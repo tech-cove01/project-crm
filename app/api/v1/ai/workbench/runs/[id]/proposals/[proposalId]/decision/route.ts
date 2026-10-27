@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
 import {
-  executeApprovedWorkbenchTool, NonCompensableWorkbenchWriteError,
+  executeApprovedWorkbenchTool, NonCompensableWorkbenchWriteError, WorkbenchToolRejectedError,
 } from "@/lib/ai/agents/approved-workbench-tool";
 import {
   assertWorkbenchApprovedActionCurrent, claimWorkbenchApprovedAction,
@@ -381,12 +381,13 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
         run_status: outcome === "queued" ? "running" : outcome },
       { requestId });
     } catch (error) {
-      if (error instanceof NonCompensableWorkbenchWriteError) {
+      if (error instanceof NonCompensableWorkbenchWriteError || error instanceof WorkbenchToolRejectedError) {
         try {
           const outcome = await finishWorkbenchApprovedAction(getRequestPool(), {
             organizationId: authz.org.orgId, runId: id, proposalId,
             toolName: proposal.tool_name,
-            result: { kind: "safe_failure", code: "non_compensable_reversible_write" },
+            result: { kind: "safe_failure", code: error instanceof WorkbenchToolRejectedError
+              ? "crm_tool_rejected" : "non_compensable_reversible_write" },
           });
           if (outcome)
             return ok({ proposal_id: proposalId, status: "failed",

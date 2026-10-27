@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  executeApprovedWorkbenchTool, NonCompensableWorkbenchWriteError,
+  executeApprovedWorkbenchTool, NonCompensableWorkbenchWriteError, WorkbenchToolRejectedError,
 } from "./approved-workbench-tool";
 
 describe("human-approved workbench tools", () => {
@@ -51,6 +51,25 @@ describe("human-approved workbench tools", () => {
       tools: { crm_request_human_handoff: { execute } },
     })).rejects.toThrow("crm_tool_reported_error");
     expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats an MCP error object as uncertain rather than successful execution", async () => {
+    const execute = vi.fn().mockResolvedValue({ error: "unknown_error" });
+    await expect(executeApprovedWorkbenchTool({
+      toolName: "crm_schedule_followup", args: {}, tools: { crm_schedule_followup: { execute } },
+    })).rejects.toThrow("crm_tool_reported_error");
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats explicit scope and scheduling refusals as rejected actions", async () => {
+    for (const output of [{ permitido: false, motivo: "fora_do_escopo" },
+      { agendado: false, motivo: "ja_existe_retorno" }]) {
+      const execute = vi.fn().mockResolvedValue(output);
+      await expect(executeApprovedWorkbenchTool({
+        toolName: "crm_schedule_followup", args: {}, tools: { crm_schedule_followup: { execute } },
+      })).rejects.toBeInstanceOf(WorkbenchToolRejectedError);
+      expect(execute).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("fails closed for an unclassified tool name", async () => {

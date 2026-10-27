@@ -14,6 +14,13 @@ export class NonCompensableWorkbenchWriteError extends Error {
   }
 }
 
+/** A tool explicitly refused before applying the requested business action. */
+export class WorkbenchToolRejectedError extends Error {
+  constructor() {
+    super("workbench_tool_rejected");
+  }
+}
+
 /** An approval never downgrades a reversible CRM write to a raw write. */
 export async function executeApprovedWorkbenchTool(input: {
   toolName: string;
@@ -40,8 +47,17 @@ export async function executeApprovedWorkbenchTool(input: {
   const output = await tool.execute(input.args, {
     toolCallId: randomUUID(), messages: [], context: {},
   });
-  const result = output as { isError?: boolean; ok?: boolean } | null;
-  if (result?.isError || result?.ok === false)
+  const result = output as {
+    isError?: boolean; ok?: boolean; error?: unknown; permitido?: boolean; agendado?: boolean;
+  } | null;
+  // These are explicit pre-write refusals: the scope guard denied the tool, or
+  // scheduling returned a business refusal without creating a follow-up.
+  if (result?.permitido === false ||
+      (input.toolName === "crm_schedule_followup" && result?.agendado === false))
+    throw new WorkbenchToolRejectedError();
+  // MCP's in-process bridge also returns {error} rather than throwing. An
+  // exception can happen after a side effect, so its outcome remains unknown.
+  if (result?.isError || result?.ok === false || result?.error != null)
     throw new Error("crm_tool_reported_error");
   return { output, reversible: null };
 }

@@ -154,6 +154,32 @@ function daquiADias(dias: number): string {
 }
 
 describe("crm_schedule_followup", () => {
+  it("informa ausência de canal sem gravar um retorno", async () => {
+    const cap = novasCapturas();
+    const ctx = ctxDe(caminhoLivre, cap);
+    Object.assign(ctx.supabase, { rpc: vi.fn().mockResolvedValue({
+      data: null, error: { code: "P0002", message: "service_channel_not_found" },
+    }) });
+    const res = await crmScheduleFollowup.handler({
+      lead_id: LEAD, contact_id: undefined, promised_at: daquiADias(2), in_hours: undefined,
+      reason: "reconfirmar", promise: "volto", context: undefined,
+    }, ctx);
+    expect(res).toMatchObject({ agendado: false, motivo: "canal_nao_configurado" });
+    expect(cap.inserts.some((entry) => entry.table === "cron_jobs")).toBe(false);
+  });
+
+  it("não transforma outros erros de banco em recusa conhecida", async () => {
+    const cap = novasCapturas();
+    const ctx = ctxDe(caminhoLivre, cap);
+    const erro = { code: "P0002", message: "service_contact_not_found" };
+    Object.assign(ctx.supabase, { rpc: vi.fn().mockResolvedValue({ data: null, error: erro }) });
+    await expect(crmScheduleFollowup.handler({
+      lead_id: LEAD, contact_id: undefined, promised_at: daquiADias(2), in_hours: undefined,
+      reason: "reconfirmar", promise: "volto", context: undefined,
+    }, ctx)).rejects.toEqual(erro);
+    expect(cap.inserts.some((entry) => entry.table === "cron_jobs")).toBe(false);
+  });
+
   it("agenda, grava o retorno e EMITE atividade na timeline do negócio", async () => {
     const cap = novasCapturas();
     const res = (await crmScheduleFollowup.handler(

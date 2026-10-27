@@ -157,22 +157,38 @@ export const crmScheduleFollowup: McpToolDefinition<typeof agendarShape> = {
       };
     }
 
-    const resultado = await agendaRetornoNoCrm(
-      {
-        admin: ctx.supabase,
-        orgId: ctx.organizationId,
-        actor: ctx.actor,
-        requestId: ctx.requestId,
-        agora,
-      },
-      { leadId: input.lead_id ?? null, contactId: input.contact_id ?? null },
-      {
-        motivo: input.reason,
-        prometidoPara,
-        promessa: input.promise,
-        contexto: input.context ?? null,
-      },
-    );
+    let resultado: Awaited<ReturnType<typeof agendaRetornoNoCrm>>;
+    try {
+      resultado = await agendaRetornoNoCrm(
+        {
+          admin: ctx.supabase,
+          orgId: ctx.organizationId,
+          actor: ctx.actor,
+          requestId: ctx.requestId,
+          agora,
+        },
+        { leadId: input.lead_id ?? null, contactId: input.contact_id ?? null },
+        {
+          motivo: input.reason,
+          prometidoPara,
+          promessa: input.promise,
+          contexto: input.context ?? null,
+        },
+      );
+    } catch (error) {
+      // fn_service_begin fails in its own transaction before creating a
+      // conversation or follow-up when there is no channel for this contact.
+      // Other failures remain uncertain and must not be reported as safe.
+      const detail = error as { code?: unknown; message?: unknown } | null;
+      if (detail?.code === "P0002" && detail.message === "service_channel_not_found") {
+        return {
+          agendado: false,
+          motivo: "canal_nao_configurado",
+          mensagem: "Não há canal ou conversa disponível para este cliente; configure um canal antes de agendar o retorno.",
+        };
+      }
+      throw error;
+    }
 
     if (!resultado.ok) {
       if ("janela" in resultado) {
