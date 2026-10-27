@@ -7,7 +7,7 @@
 - 当前票：CRM-006 百炼接入与只读 Agent 验收完成，状态随对应提交成功生效。任务与验收见 docs/implementation-plan.md。
 - 已有材料：从本仓根目录访问 ../../../develop/，5 个资料包已全部解压并校验；原 zip 移至 ../../../archive/zips/crm。
 - 本轮：project-crm 已移到 project/code，与 project-full-stack 同级；共同工作区维护一份 Skill，各仓库按适用范围建立本地联接。
-- 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。用户要求公开；历史 evidence 截图经核查发现疑似真实联系人资料，自动审批此前拒绝修改可见性，当前 GitHub 仍为私密。目录迁移不改变两个仓库的 Git 历史。
+- 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。目录迁移不改变两个仓库的 Git 历史。
 - README：面向面试官介绍客户经营场景、Agent 与后端亮点；本机验证范围和外部依赖已区分。旧 project-agent 本机百炼 Qwen 凭据已通过 CRM 加密入口配置；只读 Agent 流程已完成真实验收。
 - 部署选型：阿里云个人服务器运行应用与 Worker，结合托管 Supabase 和 Cloudflare Tunnel；学生券适用范围及费用以实际订单为准。
 - 下一步：按业务需要选择普通工作台发送提案、中文路由或记忆等二开切片。公网发布前执行 CRM-004 安全升级与正式依赖配置。
