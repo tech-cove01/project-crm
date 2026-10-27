@@ -1,6 +1,6 @@
 # 来源材料
 
-2026-10-27 已解压材料保留在 `D:\桌面\The ALL\agent\develop`，从本仓根目录访问 `../../../develop/`。原 zip 已移至 `../../../archive/zips/crm/`。本仓尚未导入应用源码；共享 Skill 采用本地目录联接，不运行来源包安装器。
+2026-10-27 已解压材料保留在 `D:\桌面\The ALL\agent\develop`，从本仓根目录访问 `../../../develop/`。原 zip 已移至 `../../../archive/zips/crm/`。本仓已导入应用快照，完整路径/哈希映射见 docs/upstream/import-manifest.json；共享 Skill 继续采用本地目录联接。
 
 | 材料目录 | 用途 |
 | --- | --- |
