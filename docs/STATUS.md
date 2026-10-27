@@ -18,7 +18,7 @@
 - 外部动作：用户本轮要求先看能否运行及部署缺项；Cloudflare 尚未部署，未修改 DNS 或调用客户渠道。
 - 部署偏好：用户已有 Cloudflare/域名，没有服务器，要求先评估 2 GiB 是否足够再购买；当前优先本机运行/屏幕共享。实测内存快照和公网入口前置见 cloudflare-deployment.md；未完成 Linux 2 GiB 模拟或公网部署。
 
-- CRM-007：客户确认记忆、合成 FAQ 百炼向量检索、商机变更审批已验证；金额预算未知和外部服务边界见 docs/evidence/CRM-007-capabilities.md。
+- CRM-007：客户确认记忆、合成 FAQ 百炼向量检索、商机变更审批及语义 Judge 已验证；金额预算未知和外部服务边界见 docs/evidence/CRM-007-capabilities.md。
 - CRM-006：百炼 `qwen3.8-flash` + 工作台 + Worker + `crm_get_contact` 真实完成，详细结果与成本未知边界见 docs/evidence/CRM-006.md。
 
 ## 接续入口

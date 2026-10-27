@@ -8,7 +8,7 @@
 | 组织记忆 | 管理接口可读取，当前无已发布条目。 | 未验证组织文档发布与 Agent 引用。 |
 | 原生知识库 | 真实合成 FAQ `c4f5f4d0-cae0-4cec-8433-5eaf044d21de` 使用百炼 `text-embedding-v4` 1536 维完成索引；Run `f4842ff3-2179-471f-a448-6a3955bf44eb` completed，Agent 调用 `crm_search_knowledge` 并引用 FAQ 正确回答。 | 百炼使用安装级开关；不同模型或组织不可混查。单个样本不证明真实业务召回率。 |
 | 审批和执行 | 合成商机阶段变更经人工批准后真实落库；缺渠道的跟进不再误报成功。 | 两次批准后 Run 均因百炼费用未知而 partial，详见 [审批验收](CRM-007-approval.md)。真实渠道外发和普通 Workbench 回复候选发送未验收。 |
-| Trace / 规则 Eval | 先前真实 Run 的规则评估 GET 为 200，返回 score=89 和 verdict=needs_review。 | 这是单次诊断结果，不是质量提升指标；语义 Judge 显示 not_configured，未调用。 |
+| Trace / 评估 | 规则评估 GET 为 200。对合成 FAQ Run `f4842ff3-2179-471f-a448-6a3955bf44eb` 显式触发百炼语义 Judge，HTTP 200、semanticJudge=completed、verdict=needs_review；随后 GET 确认结果已保存。 | 实际调用会计费；单次评估是诊断结果，不代表真实业务效果提升。Langfuse 外部导出仍未配置。 |
 | Mem0 / WeKnora / Langfuse | 本机集成接口返回三项 configured=false、enabled=false。 | 三者有可选适配代码，本次没有部署、连接或验收。 |
 
 ## 向量安全与迁移
