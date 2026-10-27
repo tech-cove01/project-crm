@@ -34,6 +34,7 @@ import { runWorkbenchCollaboration } from "@/lib/ai/agents/workbench-collaborati
 import { extractProductFinalAnswer } from "@/lib/ai/agents/final-answer";
 import { MissionBudgetExceededError } from "@/lib/ai/agents/mission-budget";
 import { aggregateWorkbenchLlmUsage, type WorkbenchLlmCallUsage } from "@/lib/ai/agents/workbench-usage";
+import { assertLocalWorkbenchBudgetAllowed } from "@/lib/ai/agents/local-workbench-budget";
 import { recoverWorkbenchResult } from "@/lib/ai/agents/workbench-result-recovery";
 import {
   createWorkbenchResultChannel,
@@ -126,6 +127,7 @@ export async function runWorkbenchStartJob(
           maxSteps?: number | null;
           tokenBudget?: number | null;
           costBudgetCents?: number | null;
+          localUnpricedDemo?: boolean;
         })
       : {};
   if (runtime.phase === "resume" && resumeMessages) {
@@ -259,6 +261,7 @@ export async function runWorkbenchStartJob(
       getRequestPool(), job.organization_id, run.agent_id, runtime.versionId,
     );
     if (!modelAgentConfig) throw new Error("workbench_agent_config_missing");
+    assertLocalWorkbenchBudgetAllowed(budget, modelAgentConfig.provider, run.mission_id);
     const orgMemory = await loadOrgMemory(getRequestPool(), job.organization_id);
     modelAgentConfig.systemPrompt = composeSystemPrompt({
       playbookPrompt: modelAgentConfig.systemPrompt,

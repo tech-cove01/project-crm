@@ -5,6 +5,7 @@ import { ensureBuiltinAgents } from "@/lib/ai/agents/ensure-builtins";
 import { BUILTIN_AGENTS } from "@/lib/ai/agents/builtins";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AgentCrmWorkbench } from "./_components/AgentCrmWorkbench";
+import { localWorkbenchUnpricedMode } from "@/lib/ai/agents/local-workbench-budget";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,11 @@ export default async function AgentCrmWorkbenchPage({
       className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-col"
     >
       <h1 className="sr-only">Agent–CRM 工作台</h1>
+      {localWorkbenchUnpricedMode() && (
+        <div role="status" className="mb-2 shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          开发环境演示开关已启用，只应在本机使用：百炼普通工作台任务不限制单次金额；沿用 token/步骤控制（不是硬上限），模型调用会产生费用。持续任务和组织预算不受此设置影响。
+        </div>
+      )}
       {!modelConfigured && (
         <div
           role="status"

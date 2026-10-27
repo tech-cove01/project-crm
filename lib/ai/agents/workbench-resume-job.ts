@@ -74,6 +74,7 @@ export async function runWorkbenchResumeJob(
           maxSteps?: number | null;
           tokenBudget?: number | null;
           costBudgetCents?: number | null;
+          localUnpricedDemo?: boolean;
         })
       : {};
   await runResumedWorkbenchTurn({

@@ -5,6 +5,7 @@ import {
   loadMissionDirectionContextProbe, persistMissionRunMessagesAndDirectionAck,
 } from "@/lib/ai/agents/mission-direction-consumption";
 import { MissionBudgetExceededError } from "@/lib/ai/agents/mission-budget";
+import { assertLocalWorkbenchBudgetAllowed } from "@/lib/ai/agents/local-workbench-budget";
 import { continueWorkbenchMessages } from "@/lib/ai/agents/workbench-state";
 import { executeReversibleLeadUpdate } from "@/lib/ai/agents/reversible-lead-update";
 import {
@@ -63,6 +64,7 @@ export async function runResumedWorkbenchTurn(input: {
     maxSteps?: number | null;
     tokenBudget?: number | null;
     costBudgetCents?: number | null;
+    localUnpricedDemo?: boolean;
   };
   priorFinalText: string | null;
   beforeSideEffect?: () => Promise<void>;
@@ -85,6 +87,12 @@ export async function runResumedWorkbenchTurn(input: {
   })();
 
   try {
+    if (input.budget.localUnpricedDemo) {
+      const demoConfig = await loadAgentVersionConfig(
+        getRequestPool(), organizationId, input.agentId, input.versionId,
+      );
+      assertLocalWorkbenchBudgetAllowed(input.budget, demoConfig?.provider, input.missionId);
+    }
     const { rows: priorUsage } = await getRequestPool().query<WorkbenchLlmCallUsage>(
       `select c.input_tokens, c.output_tokens, c.cost_cents, c.status
        from llm_calls c

@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { appendWorkbenchEvent } from "@/lib/ai/agents/workbench-events";
 import { BUILTIN_AGENTS } from "@/lib/ai/agents/builtins";
+import { workbenchBudgetForNewRun } from "@/lib/ai/agents/local-workbench-budget";
 import { ensureBuiltinAgents } from "@/lib/ai/agents/ensure-builtins";
 import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
 import { loadMissionContinuationAgent } from "@/lib/ai/agents/mission-continuation-agent";
@@ -211,11 +212,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
   }
 
-  const budget = definition?.defaultBudget ?? {
+  const budget = workbenchBudgetForNewRun(definition?.defaultBudget ?? {
     maxSteps: version.max_steps,
     tokenBudget: version.token_budget,
     costBudgetCents: version.cost_budget_cents,
-  };
+  }, provider, Boolean(parsed.data.mission));
   const runId = randomUUID();
   const missionId = parsed.data.mission ? randomUUID() : null;
   if (missionId && parsed.data.mission && resolvedScope.leadId) {

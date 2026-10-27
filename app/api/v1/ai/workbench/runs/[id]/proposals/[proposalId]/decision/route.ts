@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai/agents/workbench-approved-action";
 import { workbenchToolEffect } from "@/lib/ai/agents/tool-effects";
 import { validateWorkbenchToolArgs } from "@/lib/ai/agents/validate-workbench-tool-args";
+import { localUnpricedApprovalAllowed, type WorkbenchBudget } from "@/lib/ai/agents/local-workbench-budget";
 import { requestTurnDeps } from "@/lib/agent-engine/agent/request-deps";
 import { loadAgentVersionConfig } from "@/lib/agent-engine/agent/agent-config";
 import { buildMcpTurnTools } from "@/lib/agent-engine/edge/crm/mcp-tools";
@@ -100,6 +101,19 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       409,
       { requestId },
     );
+
+  const runBudget = run.budget && typeof run.budget === "object" && !Array.isArray(run.budget)
+    ? run.budget as WorkbenchBudget : {};
+  if (!(await localUnpricedApprovalAllowed({
+    budget: runBudget,
+    decision: parsed.data.decision,
+    missionId: run.mission_id,
+    loadProvider: async () => {
+      const state = run.runtime_state as { versionId?: unknown } | null;
+      if (typeof state?.versionId !== "string") return undefined;
+      return (await loadAgentVersionConfig(getRequestPool(), authz.org.orgId, run.agent_id, state.versionId))?.provider;
+    },
+  }))) return fail("local_unpriced_demo_unavailable", "演示设置或模型已变化，无法批准此动作；没有执行 CRM 工具。", 409, { requestId });
 
   if (proposal.tool_name === ASK_INTERNAL_COLLEAGUE_TOOL && parsed.data.decision === "approve") {
     if (!run.mission_id)
