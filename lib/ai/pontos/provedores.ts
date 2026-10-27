@@ -83,6 +83,15 @@ export const PROVEDORES = [
     prefixoDaChave: "sk-or-…",
   },
   {
+    id: "dashscope",
+    rotulo: "阿里云百炼 (DashScope)",
+    quandoUsar: "通过阿里云百炼调用千问模型；验证密钥会发起一次简短模型请求，可能产生少量费用。",
+    aceitaEndpointProprio: false,
+    catalogoSincronizavel: false,
+    ondePegarAChave: "https://bailian.console.aliyun.com/",
+    prefixoDaChave: "sk-…",
+  },
+  {
     id: "opencode",
     rotulo: "OpenCode Zen",
     quandoUsar:

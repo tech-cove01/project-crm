@@ -13,7 +13,7 @@ vi.mock("@/lib/env", () => ({
   },
 }));
 
-import { validateOpenCodeKey, validateOpenRouterKey } from "@/lib/ai/provider-validators";
+import { validateDashScopeKey, validateOpenCodeKey, validateOpenRouterKey } from "@/lib/ai/provider-validators";
 
 /**
  * POR QUE ESTE ARQUIVO EXISTE
@@ -221,5 +221,27 @@ describe("a base do OpenRouter vem de OPENROUTER_BASE_URL", () => {
     envMock.OPENROUTER_BASE_URL = `${comApiV1}/`;
     await validateOpenRouterKey("sk-or-v1-boa");
     expect(chamadas).toEqual([`${comApiV1}/key`, `${comApiV1}/models`]);
+  });
+});
+
+
+describe("validateDashScopeKey", () => {
+  it("authenticates using a bounded Qwen chat request", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "x" } }] }),
+    }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(validateDashScopeKey("test-key")).resolves.toEqual({ ok: true, models: ["qwen3.8-flash"] });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toMatchObject({ model: "qwen3.8-flash", max_tokens: 1, enable_thinking: false });
+  });
+
+  it("does not mark invalid keys or malformed 200 responses as validated", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 401 })));
+    await expect(validateDashScopeKey("bad-key")).resolves.toEqual({ ok: false, error: "auth_failed_401" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })));
+    await expect(validateDashScopeKey("bad-response")).resolves.toEqual({ ok: false, error: "provider_invalid_response" });
   });
 });

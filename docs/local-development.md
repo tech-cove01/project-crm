@@ -10,7 +10,7 @@
 - 登录资料：仓库内 `.local/login-credentials.json`，仅本机使用，不进入 Git。
 - 配置：`.env.local` 保存实际本机配置；`.env` 保留为存在的文件，因为上游 Worker/cron 命令同时读取两者。
 
-没有启动自动演示 seed，`CRM_DEMO_MODE=false`；登录使用真实 Supabase Auth。验收客户为明确标注的合成资料，真实保存到数据库；没有调用模型或发送客户消息。
+没有启动自动演示 seed，`CRM_DEMO_MODE=false`；登录使用真实 Supabase Auth。验收客户为明确标注的合成资料，真实保存到数据库；该初始验收没有调用模型或发送客户消息；后续百炼 Agent 验收见 CRM-006。
 
 ## 日常启动
 
@@ -52,7 +52,7 @@ corepack pnpm worker
 - 已实测：锁定安装、完整类型检查、生产构建、Supabase 核心服务、183 张业务表初始化、真实登录与引导、4 个核心页面、客户创建/纠正/刷新读取，以及未登录拒绝读取。
 - Worker `/healthz` 为 200、数据库正常，队列无待执行/执行中/死信。Web `/api/v1/health` 为 200 且总体 `degraded`：Supabase 正常，Redis 和 WAHA 未配置。这不是所有外部服务都健康的声明。
 - 本地单实例暂用上游的内存 Redis 降级，不作为多实例部署方案。CLI 默认 Docker 端口发布到所有接口，并非所有依赖都仅绑定 loopback；公网方案需单独收紧服务暴露范围。
-- 未配置模型凭据；工作台显示默认模型不等于 Key 已可用。后续在组织的 AI 凭据/模型页面配置真实 provider，再单独验收 Agent；Key 不发到聊天里。
+- 已在本机 CRM 加密凭据中配置百炼 `qwen3.8-flash`，并通过真实只读 Agent 验收；详情见 [CRM-006](evidence/CRM-006.md)。凭据仅保存在本机数据库，不提交到 Git；模型成本记录目前为未知。
 - Mem0、WeKnora、Langfuse、WhatsApp、邮件和飞书不要求同时配置。其具体能力、边界和缺口见 [能力清单](current-capabilities.md)。
 - 保留上游葡语/西语基础界面及已有中文工作台，不在本轮无关地全站翻译。
 

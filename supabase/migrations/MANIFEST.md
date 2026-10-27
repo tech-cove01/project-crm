@@ -1,5 +1,7 @@
 # Migration Manifest — pi-native-crm
 
+| `20261027190000` | `0409_dashscope_model` | Register Qwen3.8 Flash as a tool-capable DashScope model; pricing is deliberately left unset pending verified provider terms. |
+
 | `20260926010000` | `0381_builtin_agents_e_model_binding` | Adds built-in/user ownership, stable per-organization built-in key, registry revision, organization-default versus pinned model binding, and tenant-scoped durable workbench runs, append-only ordered run events, human-action proposals with business compensation/undo states, and service-role-only Pi continuation snapshots. Existing agents remain user-owned and pinned; partial unique index makes initialization idempotent. Run/proposal data uses member-scoped RLS, while private messages stay service-only; event history is append-only for PostgREST roles. |
 | `20260926020000` | `0382_workbench_confirmed_reply` | 将 workbench 的 `send_message` 草稿挂接到现有 `ai_reply_drafts` 审核与 `approved_reply` 队列；只允许组织内 act run 的待确认提案、原始上下文/Agent revision 未变化时入队。发送继续由正式 worker 执行实时 Guardrails、Service Boundary 与 send-ledger 幂等；数据库触发器把用户批准/拒绝原子反映到 proposal 状态。 |
 | `20260926030000` | `0383_workbench_durable_queue` | Workbench 首轮启动与人工确认后的 Pi continuation 均写入 PostgreSQL `job_queue`，由现有 agent-worker lease/reaper 恢复；任务只存组织/run/proposal 标识，执行前重新读取 CRM scope 与 service-role-only 消息快照。 |

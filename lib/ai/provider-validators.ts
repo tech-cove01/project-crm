@@ -240,6 +240,28 @@ export async function validateDeepSeekKey(apiKey: string): Promise<ValidationRes
   }
 }
 
+/** Validate using an authenticated, minimal Qwen chat request, not a public catalog.
+ * This can incur a small model charge and validates access to this specific model.
+ */
+export async function validateDashScopeKey(apiKey: string): Promise<ValidationResult> {
+  try {
+    const res = await timedFetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
+      method: "POST",
+      redirect: "error",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "qwen3.8-flash", messages: [{ role: "user", content: "hi" }], max_tokens: 1, enable_thinking: false }),
+    });
+    if (res.status === 401 || res.status === 403) return { ok: false, error: "auth_failed_401" };
+    if (!res.ok) return { ok: false, error: `provider_status_${res.status}` };
+    const json = (await res.json()) as { choices?: unknown[] };
+    return Array.isArray(json.choices) && json.choices.length > 0
+      ? { ok: true, models: ["qwen3.8-flash"] }
+      : { ok: false, error: "provider_invalid_response" };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.name : "network_error" };
+  }
+}
+
 /** OpenCode Zen exposes an authenticated OpenAI-compatible model catalog. */
 export async function validateOpenCodeKey(apiKey: string): Promise<ValidationResult> {
   try {
@@ -279,6 +301,8 @@ export function validateProviderKey(provider: Provider, apiKey: string): Promise
       return validate(validateGoogleKey);
     case "openrouter":
       return validate(validateOpenRouterKey);
+    case "dashscope":
+      return validate(validateDashScopeKey);
     case "opencode":
       return validate(validateOpenCodeKey);
     case "deepseek":

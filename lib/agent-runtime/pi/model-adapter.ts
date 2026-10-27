@@ -34,6 +34,8 @@ export interface ResolvedPiModel {
   streamFn: StreamFn;
 }
 
+const DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
 const DEFAULT_BASE_URL: Record<string, string> = {
   anthropic: "https://api.anthropic.com",
   openai: "https://api.openai.com/v1",
@@ -41,6 +43,7 @@ const DEFAULT_BASE_URL: Record<string, string> = {
   openrouter: "https://openrouter.ai/api/v1",
   opencode: "https://opencode.ai/zen/v1",
   deepseek: "https://api.deepseek.com",
+  dashscope: DASHSCOPE_BASE_URL,
 };
 
 const DEFAULT_API: Record<string, Api> = {
@@ -50,6 +53,7 @@ const DEFAULT_API: Record<string, Api> = {
   openrouter: "openai-completions",
   opencode: "openai-completions",
   deepseek: "openai-completions",
+  dashscope: "openai-completions",
 };
 
 async function providerFor(id: string): Promise<PiProvider> {
@@ -76,6 +80,7 @@ async function providerFor(id: string): Promise<PiProvider> {
         )
       ).googleProvider() as PiProvider;
     case "openrouter":
+    case "dashscope":
     case "opencode":
       return (
         await loadProvider<typeof OpenrouterProviderModule>(
@@ -109,11 +114,27 @@ function modelFor(provider: PiProvider, binding: RuntimeModelBinding): Model<Api
       // must execute through OpenRouter's OpenAI-compatible API.
       api: DEFAULT_API[binding.provider] ?? template.api,
       provider: binding.provider,
+      ...(binding.provider === "dashscope" ? {
+        // Do not inherit another provider's model limits or price. Pi requires
+        // numeric cost fields; CRM's separate pricing table records unknown.
+        contextWindow: binding.model === "qwen3.8-flash" ? 1_000_000 : 128_000,
+        maxTokens: 8_192,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        input: ["text"] as ("text" | "image")[],
+        compat: {
+          supportsStore: false,
+          supportsDeveloperRole: false,
+          supportsReasoningEffort: false,
+          maxTokensField: "max_tokens" as const,
+          supportsUsageInStreaming: true,
+        },
+      } : {}),
       // Keep provider defaults untouched when no CRM reasoning knob is set.
       // When the knob is explicit, mark the model as reasoning-capable so Pi's
       // provider adapter can encode even an explicit `off` decision.
       reasoning: binding.reasoning !== undefined,
       baseUrl:
+        binding.provider === "dashscope" ? DASHSCOPE_BASE_URL :
         binding.baseUrl ??
         (binding.provider === "openrouter"
           ? process.env.OPENROUTER_BASE_URL?.trim() || undefined
@@ -129,6 +150,7 @@ function modelFor(provider: PiProvider, binding: RuntimeModelBinding): Model<Api
     api: DEFAULT_API[binding.provider] ?? "openai-completions",
     provider: binding.provider,
     baseUrl:
+      binding.provider === "dashscope" ? DASHSCOPE_BASE_URL :
       binding.baseUrl ??
       (binding.provider === "openrouter"
         ? process.env.OPENROUTER_BASE_URL?.trim() || undefined
@@ -144,12 +166,29 @@ function modelFor(provider: PiProvider, binding: RuntimeModelBinding): Model<Api
 }
 
 export async function resolvePiModel(binding: RuntimeModelBinding): Promise<ResolvedPiModel> {
+  // A DashScope credential is only sent to the canonical mainland endpoint.
+  // A crafted binding must not redirect it to an arbitrary host.
+  if (binding.provider === "dashscope" && binding.baseUrl &&
+      binding.baseUrl.replace(/\/+$/, "") !== DASHSCOPE_BASE_URL) {
+    throw new Error("DashScope endpoint override is not supported");
+  }
   const provider = await providerFor(binding.provider);
   const model = modelFor(provider, binding);
   const allowlist = buildAllowlist([model.baseUrl]);
   const containedFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const target = typeof input === "string" || input instanceof URL ? input : input.url;
-    return allowlistedFetch(target, init, { allowlist });
+    // Qwen defaults to thinking; without reasoning replay, tool follow-ups can
+    // fail. For the ordinary workbench route, use explicit non-thinking mode.
+    let requestInit = init;
+    if (binding.provider === "dashscope" && binding.model.startsWith("qwen") &&
+        (binding.reasoning === undefined || binding.reasoning === "off") &&
+        typeof init?.body === "string") {
+      try {
+        const body = JSON.parse(init.body) as Record<string, unknown>;
+        requestInit = { ...init, body: JSON.stringify({ ...body, enable_thinking: false }) };
+      } catch { /* non-JSON requests are forwarded unchanged */ }
+    }
+    return allowlistedFetch(target, requestInit, { allowlist });
   };
 
   const streamFn: StreamFn = (requestedModel, context, options) =>

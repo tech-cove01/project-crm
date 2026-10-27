@@ -3,20 +3,22 @@
 更新：2026-10-27（Asia/Shanghai）。
 
 - 方向：CRM AI-native 项目。
-- 当前阶段：本轮导入和基础运行核验完成，待配置真实模型及后续二开。
-- 当前票：无执行中票；CRM-001、CRM-002a、CRM-003 已提交，CRM-002b 完成状态随本票提交成功生效。任务与验收见 docs/implementation-plan.md。
+- 当前阶段：本机已完成百炼模型和只读 Agent 流程验证，后续按业务选择二开。
+- 当前票：CRM-006 百炼接入与只读 Agent 验收完成，状态随对应提交成功生效。任务与验收见 docs/implementation-plan.md。
 - 已有材料：从本仓根目录访问 ../../../develop/，5 个资料包已全部解压并校验；原 zip 移至 ../../../archive/zips/crm。
 - 本轮：project-crm 已移到 project/code，与 project-full-stack 同级；共同工作区维护一份 Skill，各仓库按适用范围建立本地联接。
-- 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。用户要求公开，但自动审批因 evidence 截图和视频尚未全量核验而拒绝修改可见性，目前 GitHub 仍为私密。目录迁移不改变两个仓库的 Git 历史。
-- README：面向面试官介绍客户经营场景、Agent 与后端亮点；本机验证范围和外部依赖已区分。旧 project-agent 本机配置含百炼 Qwen 凭据，CRM 兼容接入及真实调用仍待验证。
+- 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。用户要求公开；历史 evidence 截图经核查发现疑似真实联系人资料，自动审批此前拒绝修改可见性，当前 GitHub 仍为私密。目录迁移不改变两个仓库的 Git 历史。
+- README：面向面试官介绍客户经营场景、Agent 与后端亮点；本机验证范围和外部依赖已区分。旧 project-agent 本机百炼 Qwen 凭据已通过 CRM 加密入口配置；只读 Agent 流程已完成真实验收。
 - 部署选型：阿里云个人服务器运行应用与 Worker，结合托管 Supabase 和 Cloudflare Tunnel；学生券适用范围及费用以实际订单为准。
-- 下一步：配置所选模型提供商并单独验证真实 Agent；按业务需要选择普通工作台发送提案、中文路由或记忆等二开切片。公网发布前执行 CRM-004 安全升级与正式依赖配置。
+- 下一步：按业务需要选择普通工作台发送提案、中文路由或记忆等二开切片。公网发布前执行 CRM-004 安全升级与正式依赖配置。
 - 运行状态：本机 Web http://localhost:3000，Worker http://127.0.0.1:8787/healthz；Supabase API 55421、PG 55422，183 张业务表。真实登录/引导、4 核心页、合成客户创建修改及刷新读取通过，未登录请求被拒绝。
-- 健康边界：Worker 200/db=ok/队列空；Web 200/status=degraded，Supabase 正常，Redis/WAHA 未配置。真实模型、Mem0/WeKnora/Langfuse、客户渠道均未在本轮调用或验收。
+- 健康边界：Worker 200/db=ok/队列空；Web 200/status=degraded，Supabase 正常，Redis/WAHA 未配置。百炼真实模型和只读 CRM 工具已验收；Mem0/WeKnora/Langfuse、客户渠道尚未验收。
 - 登录：仅本机 .local/login-credentials.json；应用源码及全部环境/会话材料分别管理，不上传本机凭据。
 - 记录规则：保留 spec、tickets、implement、code-review 和小功能 commit 的交付节奏；实际验收后才记录功能完成。
 - 外部动作：用户本轮要求先看能否运行及部署缺项；Cloudflare 尚未部署，未修改 DNS 或调用客户渠道。
 - 部署偏好：用户已有 Cloudflare/域名，没有服务器，要求先评估 2 GiB 是否足够再购买；当前优先本机运行/屏幕共享。实测内存快照和公网入口前置见 cloudflare-deployment.md；未完成 Linux 2 GiB 模拟或公网部署。
+
+- CRM-006：百炼 `qwen3.8-flash` + 工作台 + Worker + `crm_get_contact` 真实完成，详细结果与成本未知边界见 docs/evidence/CRM-006.md。
 
 ## 接续入口
 

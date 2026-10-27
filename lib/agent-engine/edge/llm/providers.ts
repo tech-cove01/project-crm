@@ -50,6 +50,7 @@ export const OPENROUTER_ENDPOINT =
  * também aceita `/v1`); o `@ai-sdk/openai` acrescenta `/chat/completions`.
  */
 export const DEEPSEEK_ENDPOINT = "https://api.deepseek.com";
+export const DASHSCOPE_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 export const OPENCODE_ZEN_ENDPOINT = "https://opencode.ai/zen/v1";
 
 /**
@@ -183,6 +184,19 @@ export function createDefaultRegistry(opts?: {
         headers: cabecalhosDeAtribuicaoOpenRouter(),
         fetch: contain(endpoint),
       })(modelId);
+    },
+    dashscope: (apiKey, modelId) => {
+      const inner = contain(DASHSCOPE_ENDPOINT);
+      const qwenFetch: typeof fetch = (input, init) => {
+        if (modelId.startsWith("qwen") && typeof init?.body === "string") {
+          try {
+            const body = JSON.parse(init.body) as Record<string, unknown>;
+            return inner(input, { ...init, body: JSON.stringify({ ...body, enable_thinking: false }) });
+          } catch { /* forward non-JSON bodies unchanged */ }
+        }
+        return inner(input, init);
+      };
+      return createOpenAI({ apiKey, baseURL: DASHSCOPE_ENDPOINT, fetch: qwenFetch }).chat(modelId);
     },
     opencode: (apiKey, modelId) =>
       createOpenAI({
