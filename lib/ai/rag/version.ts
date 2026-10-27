@@ -24,6 +24,8 @@ export interface CreateVersionParams {
   /** Histórico: o agente a partir do qual a fonte nasceu (pode ser null). */
   agentId: string | null;
   sourceType: string;
+  /** Exact model that produced this index; unknown models must never be compared. */
+  embeddingModel?: string;
 }
 
 export interface CreateVersionResult {
@@ -70,7 +72,7 @@ export async function createKnowledgeVersion(
       is_active: false,
       // Proveniência: sem ela, "indexado com um modelo e consultado com outro"
       // é a falha que responde com trecho errado e nota alta.
-      embedding_model: MODELO_DE_EMBEDDING,
+      embedding_model: params.embeddingModel ?? MODELO_DE_EMBEDDING,
       embedding_dims: DIMENSOES_DO_EMBEDDING,
     })
     .select("id, version_number")

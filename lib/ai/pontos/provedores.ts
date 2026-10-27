@@ -57,7 +57,7 @@ export const PROVEDORES = [
     id: "openai",
     rotulo: "OpenAI (GPT)",
     quandoUsar:
-      "Necessário para transcrever áudio e para indexar o seu material — esses dois pontos usam tecnologia da OpenAI mesmo quando o resto está em outro provedor.",
+      "Pode ser usado para transcrever áudio e indexar material; a instalação também pode optar pelo embedding DashScope.",
     aceitaEndpointProprio: true,
     catalogoSincronizavel: false,
     ondePegarAChave: "https://platform.openai.com/api-keys",

@@ -20,7 +20,6 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
 
 import { DEFAULT_BOT_MODEL } from "@/lib/ai/gateway";
 import { embedText } from "@/lib/ai/embed";
-import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
 import { getBudgetStatus, type BudgetStatus } from "@/lib/ai/budget/check";
 import {
   AVISO_CORPO,
@@ -846,18 +845,28 @@ async function retrieveContext(input: RetrieveInput): Promise<RagHit[]> {
   if (fontes.length === 0 && !input.kbVersionId) return [];
 
   let embedding: number[];
+  let embeddingModel: string;
   try {
-    const { embedding: e } = await embedText(input.query, {
+    const { embedding: e, model } = await embedText(input.query, {
       organizationId: input.organizationId,
       ponto: "embedding_consultar",
     });
     embedding = e;
+    embeddingModel = model;
   } catch (err) {
     logger.warn("[ai-response-worker] embed falhou; segue sem RAG", {
       error: err instanceof Error ? err.message : String(err),
       organization_id: input.organizationId,
     });
     return [];
+  }
+
+  // Legacy RPC has no model parameter. Refuse old or different vector spaces.
+  if (fontes.length === 0 && input.kbVersionId) {
+    const { data: version } = await admin.from("ai_knowledge_versions")
+      .select("embedding_model").eq("organization_id", input.organizationId)
+      .eq("id", input.kbVersionId).maybeSingle();
+    if (!version || version.embedding_model !== embeddingModel) return [];
   }
 
   const { data, error } =
@@ -870,17 +879,18 @@ async function retrieveContext(input: RetrieveInput): Promise<RagHit[]> {
             p_embedding: embedding as unknown as string,
             p_k: RAG_TOP_K,
             p_threshold: RAG_THRESHOLD,
-            p_embedding_model: MODELO_DE_EMBEDDING,
+            p_embedding_model: embeddingModel,
           } as never,
         )
       : await admin.rpc(
-          "retrieve_top_k_chunks" as never,
+          "retrieve_top_k_chunks_model" as never,
           {
             p_organization_id: input.organizationId,
             p_kb_version_id: input.kbVersionId,
             p_embedding: embedding as unknown as string,
             p_k: RAG_TOP_K,
             p_threshold: RAG_THRESHOLD,
+            p_embedding_model: embeddingModel,
           } as never,
         );
 

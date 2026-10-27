@@ -427,3 +427,5 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 
 | `20261002032000` | `0407_ai_wiki_evidence` | Immutable current Wiki snapshots with source-version manifest and per-organization ownership. |
 | `20261003010000` | `0408_cliente_agenda_guc_valido` | Forward fix: legal pi_native custom GUC restores appointment-derived customer recognition and its protected-column trigger without modifying historical migrations or data. |
+
+| `20261027193000` | `0410_embedding_model_guard` | Require explicit model provenance for all vector search; legacy five-argument search fails closed and clients must migrate. |

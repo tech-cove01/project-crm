@@ -117,6 +117,9 @@ export async function GET(): Promise<Response> {
   }));
   const capacidadePorModelo = new Map(modelos.map((m) => [`${m.provider}|${m.model_id}`, m]));
 
+  const dashscopeReady = (credsRes.data ?? []).some(
+    (credential) => credential.provider === "dashscope" && credential.validated_at !== null,
+  );
   const pontos = PONTOS_DE_IA.map((ponto) => {
     const decisao = decidirBinding({
       pontoId: ponto.id,
@@ -164,14 +167,26 @@ export async function GET(): Promise<Response> {
        * primeiro uso é o pior lugar para esse defeito estar.
        */
       mandadoPeloAgente: agentePublicado !== null && PONTOS_DO_AGENTE_PUBLICADO.has(ponto.id),
-      efetivo: {
-        provider: decisao.provider,
-        modelId: decisao.modelId,
-        credentialId: decisao.credentialId,
-        baseUrl: decisao.baseUrl,
-        origem: decisao.origem,
-        porQue: EXPLICACAO_DA_ORIGEM[decisao.origem],
-      },
+      efetivo: process.env.CRM_EMBEDDING_PROVIDER?.trim() === "dashscope" &&
+        (ponto.id === "embedding_indexar" || ponto.id === "embedding_consultar")
+        ? {
+            provider: "dashscope",
+            modelId: "text-embedding-v4",
+            credentialId: null,
+            baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            origem: "variavel_de_ambiente",
+            porQue: dashscopeReady
+              ? "安装环境选择百炼 embedding；使用当前组织已验证的百炼凭据。"
+              : "安装环境选择百炼 embedding；当前组织缺少已验证的百炼凭据，暂不可索引或检索。",
+          }
+        : {
+            provider: decisao.provider,
+            modelId: decisao.modelId,
+            credentialId: decisao.credentialId,
+            baseUrl: decisao.baseUrl,
+            origem: decisao.origem,
+            porQue: EXPLICACAO_DA_ORIGEM[decisao.origem],
+          },
       avisos: [
         ...decisao.avisos,
         // O aviso de capacidade é recalculado aqui porque só o servidor tem o

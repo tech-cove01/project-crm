@@ -32,7 +32,8 @@ describe('searchKnowledge', () => {
     });
     // embedding vai à RPC como literal pgvector '[0.1,0.2]'; o limiar do agente
     // NÃO vai à RPC (vai o piso -1) — o corte agora é aqui, ver testes abaixo.
-    expect(query.mock.calls[0]?.[1]).toEqual(['org1', 'kb1', '[0.1,0.2]', 5, -1]);
+    expect(query.mock.calls[0]?.[1]).toEqual(['org1', 'kb1', '[0.1,0.2]', 5, -1, 'm']);
+    expect(query.mock.calls[0]?.[0]).toContain('retrieve_top_k_chunks_model');
   });
 
   it('erro de embedding vira erro de ENSINO, nunca exceção', async () => {

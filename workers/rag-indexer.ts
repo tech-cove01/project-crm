@@ -376,6 +376,7 @@ export async function indexarFonte(
     knowledgeSourceId: fonte.id,
     agentId: fonte.agent_id,
     sourceType: tipo,
+    embeddingModel: chave.model,
   });
 
   console.warn(
@@ -573,18 +574,18 @@ export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
     // A chave é resolvida UMA vez por indexação — não uma vez por trecho.
     const chave = await resolverChaveDeEmbedding(row.organization_id, "embedding_indexar");
     if (!chave) {
+      const faltante = process.env.CRM_EMBEDDING_PROVIDER?.trim() === "dashscope"
+        ? "Falta uma credencial DashScope ativa e validada em IA › Credenciais."
+        : "Falta uma chave da OpenAI. Cadastre uma em IA › Credenciais ou defina OPENAI_API_KEY.";
       await marcarFonte(row.organization_id, fonte.id, {
         last_index_status: "sem_credencial",
-        last_index_error:
-          "Falta uma chave da OpenAI para indexar. Cadastre uma em IA › Credenciais " +
-          "(ou defina OPENAI_API_KEY na instalação) e este material entra sozinho.",
+        last_index_error: faltante,
       });
       await avisarNaCentral(
         row.organization_id,
         fonte,
         `"${fonte.name}" ainda não entrou na base de conhecimento`,
-        "Falta uma chave da OpenAI para preparar o material. Cadastre uma em IA › Credenciais " +
-          "e a indexação recomeça sozinha — nada do que você enviou foi perdido.",
+        `${faltante} A indexação recomeça sozinha — nada do que você enviou foi perdido.`,
       );
       // `retry` e não `skipped`: o drain conta `skipped` como sucesso e marca o
       // evento consumido para sempre. Quem cadastrasse a chave amanhã não teria

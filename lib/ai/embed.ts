@@ -15,6 +15,8 @@ import { embed } from "ai";
 import {
   DIMENSOES_DO_EMBEDDING,
   MODELO_DE_EMBEDDING,
+  MODELO_DASHSCOPE_EMBEDDING,
+  DASHSCOPE_EMBEDDING_BASE_URL,
   resolverChaveDeEmbedding,
   type ChaveDeEmbedding,
   type PontoDeEmbedding,
@@ -49,8 +51,10 @@ export class SemChaveDeEmbeddingError extends Error {
   readonly code = "embedding_sem_chave";
   constructor(readonly organizationId: string) {
     super(
-      "Esta organização não tem chave da OpenAI para indexar nem consultar o material. " +
-        "Cadastre uma em Credenciais, ou defina OPENAI_API_KEY na instalação.",
+      process.env.CRM_EMBEDDING_PROVIDER?.trim() === "dashscope"
+        ? "Esta organização não tem credencial DashScope ativa e validada para indexar e consultar o material."
+        : "Esta organização não tem chave da OpenAI para indexar nem consultar o material. " +
+          "Cadastre uma em Credenciais, ou defina OPENAI_API_KEY na instalação.",
     );
     this.name = "SemChaveDeEmbeddingError";
   }
@@ -66,7 +70,15 @@ export async function embedText(
     throw new SemChaveDeEmbeddingError(opts.organizationId);
   }
 
-  const modelId = String(opts.model ?? MODELO_DE_EMBEDDING);
+  const modelId = chave.model ?? MODELO_DE_EMBEDDING;
+  if (opts.model && String(opts.model) !== modelId) throw new Error("embedding_model_override_rejected");
+  if (modelId !== MODELO_DE_EMBEDDING && modelId !== MODELO_DASHSCOPE_EMBEDDING) {
+    throw new Error("embedding_model_not_supported");
+  }
+  const dashscope = modelId === MODELO_DASHSCOPE_EMBEDDING;
+  if (dashscope && (chave.viaGateway || chave.baseUrl !== DASHSCOPE_EMBEDDING_BASE_URL)) {
+    throw new Error("dashscope_embedding_endpoint_rejected");
+  }
 
   // COM gateway: a string `openai/text-embedding-3-small` é roteada por ele, que
   // lê `AI_GATEWAY_API_KEY` do process.env. Headers vão junto p/ observabilidade
@@ -81,11 +93,17 @@ export async function embedText(
     : createOpenAI({
         apiKey: chave.apiKey ?? "",
         ...(chave.baseUrl ? { baseURL: chave.baseUrl } : {}),
-      }).textEmbeddingModel(modelId.replace(/^openai\//, ""));
+        ...(dashscope ? { fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+          const target = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+          if (target !== `${DASHSCOPE_EMBEDDING_BASE_URL}/embeddings`) throw new Error("dashscope_embedding_target_rejected");
+          return fetch(target, { ...init, redirect: "error" });
+        }} : {}),
+      }).textEmbeddingModel(modelId.replace(/^(?:openai|dashscope)\//, ""));
 
   const result = await embed({
     model: resolvido,
     value: content,
+    ...(dashscope ? { providerOptions: { openai: { dimensions: DIMENSOES_DO_EMBEDDING } } } : {}),
     headers: chave.viaGateway
       ? gatewayHeaders({ organizationId: opts.organizationId })
       : undefined,

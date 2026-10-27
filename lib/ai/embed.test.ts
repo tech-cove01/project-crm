@@ -108,6 +108,18 @@ describe("embedText", () => {
     expect(embedSpy).not.toHaveBeenCalled();
   });
 
+  it("identifica a falta da credencial DashScope quando o provedor está selecionado", async () => {
+    vi.stubEnv("CRM_EMBEDDING_PROVIDER", "dashscope");
+    chaveMock = () => null;
+    try {
+      await expect(embedText("合成内容", { organizationId: "org-1" }))
+        .rejects.toThrow(/credencial DashScope ativa e validada/);
+      expect(embedSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("chave já resolvida NÃO é re-resolvida — indexar 200 trechos decifra a credencial uma vez", async () => {
     let resolucoes = 0;
     chaveMock = () => {
@@ -142,4 +154,28 @@ describe("embedText", () => {
 
     await expect(embedText("oi", { organizationId: "org-1" })).rejects.toThrow(/1536/);
   });
+  it("routes DashScope embedding to its own model and requests 1536 dimensions", async () => {
+    chaveMock = () => ({
+      apiKey: "synthetic-key", model: "dashscope/text-embedding-v4",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", viaGateway: false,
+      origem: "credencial_dashscope_da_organizacao", rotulo: "test", avisos: [],
+    });
+    const result = await embedText("synthetic", { organizationId: "org-1" });
+    const arg = embedSpy.mock.calls[0]?.[0] as { model: { modelId: string }, providerOptions: unknown };
+    expect(arg.model.modelId).toBe("text-embedding-v4");
+    expect(arg.providerOptions).toEqual({ openai: { dimensions: 1536 } });
+    expect(result.model).toBe("dashscope/text-embedding-v4");
+  });
+
+  it("refuses a DashScope key with an untrusted endpoint before embedding", async () => {
+    chaveMock = () => ({
+      apiKey: "synthetic-key", model: "dashscope/text-embedding-v4",
+      baseUrl: "https://example.invalid/v1", viaGateway: false,
+      origem: "credencial_dashscope_da_organizacao", rotulo: "test", avisos: [],
+    });
+    await expect(embedText("synthetic", { organizationId: "org-1" }))
+      .rejects.toThrow("dashscope_embedding_endpoint_rejected");
+    expect(embedSpy).not.toHaveBeenCalled();
+  });
+
 });

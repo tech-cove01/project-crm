@@ -57,3 +57,9 @@ corepack pnpm worker
 - 保留上游葡语/西语基础界面及已有中文工作台，不在本轮无关地全站翻译。
 
 本轮构建发生在本机运行配置生成前，构建期允许上游内部占位；验证的是能编译，不能把本次构建直接用于公网。源码通过 PublicEnvScript 提供运行时公共 URL，因此并非每次改 URL 都强制重新构建；正式上线前仍需安全升级、真实部署配置、重新构建与完整验证。当前 Supabase CLI 栈只作本地开发环境。部署路线见 [Cloudflare 评估](cloudflare-deployment.md)。
+
+## 百炼知识库
+
+本机 `.env.local` 已设置 `CRM_EMBEDDING_PROVIDER=dashscope`，Web 和 Worker 同时使用组织中已验证的百炼加密凭据及 `text-embedding-v4`（1536 维）。省略该配置默认使用原 OpenAI 模型。修改环境配置后应同时重启本项目的 Web 和 Worker。
+
+本机 0410 数据库迁移已应用；新应用与迁移需要同步部署。切换 embedding 模型时旧索引必须重新生成；旧五参数 `retrieve_top_k_chunks` 会明确拒绝调用，需迁移至带模型身份的新接口。合成 FAQ、隔离检查和运行结果见 [CRM-007 验收](evidence/CRM-007-capabilities.md)。不要求启动 Mem0、WeKnora 或 Langfuse 才能使用原生知识库。

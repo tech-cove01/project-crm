@@ -38,13 +38,14 @@
  * a tela responder *"está usando a chave X **porque**…"* em vez de deixar o dono
  * do negócio adivinhando por que a indexação não anda.
  *
- * ## O modelo NÃO é escolha
+ * ## Um modelo por instalação, com proveniência explícita
  *
- * `text-embedding-3-small`, 1536 dimensões, dos dois lados. Indexação e busca
- * são coordenadas de um mesmo mapa: trocar só um lado não dá erro nenhum — o
- * agente simplesmente para de achar o seu conteúdo. É por isso que o binding
- * aqui governa a CHAVE e não o MODELO, e por isso que a versão de índice grava
- * com que modelo foi calculada (`ai_knowledge_versions.embedding_model`).
+ * OpenAI text-embedding-3-small é o padrão; CRM_EMBEDDING_PROVIDER=dashscope
+ * seleciona text-embedding-v4 em ambas as pontas. Ambos usam 1536 dimensões,
+ * mas os espaços vetoriais são diferentes: a versão de índice registra a
+ * identidade e a busca recusa material sem identidade igual. Ao trocar o
+ * provedor é necessário reindexar os materiais. Web e Worker devem usar a
+ * mesma configuração de ambiente.
  */
 import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { env } from "@/lib/env";
@@ -57,16 +58,20 @@ export type PontoDeEmbedding = "embedding_indexar" | "embedding_consultar";
 /** Pin de contrato: o mesmo modelo dos dois lados, com a mesma dimensão. */
 export const MODELO_DE_EMBEDDING = "openai/text-embedding-3-small";
 export const DIMENSOES_DO_EMBEDDING = 1536;
+export const MODELO_DASHSCOPE_EMBEDDING = "dashscope/text-embedding-v4";
+export const DASHSCOPE_EMBEDDING_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 
 export type OrigemDaChave =
   | "binding_do_ponto"
   | "credencial_da_organizacao"
+  | "credencial_dashscope_da_organizacao"
   | "gateway_da_instalacao"
   | "chave_da_instalacao";
 
 export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaChave, string> = {
   binding_do_ponto: "Escolhida por você no painel de Provedores.",
   credencial_da_organizacao: "Usando a chave OpenAI cadastrada em Credenciais.",
+  credencial_dashscope_da_organizacao: "Usando a chave DashScope cadastrada em Credenciais.",
   gateway_da_instalacao: "Usando o gateway de IA configurado nesta instalação.",
   chave_da_instalacao: "Usando a chave que veio na instalação.",
 };
@@ -74,6 +79,8 @@ export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaChave, string> = {
 export interface ChaveDeEmbedding {
   /** Plaintext. Vive só no escopo de quem chamou — nunca logada nem persistida. */
   apiKey: string | null;
+  /** Identity stored with every index and supplied to the retrieval RPC. */
+  model?: string;
   /** `null` = falar direto com a OpenAI. */
   baseUrl: string | null;
   /** Quando true, a chamada vai pelo gateway (o SDK lê a chave do process.env). */
@@ -97,11 +104,34 @@ export async function resolverChaveDeEmbedding(
   ponto: PontoDeEmbedding = "embedding_indexar",
 ): Promise<ChaveDeEmbedding | null> {
   const avisos: string[] = [];
+  // An explicit installation-wide choice keeps both index and query on one
+  // vector space; the legacy OpenAI behavior remains the default.
+  const embeddingProvider = process.env.CRM_EMBEDDING_PROVIDER?.trim() || "openai";
+  if (embeddingProvider !== "openai" && embeddingProvider !== "dashscope") {
+    throw new Error("unsupported_embedding_provider");
+  }
+  if (embeddingProvider === "dashscope") {
+    const cred = await credencialDaOrganizacao(organizationId, "dashscope");
+    if (!cred) return null;
+    return {
+      apiKey: cred.apiKey,
+      model: MODELO_DASHSCOPE_EMBEDDING,
+      baseUrl: DASHSCOPE_EMBEDDING_BASE_URL,
+      viaGateway: false,
+      origem: "credencial_dashscope_da_organizacao",
+      rotulo: cred.rotulo,
+      avisos,
+    };
+  }
 
   // 1 · A escolha explícita do painel.
   const binding = await lerBindingDeEmbedding(ponto, organizationId);
   if (binding?.credential_id) {
-    const credencial = await decifrarCredencial(binding.credential_id, organizationId);
+    // Explicit bindings cannot silently send another provider's key elsewhere.
+    // DashScope requires the installation-wide DashScope setting above.
+    if (binding.provider === "dashscope" ||
+        (binding.provider !== "openai" && !binding.base_url)) return null;
+    const credencial = await decifrarCredencial(binding.credential_id, organizationId, binding.provider);
     if (credencial) {
       if (binding.model_id && !/embed/i.test(binding.model_id)) {
         // Falha ABERTA na informação: a chamada segue com o modelo do contrato,
@@ -120,14 +150,12 @@ export async function resolverChaveDeEmbedding(
         avisos,
       };
     }
-    avisos.push(
-      "A chave escolhida no painel de Provedores para este ponto não está utilizável " +
-        "(desativada, apagada ou ainda não validada). Seguindo com a próxima chave disponível.",
-    );
+    // Explicit invalid/foreign bindings fail closed; no fallback to a different key.
+    return null;
   }
 
   // 2 · A credencial OpenAI da organização, sem exigir binding nenhum.
-  const daOrg = await credencialOpenAiDaOrganizacao(organizationId);
+  const daOrg = await credencialDaOrganizacao(organizationId, "openai");
   if (daOrg) {
     if (daOrg.quantas > 1) {
       avisos.push(
@@ -189,6 +217,7 @@ export async function temChaveDeEmbedding(organizationId: string): Promise<boole
 // ---------------------------------------------------------------------------
 
 interface LinhaDeBinding {
+  provider: string;
   credential_id: string | null;
   model_id: string;
   base_url: string | null;
@@ -202,7 +231,7 @@ async function lerBindingDeEmbedding(
     const admin = createAdminClient();
     const { data } = await admin
       .from("ai_purpose_bindings")
-      .select("credential_id, model_id, base_url")
+      .select("provider, credential_id, model_id, base_url")
       .eq("organization_id", organizationId)
       .eq("purpose", ponto)
       .eq("is_enabled", true)
@@ -223,6 +252,7 @@ async function lerBindingDeEmbedding(
 async function decifrarCredencial(
   credentialId: string,
   organizationId: string,
+  provider: string,
 ): Promise<{ apiKey: string; rotulo: string } | null> {
   try {
     const admin = createAdminClient();
@@ -231,6 +261,7 @@ async function decifrarCredencial(
       .select("label, api_key_encrypted, api_key_iv, api_key_tag")
       .eq("id", credentialId)
       .eq("organization_id", organizationId)
+      .eq("provider", provider)
       .eq("is_active", true)
       .not("validated_at", "is", null)
       .maybeSingle();
@@ -258,8 +289,9 @@ async function decifrarCredencial(
  * cadastrasse outra. A tela evita o caso oferecendo a escolha; aqui o que
  * importa é não variar.
  */
-async function credencialOpenAiDaOrganizacao(
+async function credencialDaOrganizacao(
   organizationId: string,
+  provider: "openai" | "dashscope",
 ): Promise<{ apiKey: string; rotulo: string; quantas: number } | null> {
   try {
     const admin = createAdminClient();
@@ -267,7 +299,7 @@ async function credencialOpenAiDaOrganizacao(
       .from("ai_provider_credentials")
       .select("id, label, api_key_encrypted, api_key_iv, api_key_tag")
       .eq("organization_id", organizationId)
-      .eq("provider", "openai")
+      .eq("provider", provider)
       .eq("is_active", true)
       .not("validated_at", "is", null)
       .order("created_at", { ascending: true });

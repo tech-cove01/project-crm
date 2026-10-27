@@ -57,7 +57,7 @@ const input = {
   topK: 5,
   limiar: 0.4,
 };
-const embed = vi.fn().mockResolvedValue({ embedding: [0.1, 0.2] });
+const embed = vi.fn().mockResolvedValue({ embedding: [0.1, 0.2], model: "dashscope/text-embedding-v4" });
 describe("retrieval provenance", () => {
   it("reads index identity from the observed chunk with explicit tenant/source bounds", async () => {
     const { client, filters } = db();
@@ -75,7 +75,7 @@ describe("retrieval provenance", () => {
     ]);
     expect(client.rpc).toHaveBeenCalledWith(
       "fn_buscar_trechos_das_fontes",
-      expect.objectContaining({ p_organization_id: "org", p_source_ids: ["source"] }),
+      expect.objectContaining({ p_organization_id: "org", p_source_ids: ["source"], p_embedding_model: "dashscope/text-embedding-v4" }),
     );
   });
   it("fails visibly when provenance read fails instead of inventing a current version", async () => {
