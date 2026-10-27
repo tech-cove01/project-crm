@@ -12,7 +12,7 @@
 
 | 能力 | 已有实现与主要路径 | 当前边界 / 可二开的内容 |
 | --- | --- | --- |
-| 核心 CRM | 客户、沟通 Inbox、商机看板、任务及组织权限；`app/api/v1/contacts/_handler.ts`、`hooks/kanban/useMoveCard.ts`、`app/api/v1/leads/[id]/move/route.ts`。 | 已有业务界面与 API，可围绕客户咨询、商机推进和销售跟进二开；本机业务链路尚未验收。 |
+| 核心 CRM | 客户、沟通 Inbox、商机看板、任务及组织权限；`app/api/v1/contacts/_handler.ts`、`hooks/kanban/useMoveCard.ts`、`app/api/v1/leads/[id]/move/route.ts`。 | 本机已验收登录、核心页面及合成客户创建/纠正/刷新读取；商机推进、销售跟进等完整业务链仍待分别验证。 |
 | Agent 工作台与 Worker | `app/app/ai/workbench/_components/AgentCrmWorkbench.tsx` → `app/api/v1/ai/workbench/runs/route.ts` → SQL Run / `workbench_start` 队列 → `workers/agent-worker/main.ts` → `lib/ai/agents/workbench-start-job.ts`。模型经 `lib/agent-engine/edge/llm/run-model-call.ts` 接入 `lib/agent-runtime/pi/runtime.ts`。 | 有持久化事件、SSE 回放、取消及恢复路径；每次工作台发送创建独立 Run，不能默认等于自动携带全部历史的连续会话。 |
 | 四个内置 Agent | `lib/ai/agents/builtins.ts` 定义 `crm_intelligence`、`sales_operations`、`customer_communications`、`crm_supervisor`；Run API 调用 `ensureBuiltinAgents`。 | 分别覆盖客户分析、销售操作、沟通与监督，配置和运行效果仍需本机验收；名称不是效果证明。 |
 | 工具约束、审批与执行 | `lib/ai/agents/tool-effects.ts` 区分工具效果；`app/api/v1/ai/workbench/runs/[id]/proposals/[proposalId]/decision/route.ts` 接收决定；`lib/ai/agents/approved-workbench-tool.ts`、`lib/ai/agents/workbench-approved-action.ts` 负责批准动作、回执及后续处理。 | 已有权限、预算、审批、持久化、恢复等执行约束；仍须逐业务动作验证，不能泛称所有外部副作用都恰好执行一次。 |

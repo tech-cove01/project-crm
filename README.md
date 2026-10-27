@@ -2,7 +2,15 @@
 
 AI-native CRM 二开项目，业务围绕客户、商机、会话、任务与 Agent 执行。它与 Go 后端项目、实习经历分别记录。
 
-已导入用户提供的 AiNativeCrm 源码快照，正在安装依赖并核验本地运行。尚未完成数据库、登录或真实模型验收；仓库为私密。来源与继承边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+已导入用户提供的 AiNativeCrm 源码快照，并在本机跑通独立 Supabase、真实登录、核心页面、客户保存与后台 Worker。锁定安装、完整类型检查和生产构建通过。真实模型及外部渠道尚未配置验收；仓库为私密。来源与继承边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 本地使用
+
+本机应用：`http://localhost:3000`；登录资料保存在被 Git 忽略的 `.local/login-credentials.json`。首次本地准备已完成，日常启动与真实验收边界见 [Windows 运行指南](docs/local-development.md)。
+
+Supabase 在这里同时提供数据库、认证、存储和实时能力；当前是独立 Docker 开发环境，不需要先注册云项目。Agent 真正调用模型还需在组织 AI 凭据/模型页面完成配置；默认模型显示不代表 Key 已可用。
+
+已继承的能力、尚未闭合的业务和材料中需要纠正的说法见 [能力清单](docs/current-capabilities.md)。Cloudflare 暂未部署，当前用户已有域名、暂无服务器；后续路线见 [部署评估](docs/cloudflare-deployment.md)。
 
 ## 本地目录
 

@@ -2,20 +2,19 @@
 # Docs: https://supabase.com/docs/guides/cli/config
 # Este arquivo é versionado. Segredos vivem em .env.local (dev) ou no .env da instalação.
 
-# Identificador legado do projeto Supabase; mantido para não quebrar instalações existentes.
-# O nome visível do produto e os e-mails usam Pi Native CRM.
-project_id = "pi-native-crm"
+# Isolated development stack; never reuse another project's containers or volumes.
+project_id = "project-crm-local"
 
 [api]
 enabled = true
-port = 54321
+port = 55421
 schemas = ["public", "storage", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54322
-shadow_port = 54320
+port = 55422
+shadow_port = 55420
 
 # pg15 = o PISO que prometemos suportar, e é o servidor que o contribuidor pega
 # ao rodar `supabase start` — o mesmo que o job `invariants` do CI mede por
@@ -30,9 +29,17 @@ shadow_port = 54320
 # que é o que aquela matriz mede duas vezes.
 major_version = 15
 
+# A fresh CRM database is initialized explicitly with baseline.sql. The inherited
+# migration chain is incomplete from zero; starting services must not apply it.
+[db.migrations]
+enabled = false
+
+[db.seed]
+enabled = false
+
 [db.pooler]
 enabled = false
-port = 54329
+port = 55429
 pool_mode = "transaction"
 default_pool_size = 20
 max_client_conn = 100
@@ -43,13 +50,13 @@ enabled = true
 [studio]
 # CRM 前端测试默认不需要 Supabase Studio，减少本地内存占用。
 enabled = false
-port = 54323
-api_url = "http://127.0.0.1:54321"
+port = 55423
+api_url = "http://127.0.0.1:55421"
 
 [inbucket]
 # 邮件收件箱仅在调试邮件流程时开启。
 enabled = false
-port = 54324
+port = 55424
 
 [storage]
 enabled = true

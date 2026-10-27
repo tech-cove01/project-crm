@@ -19,3 +19,13 @@
 - 原技术约定和说明存于 docs/upstream/AGENTS.md、docs/upstream/CLAUDE.md，作为源码参考；用户指令及本仓工作流优先。源码语言与机器值保持现状，不做无关全量翻译。
 - 原助手配置与 GitHub 工作流已存为 docs/upstream 下的非活动快照。不要运行 skills:sync 覆盖当前共享联接，也不自动激活来源包 hooks 或发布工作流。
 - 当前实施任务只在 docs/implementation-plan.md 维护，本机实际进度在 docs/STATUS.md。上游 tasks/todo.md、docs/current-state.md 和历史报告不等于本仓当前状态。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
