@@ -1,5 +1,7 @@
 # 当前能力与二开边界
 
+> 本页为导入基线的源码盘点。2026-10-27 本机真实验收与后续修复见 [CRM-007 能力记录](evidence/CRM-007-capabilities.md) 和 [审批验收](evidence/CRM-007-approval.md)。
+
 审查日期：2026-10-27。依据 CRM-001 导入基线 `06fac28`；来源、许可与文件映射见 `THIRD_PARTY_NOTICES.md`、`docs/upstream/import-manifest.json`。
 
 以下实现均为**上游继承能力**，不是本次个人新增。“已接线”仅表示找到源码入口和消费者，不代表本机已通过数据库、登录、Worker、模型或客户渠道验收；实际运行进度以 `docs/STATUS.md` 为准。本文路径均相对仓库根目录。
