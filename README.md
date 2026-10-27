@@ -51,6 +51,7 @@ Web/API 与 Worker 分工：前者承接产品交互、权限校验和任务创�
 
 ## 更多资料
 
+- [实施工作流与状态](docs/STATUS.md)
 - [能力与实现边界](docs/current-capabilities.md)
 - [文档索引](docs/index.md)
 - [第三方来源与许可](THIRD_PARTY_NOTICES.md)
