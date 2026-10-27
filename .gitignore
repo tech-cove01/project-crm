@@ -1,0 +1,32 @@
+# Local secrets and private material
+.env
+.env.*
+!.env.example
+!.env.*.example
+.local/
+data/
+archive/
+*.zip
+*.db
+*.db-wal
+*.db-shm
+
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+.venv/
+__pycache__/
+
+# Local editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
