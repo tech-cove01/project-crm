@@ -14,6 +14,14 @@
 
 ## 日常启动
 
+启动前可先执行只读状态检查：
+
+```powershell
+node scripts/local-crm-status.mjs
+```
+
+该入口读取 `.env`、`.env.local` 和既有生成绑定；明确进程环境优先，生成的组织绑定统一覆盖旧 ambient 绑定。仅接受本项目的本机 development 地址，显示健康与两类队列计数，不打印凭据或客户正文。公开集成端点可达不等于已鉴权；Worker 的 HTTP、数据库和消费循环就绪分别显示。无需为状态检查重启、迁移或初始化。
+
 先开启 Docker Desktop。下列 PowerShell 命令在仓库根目录执行。
 
 ```powershell
