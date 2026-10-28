@@ -1,0 +1,6 @@
+# Optional local-only configuration for the official DashScope hostname.
+# Use with compose.yml only when proxy DNS resolves this hostname to a restricted address.
+services:
+  weknora:
+    environment:
+      SSRF_WHITELIST_EXTRA: dashscope.aliyuncs.com
