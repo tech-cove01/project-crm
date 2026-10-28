@@ -25,6 +25,11 @@ interface WikiResponse {
 }
 
 async function main() {
+  const wikiModel = process.env.CRM_LOCAL_WIKI_MODEL;
+  assert(
+    wikiModel === undefined || wikiModel === "opencode" || wikiModel === "dashscope",
+    "wiki_model_invalid",
+  );
   assert(
     ["localhost", "127.0.0.1"].includes(new URL(process.env.SUPABASE_DB_URL ?? "").hostname),
     "local_demo_db_required",
@@ -105,25 +110,33 @@ async function main() {
   token = login.token;
   store("WEKNORA_TENANT_ID", String(login.active_tenant.id));
   if (!values.WEKNORA_MODEL_ID) {
+    const useDashscope = wikiModel === "dashscope";
+    const credentialId = useDashscope
+      ? process.env.CRM_LOCAL_WIKI_CREDENTIAL_ID
+      : "0e644ce3-e1ba-4b4c-8e41-9860e292f965";
+    const organizationId = useDashscope
+      ? process.env.CRM_LOCAL_WIKI_ORGANIZATION_ID
+      : "3ea5dbc2-050b-4324-a489-8a17c2b654c3";
+    assert(credentialId && organizationId, "wiki_local_credential_and_org_required");
+    const modelName = useDashscope ? "qwen3.8-flash" : "space-bunny-free";
     const listed = await api<{ data: WikiEntity[] }>("/api/v1/models");
     let model = listed.data.find(
-      (m) => m.name === "space-bunny-free" && m.display_name === "CRM 本地 Wiki 真实模型",
+      (m) => m.name === modelName && m.display_name === "CRM 本地 Wiki 真实模型",
     );
     if (!model) {
-      const credential = await loadCredential(
-        "0e644ce3-e1ba-4b4c-8e41-9860e292f965",
-        "3ea5dbc2-050b-4324-a489-8a17c2b654c3",
-      );
-      assert.equal(credential.provider, "opencode");
+      const credential = await loadCredential(credentialId, organizationId);
+      assert.equal(credential.provider, useDashscope ? "dashscope" : "opencode");
       model = (
         await api("/api/v1/models", "POST", {
-          name: "space-bunny-free",
+          name: modelName,
           display_name: "CRM 本地 Wiki 真实模型",
           type: "KnowledgeQA",
           source: "remote",
           parameters: {
             provider: "generic",
-            base_url: "https://opencode.ai/zen/v1",
+            base_url: useDashscope
+              ? "https://dashscope.aliyuncs.com/compatible-mode/v1"
+              : "https://opencode.ai/zen/v1",
             api_key: credential.apiKey,
             max_concurrency: 1,
             context_window: 32768,
@@ -230,7 +243,7 @@ async function main() {
       documentId: values.WEKNORA_DOCUMENT_ID,
       parseStatus: doc.data?.parse_status,
       pageCount: pages.pages?.length ?? pages.data?.length,
-      realModel: "opencode/space-bunny-free",
+      modelId: values.WEKNORA_MODEL_ID,
       keyCapability: "retrieve",
     }),
   );
