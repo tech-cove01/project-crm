@@ -4,8 +4,8 @@
 
 - 方向：CRM AI-native 项目。
 - 当前阶段：本机已验证百炼 Agent、客户记忆、原生与 WeKnora 知识检索、部分审批动作及 Langfuse 观测投递，后续按实际业务补齐。
-- 当前票：CRM-013 与 CRM-015 已交付本次范围，最新完成随验收提交成功生效；下一票 CRM-014 销售演示。用户已明确本 agent 持续负责 CRM，工作流和验收见 [实施票据](implementation-plan.md)。
-- 最近交付：CRM-015（44a64b6）文档事实、链接和独立审查通过；见 [证据](evidence/CRM-015.md)。
+- 当前票：正在实施 CRM-014 销售演示；CRM-013 与 CRM-015 已交付本次范围。用户已明确本 agent 持续负责 CRM，工作流和验收见 [实施票据](implementation-plan.md)。
+- 最近交付：CRM-014p 阶段变更审批目标预览完成定向验证和独立审查，随本切片提交生效；完整销售演示仍在进行。[证据](evidence/CRM-014p.md)。CRM-015（44a64b6）文档事实、链接和独立审查通过；见 [证据](evidence/CRM-015.md)。
 - CRM-013a（7211979）：只读状态、一致本机绑定、6 项定向检查及独立审查通过。[证据](evidence/CRM-013a.md)。
 - CRM-013b（3f773cf）：受管启停、脱敏日志与退出诊断通过定向验证及独立审查。[证据](evidence/CRM-013b.md)。
 - CRM-013c：已验证真实登录、正常有序退出、受控异常及恢复；百炼只读 Run `4e30f57b-9738-4c6c-9fdc-d93ca18a341b` completed，专用消费者自然处理两条观测事件为 done，最新队列空闲。Web/Worker/集成服务留在线；这是一时快照，实时请运行 `node scripts/local-crm.mjs status`。[证据](evidence/CRM-013c.md)。

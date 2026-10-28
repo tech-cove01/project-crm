@@ -1239,6 +1239,19 @@ export function AgentCrmWorkbench({
                                   ? "问题尚未发送。批准后进入飞书发送队列；送达和同事回复会分别记录，任务不会因此自动完成。"
                                   : "Agent 未执行此动作。批准后由 CRM Harness 再次校验并调用。"}
                             </p>
+                            {proposal.tool_name === "crm_move_lead_stage" && (
+                              <div className="mt-2 rounded-md bg-muted p-2 text-xs break-all">
+                                <p>
+                                  目标商机 ID：{String(proposal.preview.targetId ?? "未记录，请先核对")}
+                                </p>
+                                <p className="mt-1">
+                                  目标阶段 ID：{String(proposal.preview.toStageId ?? "未记录，请先核对")}
+                                </p>
+                                <p className="mt-1 text-muted-foreground">
+                                  请与商机及目标阶段核对后批准；历史提案可能缺少预览。
+                                </p>
+                              </div>
+                            )}
                             {proposal.tool_name === "crm_schedule_followup" && (
                               <div className="mt-2 rounded-md bg-muted p-2 text-xs">
                                 <p>

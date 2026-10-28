@@ -1,4 +1,4 @@
-import { followupProposalPreview } from "./workbench-proposal-preview";
+import { workbenchProposalPreview } from "./workbench-proposal-preview";
 import { composeSystemPrompt, loadOrgMemory, orgMemoryProvenance, renderOrgMemory } from "@/lib/agent-engine/agent/org-memory";
 import { appendWorkbenchEvent } from "@/lib/ai/agents/workbench-events";
 import {
@@ -372,7 +372,7 @@ export async function runResumedWorkbenchTurn(input: {
             tool_args: proposal.arguments as never,
             preview: {
               requiresHumanConfirmation: true,
-                ...followupProposalPreview(proposal.tool, proposal.arguments),
+                ...workbenchProposalPreview(proposal.tool, proposal.arguments),
               ...(proposal.tool === ASK_INTERNAL_COLLEAGUE_TOOL
                 ? { externalEffect: "feishu_internal_question",
                     recipientUserId: (proposal.arguments as { recipientUserId: string }).recipientUserId,

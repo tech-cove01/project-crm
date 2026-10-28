@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { followupProposalPreview } from "./workbench-proposal-preview";
+import { workbenchProposalPreview } from "./workbench-proposal-preview";
 const lead = "11111111-1111-4111-8111-111111111111";
-describe("safe follow-up approval preview", () => {
+describe("safe workbench approval preview", () => {
   it("shows target and relative due time using the same precedence as the real tool", () => {
     expect(
-      followupProposalPreview("crm_schedule_followup", {
+      workbenchProposalPreview("crm_schedule_followup", {
         lead_id: lead,
         in_hours: 24,
         promised_at: "2026-01-01T00:00:00Z",
@@ -16,7 +16,7 @@ describe("safe follow-up approval preview", () => {
   });
   it("uses an absolute ISO instant only when relative scheduling is absent", () => {
     expect(
-      followupProposalPreview("crm_schedule_followup", {
+      workbenchProposalPreview("crm_schedule_followup", {
         contact_id: lead,
         promised_at: "2026-10-02T08:00:00Z",
       }),
@@ -24,11 +24,20 @@ describe("safe follow-up approval preview", () => {
   });
   it("does not copy arbitrary/invalid arguments to the manager-readable preview", () => {
     expect(
-      followupProposalPreview("crm_schedule_followup", {
+      workbenchProposalPreview("crm_schedule_followup", {
         lead_id: "secret",
         promised_at: "tomorrow",
       }),
     ).toEqual({});
-    expect(followupProposalPreview("unknown", { contact_id: lead })).toEqual({});
+    expect(workbenchProposalPreview("unknown", { contact_id: lead })).toEqual({});
+  });
+  it("only exposes validated move targets, excluding free-text reason and unrelated args", () => {
+    const stage = "22222222-2222-4222-8222-222222222222";
+    expect(workbenchProposalPreview("crm_move_lead_stage", {
+      lead_id: lead, to_stage_id: stage, reason: "private note", token: "secret",
+    })).toEqual({ targetKind: "lead", targetId: lead, toStageId: stage });
+    expect(workbenchProposalPreview("crm_move_lead_stage", {
+      lead_id: "private", to_stage_id: "private",
+    })).toEqual({});
   });
 });
