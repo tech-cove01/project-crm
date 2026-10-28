@@ -132,7 +132,7 @@ services:
         "-dir=/data",
         "-ip=seaweedfs",
         "-ip.bind=0.0.0.0",
-        "-volume.max=2",
+        "-volume.max=5",
         "-master.volumeSizeLimitMB=64",
         "-s3",
         "-s3.config=/etc/seaweedfs/auth.json",

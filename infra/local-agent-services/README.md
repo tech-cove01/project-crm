@@ -2,7 +2,7 @@
 
 安全说明：`provision-local-wiki.ts` 默认只复用完整的现有合成 fixture。缺少模型/知识库/文档时会在远端请求之前拒绝；只有明确接受 `--allow-unbounded-synthetic-ingest` 的未设硬上限成本才能重新生成。已部署 WeKnora 曾忽略页数配置，因此不存在已验证的“最多 2 页”保证。该开关不是生产审批机制；CRM 使用 retrieve-only 密钥读取，不能自动生成或发布知识。
 
-这里运行真实的 Mem0、WeKnora 和 Langfuse，不是健康检查模拟器。配置只绑定合成演示组织 `pi-native-demo`，不得用于真实客户或无人值守生产。
+这里运行真实的 Mem0、WeKnora 和 Langfuse，不是健康检查模拟器。配置应只绑定本机合成演示组织，不得用于真实客户或无人值守生产。
 
 ## 服务与资源
 
@@ -18,7 +18,7 @@
 
 ## 初始化（仅一次）
 
-需要 Docker、Compose v2、pnpm；当前机器 Compose 二进制位于 `/Volumes/exten-disk/work/crm/agent-services-tools/docker-compose`。以下 `docker compose` 可替换为该绝对路径。compose 设置 `pull_policy: never`，先准备指定版本镜像，避免无意更新。
+需要 Docker、Compose v2、pnpm；compose 设置 `pull_policy: never`，先准备指定版本镜像，避免无意更新。以下部分 Bash 命令来自上游环境；本机 Windows 操作可按 PowerShell 示例及本仓 `docs/local-development.md` 执行。
 
 ```bash
 pnpm exec tsx scripts/provision-local-agent-services.ts init
@@ -56,13 +56,28 @@ docker compose --env-file infra/local-agent-services/.env.generated -f infra/loc
 
 本版本实际 ingest 未遵守配置的 `max_pages_per_ingest: 2`：短文仍生成了 11 页，耗时约 11 分钟，包含一次模型超时重试。并发 1 确实限制了内存和模型并发，但不是模型调用次数的硬上限；生产接入前需要独立的生成预算与发布复核，不能只依赖该上游字段。
 
-Langfuse 的 ClickHouse 用 `ClickHouse.Dockerfile` 构建为 compose 指定镜像。SeaweedFS 使用官方 3.95 arm64 发布二进制构建 `SeaweedFS.Dockerfile`，不是 MinIO 模拟实现；验证过的官方压缩包 MD5 为 `bf384a31c4e171dc3ec3f2a984becdbf`。创建 `crm-agent-services-s3-config` 卷，使用临时 helper 容器把生成的 `.env.s3.generated` 复制为 `/etc/seaweedfs/auth.json`，不可放入镜像或提交 Git。启动 S3 后创建 `langfuse` 桶，再启动 Worker/Web：
+Langfuse 的 ClickHouse 用 `ClickHouse.Dockerfile` 构建。SeaweedFS 是真实服务：x86_64 本机用官方 `chrislusf/seaweedfs:3.95` 和 `SeaweedFS.amd64.Dockerfile`；原 `SeaweedFS.Dockerfile` 适用于 arm64 上游二进制（历史校验 MD5 `bf384a31c4e171dc3ec3f2a984becdbf`）。下列 PowerShell 以 x86_64 为例，依次准备镜像、专用配置卷与服务：
 
-```bash
+```powershell
+docker pull clickhouse/clickhouse-server:25.12.5.44
+docker pull chrislusf/seaweedfs:3.95
+docker pull redis:7.2.7-alpine
+docker pull docker.langfuse.com/langfuse/langfuse:4.49.0
+docker pull docker.langfuse.com/langfuse/langfuse-worker:4.49.0
+docker build -f infra/local-agent-services/ClickHouse.Dockerfile -t crm-agent-services-clickhouse:25.12.5.44 infra/local-agent-services
+docker build -f infra/local-agent-services/SeaweedFS.amd64.Dockerfile -t crm-agent-services-seaweedfs:3.95 infra/local-agent-services
+
+# 第一次创建配置卷；已有 auth.json 时不覆盖，以免破坏已有数据访问。
+docker volume create crm-agent-services-s3-config
+$s3File = (Resolve-Path 'infra/local-agent-services/.env.s3.generated').Path
+docker run --rm --mount 'type=volume,source=crm-agent-services-s3-config,target=/target' --mount "type=bind,source=$s3File,target=/source/auth.json,readonly" --entrypoint /bin/sh redis:7.2.7-alpine -c 'if [ ! -e /target/auth.json ]; then cp /source/auth.json /target/auth.json && chmod 600 /target/auth.json; fi'
 docker compose --env-file infra/local-agent-services/.env.generated -f infra/local-agent-services/compose.yml --profile langfuse up -d redis clickhouse seaweedfs
-printf 's3.bucket.create -name langfuse\n' | docker exec -i crm-agent-services-seaweedfs-1 /weed -logtostderr=true shell -master=seaweedfs:9333 -filer=seaweedfs:8888
+# 首次使用：等待 SeaweedFS filer 就绪，再创建存储桶。
+'s3.bucket.create -name langfuse' | docker exec -i crm-agent-services-seaweedfs-1 /usr/bin/weed -logtostderr=true shell -master=seaweedfs:9333 -filer=seaweedfs:8888
 docker compose --env-file infra/local-agent-services/.env.generated -f infra/local-agent-services/compose.yml --profile langfuse up -d langfuse-worker langfuse-web
 ```
+
+配置卷含密钥，不可放入镜像或提交 Git。保留 `.env.generated`、`.env.s3.generated` 和持久卷：初始化脚本不会自动替换已存在的卷凭据，凭据轮换必须同步处理。已存在桶时不必再创建；可把上述 `s3.bucket.create -name langfuse` 改成 `s3.bucket.list` 检查。arm64 上游 scratch 镜像内执行路径为 `/weed`，x86_64 镜像使用 `/usr/bin/weed`。Compose 中 `volume.max=5` 仅解决本机示例的可写卷槽不足，不是长期容量保证；容量、增长与持久化需按实际环境配置。重启已有服务时不要重新创建配置卷或清理数据。
 
 `agent-services@localhost.test` 为本地合成管理员。密码从私有文件读取，不能记录到 README。
 
@@ -78,7 +93,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3009 node --env-file=.env.e2e --env-file=in
 
 将示例 UUID 替换成目标 CRM 组织 UUID，避免沿用来源项目的演示组织。WeKnora 的密钥和知识库 ID 必须先由本地初始化脚本生成，才能包含其绑定；生成过程会覆盖原有 `.env.crm.generated`，每次重新生成后 Web 和 Worker 都要重新加载该环境文件。
 
-本机网络需要代理时，Node 24+ 可使用 `NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7897 NO_PROXY=localhost,127.0.0.1`，CRM 和选定 worker 均需设置。容器的 `SERVICE_HTTP_PROXY` 必须是 Docker VM 实际可达的本机代理地址。当前 VM 通过 SSH 反向转发 17897 和仅绑定 Docker 网桥的 socat 17898 访问本机代理；VM 重启后需重新建立这两个转发。不要把宿主 `127.0.0.1` 当作容器可达的宿主地址。
+本机网络需要代理时，Node 24+ 可使用 `NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7897 NO_PROXY=localhost,127.0.0.1`，CRM 和选定 worker 均需设置。容器的 `SERVICE_HTTP_PROXY` 必须是 Docker VM 实际可达的本机代理地址。来源环境曾通过 SSH 反向转发 17897 和仅绑定 Docker 网桥的 socat 17898 访问本机代理，不能假定当前机器也有该配置。不要把宿主 `127.0.0.1` 当作容器可达的宿主地址。
 
 真实运行创建后，只执行该合成 run 的 job，不启动整个业务消费器：
 
