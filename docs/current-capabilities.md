@@ -10,7 +10,7 @@
 
 这是一套面向销售团队的 CRM：管理客户与商机，结合客户上下文和公司知识生成建议，再经权限、审批及执行回执推动跟进。Agent 并非单独聊天页，而是读取和操作 CRM 的执行入口；但不能把现有代码描述成已验证的全自动销售闭环。
 
-全栈部分由 Next.js / React / TypeScript 工作台与 API、Supabase/PostgreSQL 的业务和权限数据组成；Pi Agent Core 在独立 Node Worker 内驱动模型和工具执行。[中文演示入口](sales-demo.md)首轮两个真实 Run 展示了客户/知识、独立商机提案、明确批准、落库续跑和观测，批准由自动化操作者通过现有 UI 执行。但后续复现出现 partial，稳定性仍未完成，不能称为单 Run 自动销售闭环或稳定演示。实际结果及评分缺口见 [CRM-014](evidence/CRM-014b.md)。
+全栈部分由 Next.js / React / TypeScript 工作台与 API、Supabase/PostgreSQL 的业务和权限数据组成；Pi Agent Core 在独立 Node Worker 内驱动模型和工具执行。[中文演示入口](sales-demo.md)现以三个独立任务展示客户事实、知识证据、商机提案与批准续跑，最新本机复现均 completed、含观测回查约 4 分 29 秒。批准由自动化操作者通过现有 UI 明确执行；这是固定合成样本，不能称为单 Run 自动销售闭环或生产稳定性验证。[最新结果](evidence/CRM-014v.md)与[前序失败](evidence/CRM-014b.md)分别保留。
 
 ## 本机真实验收
 
@@ -65,7 +65,7 @@
 - Mem0、WeKnora、Langfuse 是可选适配器；关闭它们不等于删除本地 SQL 事实、原生 RAG 或 SQL 运行记录，但相应外部能力不可用。客户发送渠道也需单独配置和验收。
 - 普通 Worker 处理业务任务不等于外部集成队列会被消费；本机专用定时器需另行运行，Web 与 Worker 需加载一致组织绑定。启动方式见[本地运行](local-development.md)、[可选服务说明](../infra/local-agent-services/README.md)及 [WeKnora 本机接入](weknora-local-development.md)。
 - 百炼费用在 CRM 中仍为 NULL/未知，不是免费。本机 `CRM_LOCAL_WORKBENCH_UNPRICED_MODE=true` 仅对符合条件的新百炼非 Mission Workbench Run 关闭单次金额预算；默认关闭，组织预算不变，token/步骤控制并非硬上限。正式费用计算与续跑 token 统计边界见 [CRM-008](evidence/CRM-008.md)。
-- CRM-015 的文档更新仅复核已有材料；CRM-013 随后完成本机恢复验收，CRM-014 保留部分成功和复现失败，尚未结票。首轮两 Run 确定性评分为 fail/83、fail/79，答案质量项均为 0，不因业务阶段落库或续跑完成而视为已通过。公网部署、全渠道发送、组织记忆发布与引用、多 Agent/Mission/意图路由深验均未由这些样本证明。Cloudflare 与正式依赖、安全升级等前置见[部署评估](cloudflare-deployment.md)；私人求职及实习材料保留在公开仓库之外。
+- CRM-015 的文档更新仅复核已有材料；CRM-013/014 随后完成各票记录的本机范围。首轮评分 fail/83、79 及后续 partial 未删除；最新三任务为 needs_review/89、92、89，answer_quality 均为 50，仍未做语义 Judge，不因业务完成而视为全评测通过。公网部署、全渠道发送、组织记忆发布与引用、多 Agent/Mission/意图路由深验均未由这些样本证明。Cloudflare 与正式依赖、安全升级等前置见[部署评估](cloudflare-deployment.md)；私人求职及实习材料保留在公开仓库之外。
 
 ## 架构材料需纠正的说法
 

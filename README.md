@@ -47,7 +47,7 @@ Web/API 与 Worker 分工：前者承接产品交互、权限校验和任务创�
 
 ## 本机已验证的范围
 
-以下是截至 **2026-10-28** 的本机验收记录，使用合成客户、商机和知识资料，模型请求真实执行并由百炼计费。[中文销售演示](docs/sales-demo.md)已准备固定输入与操作入口，首轮两个真实 Run 展示记忆/知识、独立商机审批、落库续跑与观测；后续复现出现 partial，稳定性与连续 3–5 分钟目标仍在完善。源码中的其他 Agent、Mission 和渠道能力不因此视为全部验收。
+以下是截至 **2026-10-28** 的本机验收记录，使用合成客户、商机和知识资料，模型请求真实执行并由百炼计费。[中文销售演示](docs/sales-demo.md)采用三个独立任务，最新一次从客户读取到商机审批续跑为 3 分 31 秒，含观测回查为 4 分 29 秒；前序 partial 与评分失败完整保留。该样本不代表生产稳定性，源码中的其他 Agent、Mission 和渠道能力不因此视为全部验收。
 
 | 切片 | 实际结果 | 验收依据与限制 |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ Web/API 与 Worker 分工：前者承接产品交互、权限校验和任务创�
 | Mem0 | 确认事实经专用集成队列自动同步；真实写入、搜索、删除及 Agent 客户工具触发检索通过。 | [CRM-010 Mem0](docs/evidence/CRM-010-mem0.md)；SQL 仍为事实权威，脱敏记录无法确认答案引用了哪条重复记忆。 |
 | WeKnora | 百炼处理合成产品资料，CRM 返回带来源的 Wiki 结果，Agent 已引用。 | [CRM-010 WeKnora](docs/evidence/CRM-010-weknora.md)；短查询命中，较长自然语言查询曾返回空结果。 |
 | Langfuse 与评估 | 真实回读模型/工具 observations 和确定性评分，重启后记录保留；另已显式运行语义 Judge。 | [CRM-010 Langfuse](docs/evidence/CRM-010-langfuse.md)、[CRM-007](docs/evidence/CRM-007-capabilities.md)；确定性评估出现 `fail`，语义 Judge 为 `needs_review`，均保留原结果。 |
-| 固定销售演示（进行中） | 首轮两 Run completed、阶段落库续跑、Trace 实际回读；第二次商机虽已落库，续跑 partial，第三次只读任务也 partial。 | [CRM-014](docs/evidence/CRM-014b.md)；自动化操作者点击现有 UI；失败、评分与输入修正均保留，未发送客户消息。 |
+| 固定销售演示 | 最新三 Run completed；批准前阶段不变，执行后重读目标阶段并续跑，三 Trace 实际回读。 | [CRM-014v](docs/evidence/CRM-014v.md)；自动化操作者点击现有 UI，评估仍 needs_review/89、92、89；[前序失败](docs/evidence/CRM-014b.md)保留，未发送客户消息。 |
 
 当前百炼模型费用在 CRM 中仍为未知，不等于免费；演示模式保留组织预算及已有 token/步骤控制，但后两者不是硬上限。客户发送、普通工作台回复候选到批准发送的闭环、组织记忆发布引用和正式成本计算仍未验收，详见[能力与边界](docs/current-capabilities.md)。
 
