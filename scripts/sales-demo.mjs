@@ -90,7 +90,7 @@ export async function inspectDemo(client, config, fixtures) {
 export function buildDemoSession(facts, fixtures, config, sessionId = randomUUID()) {
   const [approval, memory, wiki] = fixtures;
   const marker = `[CRM-014:${sessionId}]`;
-  const language = "面向用户的回复和结构化结果中的自然语言字段必须使用简体中文；JSON 键、枚举、实际记录 ID、工具名、来源标题和观察到的标量值保持原样。";
+  const language = "面向用户的回复和结构化结果中的自然语言字段必须使用简体中文；JSON 键、枚举、实际记录 ID、工具名、来源标题和观察到的标量值保持原样。知识引用使用工具实际返回的片段/证据 ID，不用父级知识源或文档 ID 代替；商机引用使用实际商机 ID，不把它当成 run_event 的事件 ID，也不自行拼造时间或其他观察值。";
   const inspectTask = `${marker} 本机合成销售演示，仅做读取。${language}请先调用 crm_get_contact，读取联系人 ${memory.contactId}，根据工具返回的 confirmed_customer_memory 汇报已确认的沟通时间与方式；再调用 crm_search_knowledge，pergunta 参数精确使用“产品”两个字，quantidade 参数为 5，查询已授权的公司产品知识并列出工具实际返回的来源和关键内容。知识源为 ${wiki.sourceId}。明确区分事实与未知，不编造结果，不修改任何数据，也不发送消息。`;
   const approvalTask = `${marker} 本机合成销售演示，只处理选中的无客户关联合成商机。${language}请先读取商机 ${approval.leadId}，然后仅调用一次 crm_move_lead_stage 提出移动阶段的动作：lead_id 精确为 ${approval.leadId}，to_stage_id 精确为 ${facts.targetStageId}，reason 填写“CRM-014 合成销售演示”。等待人工确认。批准后必须再调用 crm_get_lead 复核同一商机；本任务验收仅要求实际 stage_id 等于 ${facts.targetStageId}，若一致则据实汇报完成，不重复移动。阶段可读名称、客户关联和后续外联均不属于本次内部阶段变更任务的必要材料；不要把它们当成本任务缺口，真正阻止核对阶段的错误仍须如实报告。禁止调用 crm_update_lead 或其他写工具，不操作其他商机，不发送任何消息。`;
   const shape = (agent, task, mode, scope) => ({ agentId: agent.id, task, mode, collaboration: "disabled", scope });
