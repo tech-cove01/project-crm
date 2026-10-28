@@ -64,6 +64,24 @@ corepack pnpm worker
 
 本机 0410 数据库迁移已应用；新应用与迁移需要同步部署。切换 embedding 模型时旧索引必须重新生成；旧五参数 `retrieve_top_k_chunks` 会明确拒绝调用，需迁移至带模型身份的新接口。合成 FAQ、隔离检查和运行结果见 [CRM-007 验收](evidence/CRM-007-capabilities.md)。不要求启动 Mem0、WeKnora 或 Langfuse 才能使用原生知识库。
 
+当前机器的 Mem0 容器需在 Docker 重启后手动启动（保留已有配置、镜像和卷）：
+
+```powershell
+docker compose --env-file infra/local-agent-services/.env.generated -f infra/local-agent-services/compose.yml --profile mem0 up -d mem0
+```
+
+目前独立 PostgreSQL 的本地镜像标签沿用了 `15.8.1.085`，实际基于 15.19；本机适配 Dockerfile 位于 `.local/Postgres.Dockerfile`，与仓库中的来源 Dockerfile 不同。镜像或私有配置丢失后不能直接按来源文档声称已恢复；须重新核对并构建，不能清空现有卷。
+
+启用本机集成后，启动 Web 和 Worker 的 PowerShell 终端都要先加载由 `scripts/provision-local-agent-services.ts bindings` 生成的本机绑定（文件含凭据，勿上传或粘贴到聊天）：
+
+```powershell
+$bindingLine = Get-Content 'infra/local-agent-services/.env.crm.generated' | Where-Object { $_.StartsWith('AI_INTEGRATION_BINDINGS=') } | Select-Object -First 1
+if (-not $bindingLine) { throw 'Local integration bindings missing' }
+$env:AI_INTEGRATION_BINDINGS = $bindingLine.Substring('AI_INTEGRATION_BINDINGS='.Length).Trim("'")
+```
+
+然后在各自终端按上文启动 Web 和 Worker。每次重新生成绑定后需重新加载并重启两者；未配置的服务不应标为已验收。
+
 启用外部服务时，普通 Worker 的业务事件循环不会处理集成队列。本机启动 Web 后，可用 `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/dev-integration-drain.ts` 启动仅处理集成队列的本机定时器；须设置 `NODE_ENV=development`，且 Web、数据库和 Supabase 地址均为本机。专用入口处理该 Web 所连数据库的全局集成队列，不按组织筛选：必须确认 Web 实际使用同一个本机数据库。每次调用结束后等待 60 秒，不处理客户消息队列。正式部署使用独立 scheduler。
 ## 本机工作台演示模式
 

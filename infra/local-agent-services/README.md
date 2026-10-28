@@ -50,7 +50,9 @@ pnpm exec tsx --env-file=.env.e2e scripts/provision-local-wiki.ts
 docker compose --env-file infra/local-agent-services/.env.generated -f infra/local-agent-services/compose.yml --profile wiki up -d weknora
 ```
 
-脚本仅从合成组织既有加密凭据中读取 `opencode/space-bunny-free`，通过真实模型建立 Wiki；管理员密码不打印，CRM API Key 仅有 `retrieve` 权限并绑定单一 KB。生成需要多次真实模型请求，超时会重试。草稿不等于可检索证据；上游在完整 ingest 成功时自动发布派生页面（本次共 11 页），这不代表人工审核其业务结论。`--publish-synthetic` 只用于检查指定产品页面及其单一合成文档引用，若仍为草稿则显式发布该页。CRM 检索还会验证源文档和页面的范围、状态及新鲜度。
+脚本默认从历史合成组织的加密凭据中读取 `opencode/space-bunny-free`，通过真实模型建立 Wiki；管理员密码不打印，CRM API Key 仅有 `retrieve` 权限并绑定单一 KB。生成需要多次真实模型请求，超时会重试。草稿不等于可检索证据；上游在历史联调中完整 ingest 后自动发布派生页面（共 11 页），这不代表人工审核其业务结论，也不代表当前本机已完成。`--publish-synthetic` 只用于检查指定产品页面及其单一合成文档引用，若仍为草稿则显式发布该页。CRM 检索还会验证源文档和页面的范围、状态及新鲜度。
+
+本机已有百炼凭据时，首次创建 Wiki 可将 `CRM_LOCAL_WIKI_MODEL` 设为 `dashscope`，并设置 `CRM_LOCAL_WIKI_CREDENTIAL_ID`、`CRM_LOCAL_WIKI_ORGANIZATION_ID` 为本机 CRM 中的凭据和所属组织 ID；脚本会校验凭据属于该组织且提供商为百炼，然后使用固定的百炼兼容接口和 `qwen3.8-flash`。这只影响尚未创建模型的首次初始化；已有模型需要在 WeKnora 中单独核对，不会因修改环境变量自动替换。首次合成资料生成需在脚本命令后显式传入 `--allow-unbounded-synthetic-ingest`；该上游生成过程可能多次调用模型，不能保证页数或调用次数上限。
 
 本版本实际 ingest 未遵守配置的 `max_pages_per_ingest: 2`：短文仍生成了 11 页，耗时约 11 分钟，包含一次模型超时重试。并发 1 确实限制了内存和模型并发，但不是模型调用次数的硬上限；生产接入前需要独立的生成预算与发布复核，不能只依赖该上游字段。
 
@@ -67,12 +69,14 @@ docker compose --env-file infra/local-agent-services/.env.generated -f infra/loc
 ## CRM 绑定与真正验收
 
 ```bash
-pnpm exec tsx scripts/provision-local-agent-services.ts bindings --langfuse
+pnpm exec tsx scripts/provision-local-agent-services.ts bindings --organization-id=00000000-0000-4000-8000-000000000001 --langfuse
 # CRM 与选定的真实运行 worker 都必须加载以下两个 env 文件。
 NEXT_PUBLIC_APP_URL=http://localhost:3009 node --env-file=.env.e2e --env-file=infra/local-agent-services/.env.crm.generated node_modules/next/dist/bin/next start --port 3009
 ```
 
 在 CRM 集成页面启用对应 provider，通过管理员 API 连接 Wiki source，并把该 source 选择到测试 Agent 的草稿。已有真实 API 的权限、审计和组织隔离继续适用；脚本不直接改写 Agent 配置或发布 Agent。
+
+将示例 UUID 替换成目标 CRM 组织 UUID，避免沿用来源项目的演示组织。WeKnora 的密钥和知识库 ID 必须先由本地初始化脚本生成，才能包含其绑定；生成过程会覆盖原有 `.env.crm.generated`，每次重新生成后 Web 和 Worker 都要重新加载该环境文件。
 
 本机网络需要代理时，Node 24+ 可使用 `NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7897 NO_PROXY=localhost,127.0.0.1`，CRM 和选定 worker 均需设置。容器的 `SERVICE_HTTP_PROXY` 必须是 Docker VM 实际可达的本机代理地址。当前 VM 通过 SSH 反向转发 17897 和仅绑定 Docker 网桥的 socat 17898 访问本机代理；VM 重启后需重新建立这两个转发。不要把宿主 `127.0.0.1` 当作容器可达的宿主地址。
 
@@ -88,6 +92,8 @@ pnpm exec tsx --env-file=.env.e2e --env-file=infra/local-agent-services/.env.crm
 先通过 CRM 的显式 Eval POST 生成报告，再通过已鉴权的 `ai-integration-drain` 专用接口投递并等待 Worker 落库。Langfuse v4 使用 Observations API v2 和 Scores API v3 回读，不能用旧 `/traces/:id` 的 404 判断入库失败；见[官方 API 文档](https://langfuse.com/docs/api-and-data-platform/features/public-api)。探针必须查到对应 run 的模型、工具、分数，并确认 input/output 均为空（隐私保护），不能将 HTTP 200 或队列 done 当作完整验收。
 
 验证输出只含 ID、数量、哈希和分数，写入受忽略的 `.env.verification.generated`。真实模型调用成功不代表业务任务完成；部分结果、Judge 失败、来源缺失必须保留。
+
+探针默认使用上游 `pi-native-demo` 组织；在本机新建的演示组织中验证时，设置 `CRM_AGENT_SERVICES_ORGANIZATION_ID` 为当前组织 ID。Mem0 查询探针还需要将 `CRM_AGENT_SERVICES_CONTACT_ID` 设为相应的合成联系人 ID；涉及删除的旧探针仍只允许上游演示组织与本机 Mem0。Langfuse 默认验证 `http://127.0.0.1:3006` 上的 `crm-local-demo-project`；若明确选择其他实例，可分别设置 `CRM_LANGFUSE_ORIGIN` 和 `CRM_LANGFUSE_PROJECT_ID`，并确保 CRM 的服务端绑定指向同一地址和项目。探针仍要求 CRM 数据库位于本机，且运行记录属于所选组织；项目鉴权成功不代表 Trace 或评分已实际写入，需继续执行 `langfuse RUN_ID` 回读。
 
 ## 外置盘迁移后的注册邮件恢复
 
