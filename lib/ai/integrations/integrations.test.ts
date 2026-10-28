@@ -10,6 +10,7 @@ import {
 } from "./langfuse";
 import { syncCustomerMemory, readConfirmedCustomerMemory, customerMemoryInput } from "./mem0";
 import { searchCompanyWiki, readCompanyWikiEvidence } from "./weknora";
+import { escapeWikiRegex } from "./wiki-query";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import type { AgentEvalReport } from "@/lib/ai/evals/contracts";
 
@@ -542,6 +543,7 @@ describe("WeKnora current-source Wiki evidence", () => {
       query,
       http,
       page,
+      source,
       doc,
       manifests,
       revoke: () => {
@@ -570,6 +572,92 @@ describe("WeKnora current-source Wiki evidence", () => {
           query.text.includes("do nothing"),
       ),
     ).toBe(true);
+  });
+  it("treats fake regex input as literal text without broadening the search", async () => {
+    const f = fixture();
+    const query = ".*|[unknown";
+    f.http.mockImplementation(async () => j({ pages: [] }));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: false, queryMode: "literal" });
+    expect(f.http).toHaveBeenCalledTimes(1);
+    expect(new URL(String(f.http.mock.calls[0]![0])).searchParams.get("q")).toBe("\\.\\*\\|\\[unknown");
+    expect(f.manifests).toEqual([]);
+  });
+  it("uses one bounded keyword retry after an upstream zero and validates the current published page", async () => {
+    const f = fixture();
+    const query = "Pi Native CRM 的客户记忆由什么服务提供向量检索，数据库是否是事实来源？";
+    f.page.title = "Pi Native CRM";
+    f.page.content = "客户记忆由向量检索服务支持；数据库是事实来源。";
+    const original = f.http.getMockImplementation()!;
+    const searches: string[] = [];
+    f.http.mockImplementation(async url => {
+      const target = new URL(String(url));
+      if (target.pathname.endsWith("/search")) {
+        searches.push(target.searchParams.get("q")!);
+        return j({ pages: searches.length === 1 ? [] : [{ slug: f.page.slug }] });
+      }
+      return original(url);
+    });
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
+    expect(searches).toHaveLength(2);
+    expect(searches[0]).toBe(escapeWikiRegex(query));
+    expect(searches[1]).toContain("|");
+    expect(result).toMatchObject({ status: "complete", fallbackUsed: true, queryMode: "keyword_fallback", handledSourceIds: [sourceId] });
+    expect(result.evidence).toHaveLength(1);
+    expect(result.evidence[0]?.metadata).toMatchObject({ queryMode: "keyword_fallback", authority: "derived_company_knowledge_not_commercial_approval" });
+    expect(f.manifests).toHaveLength(1);
+  });
+  it.each(["one repeated term", "terms outside the returned excerpt"])("rejects fallback candidates with %s even when search snippets claim relevance", async variant => {
+    const f = fixture();
+    const query = "Pi Native CRM 的客户记忆由什么服务提供向量检索，数据库是否是事实来源？";
+    f.page.title = variant === "one repeated term" ? "Pi Native CRM" : "Widget";
+    f.page.content = variant === "one repeated term" ? "Pi Native CRM Pi Native CRM" : "x".repeat(12000) + "客户记忆向量检索";
+    const original = f.http.getMockImplementation()!;
+    let searches = 0;
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug, title: "客户记忆向量检索" }] })
+      : original(url));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true });
+    expect(searches).toBe(2);
+    expect(f.manifests).toEqual([]);
+  });
+  it("retains empty for the fixed no-answer query despite an unrelated provider candidate", async () => {
+    const f = fixture();
+    f.page.title = "产品资料";
+    f.page.content = "人工确认与客户记忆；数据库是事实来源。";
+    const original = f.http.getMockImplementation()!;
+    let searches = 0;
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug }] }) : original(url));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "火星基地量子电池的政府采购合同编号是什么？", 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true });
+    expect(searches).toBe(2);
+    expect(f.manifests).toEqual([]);
+  });
+  it.each(["stale", "foreign"])("never retries when literal candidates are rejected as %s", async reason => {
+    const f = fixture();
+    if (reason === "stale") f.doc.updated_at = "2026-10-02T01:00:00Z";
+    else f.doc.knowledge_base_id = "foreign-kb";
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "客户记忆向量检索", 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: false });
+    expect(f.http.mock.calls.filter(([url]) => String(url).includes("/search?"))).toHaveLength(1);
+    expect(f.manifests).toEqual([]);
+  });
+  it("limits the keyword retry to one per KB when selected CRM sources share that KB", async () => {
+    const f = fixture();
+    const original = f.query.getMockImplementation()!;
+    f.query.mockImplementation(async (query, values) => {
+      const sql = typeof query === "string" ? query : query.text;
+      const args = typeof query === "string" ? values : query.values;
+      if (sql.includes("select id,source_metadata"))
+        return { rows: [f.source, { ...f.source, id: other }].filter(source => (args![1] as string[]).includes(source.id)) };
+      return original(query, values);
+    });
+    f.http.mockImplementation(async () => j({ pages: [] }));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId, other], "客户记忆向量检索", 3, undefined, f.http);
+    expect(f.http).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true, handledSourceIds: [sourceId, other] });
   });
   it("hides a previously captured receipt after page correction or deletion", async () => {
     const f = fixture();

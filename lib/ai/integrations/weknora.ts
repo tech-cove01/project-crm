@@ -4,6 +4,7 @@ import { z } from "zod";
 import { enabledIntegration, type IntegrationBinding } from "./config";
 import { integrationFetch } from "./http";
 import { integrationQuery } from "./db";
+import { matchesWikiKeywords, planWikiQuery } from "./wiki-query";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const id = z
@@ -137,21 +138,32 @@ export async function searchCompanyWiki(
   const allowed = await sourcesFor(pool, org, authorizedSourceIds);
   const evidence = [];
   const max = Math.max(1, Math.min(10, limit));
+  const planned = planWikiQuery(query);
+  const searched = new Map<string, { pages: unknown[]; usedFallback: boolean }>();
+  let fallbackUsed = false;
   for (const source of allowed.slice(0, 5)) {
     const kb = source.source_metadata.knowledge_base_id;
     if (!binding.knowledge_base_ids?.includes(kb) || binding.visibility !== "organization")
       continue;
-    const response = z
+    const search = async (pattern: string) => z
       .object({ pages: z.array(z.unknown()).max(100) })
-      .parse(
-        await json(
-          binding,
-          `/api/v1/knowledgebase/${encodeURIComponent(kb)}/wiki/search?q=${encodeURIComponent(query.slice(0, 2000))}&limit=${max}`,
-          signal,
-          fetchImpl,
-        ),
-      );
-    for (const candidate of response.pages.slice(0, max)) {
+      .parse(await json(binding,
+        `/api/v1/knowledgebase/${encodeURIComponent(kb)}/wiki/search?q=${encodeURIComponent(pattern)}&limit=${max}`,
+        signal, fetchImpl));
+    let result = searched.get(kb);
+    if (!result) {
+      let response = await search(planned.literal);
+      // Only an upstream zero-candidate result permits retry; invalid/stale pages never widen the search.
+      const usedFallback = response.pages.length === 0 && planned.fallback !== null;
+      if (usedFallback) {
+        fallbackUsed = true;
+        response = await search(planned.fallback!);
+      }
+      result = { pages: response.pages, usedFallback };
+      searched.set(kb, result);
+    }
+    const { usedFallback } = result;
+    for (const candidate of result.pages.slice(0, max)) {
       signal?.throwIfAborted();
       const candidateIdentity = z.object({ slug: z.string() }).safeParse(candidate);
       if (!candidateIdentity.success) continue;
@@ -166,6 +178,7 @@ export async function searchCompanyWiki(
           ),
         );
         if (page.knowledge_base_id !== kb) throw new Error("wiki_page_scope_mismatch");
+        if (usedFallback && !matchesWikiKeywords([page.title, page.slug, page.content.slice(0, 12000)], planned.terms)) continue;
         const documentIds = [...new Set(page.source_refs.map((ref) => ref.split("|")[0]!))].sort();
         const docs = await Promise.all(
           documentIds.map((ref) => document(binding, kb, ref, signal, fetchImpl)),
@@ -228,6 +241,7 @@ export async function searchCompanyWiki(
             chunk_ids: manifest.chunk_ids,
             authority: manifest.authority,
             revision_kind: "immutable_observation_manifest",
+            queryMode: usedFallback ? "keyword_fallback" : "literal",
           },
         });
       } catch {
@@ -241,6 +255,8 @@ export async function searchCompanyWiki(
     evidence,
     status: evidence.length ? "complete" : "empty",
     handledSourceIds: allowed.map((source) => source.id),
+    queryMode: fallbackUsed ? "keyword_fallback" : "literal",
+    fallbackUsed,
   };
 }
 
