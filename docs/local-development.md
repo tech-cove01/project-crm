@@ -41,6 +41,23 @@ node scripts/local-crm.mjs stop
 
 下面保留原手工启动方式，勿与受管入口同时启动同一端口。
 
+### 恢复本机既有集成容器
+
+受管入口不创建或重置依赖。此机器已有 CRM 专用容器和持久卷时，先检查归属与名称：
+
+```powershell
+docker ps -a --filter label=com.docker.compose.project=crm-agent-services --format 'table {{.Names}}\t{{.Status}}'
+# 确认属于当前仓库、沿用已有配置后，按需选择服务启动。
+docker start crm-agent-services-postgres-1
+docker start crm-agent-services-redis-1 crm-agent-services-clickhouse-1 crm-agent-services-seaweedfs-1
+docker start crm-agent-services-mem0-1 crm-agent-services-weknora-1
+# 等 Postgres / ClickHouse healthy、对象存储就绪后再启动：
+docker start crm-agent-services-langfuse-worker-1 crm-agent-services-langfuse-web-1
+node scripts/local-crm.mjs status
+```
+
+这组命令只恢复本机现有实例，保留容器配置和卷；新电脑没有这些容器时应按 `infra/local-agent-services/README.md` 准备，不能把首次配置与已有实例恢复混用。按需服务的公开端点分别为 Mem0 8888 的 `/docs`、WeKnora 8088 的 `/health`、Langfuse 3006 的 `/api/public/health`；可达不证明组织鉴权或业务成功。不要对旁边 Go 项目的 MySQL/Redis/Kafka 执行启动、停止或重置。
+
 ```powershell
 # 已缓存的 Supabase CLI，首次准备时已核对官方发布校验和。
 & .\.local\tools\supabase-v2.122.0\bin\supabase.exe `
