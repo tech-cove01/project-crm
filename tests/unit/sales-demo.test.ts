@@ -72,6 +72,8 @@ describe("read-only sales demonstration preparation", () => {
     expect(f.queries[0]!.sql).toBe("begin isolation level repeatable read read only");
     expect(f.queries.at(-1)!.sql).toBe("commit");
     expect(f.ended()).toBe(true);
+    expect(session.version).toBe(1);
+    expect(Object.keys(session.runs)).toEqual(["inspect", "approval"]);
     expect(session.before).toEqual({ stageId: ids.oldStage, updatedAt: "2026-10-28T01:00:00.000Z" });
     expect(session.targetStageId).toBe(ids.newStage);
     expect(session.runs.inspect.mode).toBe("inspect"); expect(session.runs.approval.mode).toBe("act");
@@ -82,6 +84,67 @@ describe("read-only sales demonstration preparation", () => {
     expect(JSON.stringify(session)).not.toMatch(/NEVER_COPY_ORIGINAL_CUSTOMER_FACT|fixture-password|do-not-copy-fixture-extra/);
     expect(JSON.stringify(result)).not.toContain(session.runs.inspect.task);
     for (const query of f.queries.filter(query => /from (crm_leads|contacts|ai_customer_memories|ai_knowledge_sources|crm_pipelines|crm_stages|ai_agents|ai_workbench_runs)\b/.test(query.sql))) expect(query.args[0]).toBe(ids.org);
+  });
+
+  it("prepares three separate strict API bodies with bounded read-only contact and knowledge tasks", async () => {
+    const f = fixture();
+    const result = await demo.prepareDemo(f.config, { createPool: f.createPool, split: true });
+    const session = JSON.parse(readFileSync(result.sessionPath, "utf8"));
+    expect(session.version).toBe(2);
+    expect(Object.keys(session.runs)).toEqual(["contact", "knowledge", "approval"]);
+    expect(Object.keys(session.agents)).toEqual(["inspect", "approval"]);
+    for (const run of Object.values(session.runs) as Record<string, unknown>[]) {
+      expect(Object.keys(run).sort()).toEqual(["agentId", "collaboration", "mode", "scope", "task"]);
+      expect(run.collaboration).toBe("disabled");
+    }
+    expect(session.runs.contact).toMatchObject({ agentId: ids.inspect, mode: "inspect", scope: { contactId: ids.contact } });
+    expect(session.runs.knowledge).toMatchObject({ agentId: ids.inspect, mode: "inspect", scope: {} });
+    expect(session.runs.approval).toMatchObject({ agentId: ids.approval, mode: "act", scope: { leadId: ids.lead, pipelineId: ids.pipeline } });
+    expect([...new Set(session.runs.contact.task.match(/crm_[a-z_]+/g))]).toEqual(["crm_get_contact"]);
+    expect(session.runs.contact.task).toContain("body 原文、id 和 confirmed");
+    expect(session.runs.contact.task).toContain("不评判未来触达的渠道同意，也不建议外联");
+    expect([...new Set(session.runs.knowledge.task.match(/crm_[a-z_]+/g))]).toEqual(["crm_search_knowledge"]);
+    expect(session.runs.knowledge.task).toContain("pergunta 参数精确使用“产品”两个字，quantidade 参数为 5");
+    expect(session.runs.knowledge.task).toContain("不要求推演产品信息或补齐全知识库目录");
+    expect(session.runs.approval.task).toContain(`实际 stage_id 等于 ${ids.newStage}`);
+    expect(session.runs.approval.task).toContain("批准后必须再调用 crm_get_lead");
+    expect(session.runs.contact.task).toContain("真正阻止读取或核对返回事实的错误、缺口仍须如实报告");
+    expect(session.runs.knowledge.task).toContain("工具真实失败或明确报告阻止本次查询的缺口时仍须如实报告");
+    expect(JSON.stringify(session)).not.toMatch(/NEVER_COPY_ORIGINAL_CUSTOMER_FACT|fixture-password|do-not-copy-fixture-extra/);
+    expect(JSON.stringify(result)).not.toContain(session.runs.contact.task);
+    expect(f.queries[0]!.sql).toBe("begin isolation level repeatable read read only");
+    expect(f.queries.at(-1)!.sql).toBe("commit");
+  });
+
+  it("requires --new to switch a legacy session to split mode and preserves the original snapshot", async () => {
+    const f = fixture();
+    const first = await demo.prepareDemo(f.config, { createPool: f.createPool });
+    const original = readFileSync(first.sessionPath, "utf8");
+    await expect(demo.prepareDemo(f.config, { createPool: f.createPool, split: true })).rejects.toThrow("sales_demo_session_exists");
+    const second = await demo.prepareDemo(f.config, { createPool: f.createPool, split: true, newSession: true });
+    expect(first.sessionPath).not.toBe(second.sessionPath);
+    expect(readFileSync(first.sessionPath, "utf8")).toBe(original);
+    expect(JSON.parse(original).version).toBe(1);
+    expect(JSON.parse(readFileSync(second.sessionPath, "utf8")).version).toBe(2);
+    const pointer = JSON.parse(readFileSync(join(f.root, ".local", "sales-demo", "current.json"), "utf8"));
+    expect(pointer).toEqual({ version: 1, sessionId: second.sessionId, sessionPath: second.sessionPath });
+  });
+
+  it.each([
+    [["--split"], "sales_demo_fixture_config_requested"],
+    [["--new", "--split"], "sales_demo_fixture_config_requested"],
+    [["--split", "--new"], "sales_demo_fixture_config_requested"],
+    [["--split", "--split"], "sales_demo_usage_invalid"],
+    [["--new", "--new"], "sales_demo_usage_invalid"],
+    [["--split", "--unknown"], "sales_demo_usage_invalid"],
+  ])("validates CLI flags %j before any database access", (flags, error) => {
+    const f = fixture(); const scripts = join(f.root, "scripts"); mkdirSync(scripts);
+    copyFileSync(resolve("scripts/sales-demo.mjs"), join(scripts, "sales-demo.mjs"));
+    writeFileSync(join(scripts, "local-crm-config.mjs"), 'export function loadLocalConfig() { throw Object.assign(new Error("fixture"), { code: "sales_demo_fixture_config_requested" }); }');
+    const result = spawnSync(process.execPath, [join(scripts, "sales-demo.mjs"), "prepare", ...flags], { encoding: "utf8", windowsHide: true });
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stderr)).toEqual({ error });
+    expect(existsSync(join(f.root, ".local", "sales-demo"))).toBe(false);
   });
 
   it("refuses an existing session unless --new semantics preserve its prior snapshot", async () => {
@@ -141,7 +204,7 @@ describe("read-only sales demonstration preparation", () => {
     ["an old unfinished run or unresolved proposal", "run", (f: ReturnType<typeof fixture>) => { f.rows.ai_workbench_runs = [{ count: 1 }]; }, "unfinished_run"],
   ])("refuses %s without saving a session", async (_name, _key, change, code) => {
     const f = fixture(); change(f);
-    await expect(demo.prepareDemo(f.config, { createPool: f.createPool })).rejects.toThrow(String(code));
+    await expect(demo.prepareDemo(f.config, { createPool: f.createPool, split: true })).rejects.toThrow(String(code));
     expect(existsSync(join(f.root, ".local", "sales-demo", "current.json"))).toBe(false);
     expect(existsSync(join(f.root, ".local", "sales-demo", "prepare.lock"))).toBe(false);
     expect(f.queries.at(-1)!.sql).toBe("rollback");

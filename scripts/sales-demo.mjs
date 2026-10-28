@@ -87,29 +87,35 @@ export async function inspectDemo(client, config, fixtures) {
   return { orgId, lead, targetStageId, inspect, approvalAgent, model: llm.default_model, sourceUpdatedAt: source.updated_at };
 }
 
-export function buildDemoSession(facts, fixtures, config, sessionId = randomUUID()) {
+export function buildDemoSession(facts, fixtures, config, sessionId = randomUUID(), { split = false } = {}) {
   const [approval, memory, wiki] = fixtures;
   const marker = `[CRM-014:${sessionId}]`;
   const language = "面向用户的回复和结构化结果中的自然语言字段必须使用简体中文；JSON 键、枚举、实际记录 ID、工具名、来源标题和观察到的标量值保持原样。知识引用使用工具实际返回的片段/证据 ID，不用父级知识源或文档 ID 代替；商机引用使用实际商机 ID，不把它当成 run_event 的事件 ID，也不自行拼造时间或其他观察值。";
   const inspectTask = `${marker} 本机合成销售演示，仅做读取。${language}请先调用 crm_get_contact，读取联系人 ${memory.contactId}，根据工具返回的 confirmed_customer_memory 汇报已确认的沟通时间与方式；再调用 crm_search_knowledge，pergunta 参数精确使用“产品”两个字，quantidade 参数为 5，查询已授权的公司产品知识并列出工具实际返回的来源和关键内容。知识源为 ${wiki.sourceId}。明确区分事实与未知，不编造结果，不修改任何数据，也不发送消息。`;
   const approvalTask = `${marker} 本机合成销售演示，只处理选中的无客户关联合成商机。${language}请先读取商机 ${approval.leadId}，然后仅调用一次 crm_move_lead_stage 提出移动阶段的动作：lead_id 精确为 ${approval.leadId}，to_stage_id 精确为 ${facts.targetStageId}，reason 填写“CRM-014 合成销售演示”。等待人工确认。批准后必须再调用 crm_get_lead 复核同一商机；本任务验收仅要求实际 stage_id 等于 ${facts.targetStageId}，若一致则据实汇报完成，不重复移动。阶段可读名称、客户关联和后续外联均不属于本次内部阶段变更任务的必要材料；不要把它们当成本任务缺口，真正阻止核对阶段的错误仍须如实报告。禁止调用 crm_update_lead 或其他写工具，不操作其他商机，不发送任何消息。`;
+  const contactTask = `${marker} 本机合成销售演示，本段只读列出联系人已确认记忆。${language}本段仅调用 crm_get_contact 读取联系人 ${memory.contactId}，不调用其他业务工具。依据工具返回的 confirmed_customer_memory，逐条列出记忆 body 原文、id 和 confirmed，并如实汇报 status、coverage、providerStatus；原文和观察值保持工具返回的原样。结构化证据使用实际联系人 ID 作为 contact 来源，记忆 ID 在事实清单中逐条列出。本段不评判未来触达的渠道同意，也不建议外联；电话、consent 以及未来外联前提不是本段只读事实清单任务的必要材料。真正阻止读取或核对返回事实的错误、缺口仍须如实报告，不补造同意，不编造结果，不修改数据，不发送消息。`;
+  const knowledgeTask = `${marker} 本机合成销售演示，本段只读列出本次知识查询的证据。${language}本段仅调用 crm_search_knowledge，pergunta 参数精确使用“产品”两个字，quantidade 参数为 5，不调用其他业务工具。查询已授权的知识源 ${wiki.sourceId}，只列工具本次实际返回的 evidence/trechos 的证据或片段 ID、来源标题，以及工具返回的 retrieval.status、wiki_status、missing 等标记；没有返回的字段说明工具未返回，不猜测。不要求推演产品信息或补齐全知识库目录，不因返回不足 5 条自动判定材料不足。工具真实失败或明确报告阻止本次查询的缺口时仍须如实报告，不编造知识或引文，不修改数据，不发送消息。`;
   const shape = (agent, task, mode, scope) => ({ agentId: agent.id, task, mode, collaboration: "disabled", scope });
+  const approvalRun = shape(facts.approvalAgent, approvalTask, "act", { leadId: approval.leadId, pipelineId: approval.pipelineId });
+  const runs = split
+    ? { contact: shape(facts.inspect, contactTask, "inspect", { contactId: memory.contactId }), knowledge: shape(facts.inspect, knowledgeTask, "inspect", {}), approval: approvalRun }
+    : { inspect: shape(facts.inspect, inspectTask, "inspect", { contactId: memory.contactId }), approval: approvalRun };
   return {
-    version: 1, sessionId, preparedAt: new Date().toISOString(), appOrigin: config.appUrl,
+    version: split ? 2 : 1, sessionId, preparedAt: new Date().toISOString(), appOrigin: config.appUrl,
     createRunPath: "/api/v1/ai/workbench/runs", workbenchUrl: `${config.appUrl}/app/ai/workbench`,
     orgId: facts.orgId, contactId: memory.contactId, memoryId: memory.memoryId,
     wikiSourceId: wiki.sourceId, wikiKbId: wiki.kb, leadId: approval.leadId, pipelineId: approval.pipelineId,
     before: { stageId: facts.lead.stage_id, updatedAt: new Date(facts.lead.updated_at).toISOString() }, targetStageId: facts.targetStageId,
     agents: { inspect: { id: facts.inspect.id, builtinKey: facts.inspect.builtin_key, versionId: facts.inspect.version_id }, approval: { id: facts.approvalAgent.id, builtinKey: facts.approvalAgent.builtin_key, versionId: facts.approvalAgent.version_id } },
     model: { provider: "dashscope", id: facts.model }, sourceUpdatedAt: new Date(facts.sourceUpdatedAt).toISOString(),
-    runs: { inspect: shape(facts.inspect, inspectTask, "inspect", { contactId: memory.contactId }), approval: shape(facts.approvalAgent, approvalTask, "act", { leadId: approval.leadId, pipelineId: approval.pipelineId }) },
+    runs,
     checks: { sqlReadOnly: true, syntheticContact: true, memoryConfirmedSynced: true, wikiAuthorized: true, syntheticUnlinkedLead: true, twoOpenStages: true, noUnfinishedRun: true },
     budgetPolicy: { localUnpricedDemoConfigured: config.env.CRM_LOCAL_WORKBENCH_UNPRICED_MODE === "true", appliedToRunVerified: false, unknownCostIsNotZero: true },
     boundaries: { modelRequested: false, businessWritten: false, actionApproved: false, liveConnectivityVerified: false, mustRecheckBeforeApproval: true },
   };
 }
 
-export async function prepareDemo(config, { newSession = false, createPool } = {}) {
+export async function prepareDemo(config, { newSession = false, split = false, createPool } = {}) {
   const directory = join(config.root, ".local", "sales-demo");
   const currentPath = join(directory, "current.json");
   const lockPath = join(directory, "prepare.lock");
@@ -136,7 +142,7 @@ export async function prepareDemo(config, { newSession = false, createPool } = {
     requireCheck(!connectionFailed, "sales_demo_connection_failed");
     await client.query("commit");
     requireCheck(!connectionFailed, "sales_demo_connection_failed");
-    const session = buildDemoSession(facts, fixtures, config);
+    const session = buildDemoSession(facts, fixtures, config, randomUUID(), { split });
     const sessionDirectory = join(directory, session.sessionId);
     mkdirSync(sessionDirectory);
     const sessionPath = join(sessionDirectory, "session.json");
@@ -165,10 +171,11 @@ export async function prepareDemo(config, { newSession = false, createPool } = {
 }
 
 export async function main(args = process.argv.slice(2)) {
-  if (!args.length || (args.length === 1 && ["help", "--help", "-h"].includes(args[0]))) return { usage: "node scripts/sales-demo.mjs prepare [--new]", behavior: "只读核对本机合成资料，将两个中文提示词与范围保存到 .local；不创建 Run、不调用模型、不批准或写入业务数据。已有 session 时需显式 --new。" };
-  requireCheck(args[0] === "prepare" && args.length <= 2 && (args.length === 1 || args[1] === "--new"), "sales_demo_usage_invalid");
+  if (!args.length || (args.length === 1 && ["help", "--help", "-h"].includes(args[0]))) return { usage: "node scripts/sales-demo.mjs prepare [--new] [--split]", behavior: "只读核对本机合成资料，将中文提示词与范围保存到 .local；默认保留两个任务（session version 1），--split 分为联系人、知识、审批三个任务（version 2）。不创建 Run、不调用模型、不批准或写入业务数据。已有 session 时需显式 --new，旧 session 保留。" };
+  const flags = args.slice(1);
+  requireCheck(args[0] === "prepare" && flags.length <= 2 && new Set(flags).size === flags.length && flags.every(flag => ["--new", "--split"].includes(flag)), "sales_demo_usage_invalid");
   const { loadLocalConfig } = await import("./local-crm-config.mjs");
-  return prepareDemo(loadLocalConfig(), { newSession: args[1] === "--new" });
+  return prepareDemo(loadLocalConfig(), { newSession: flags.includes("--new"), split: flags.includes("--split") });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
