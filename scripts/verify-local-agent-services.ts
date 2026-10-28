@@ -1,4 +1,4 @@
-/** Opt-in probes against real local services, only the synthetic pi-native-demo org. */
+/** Opt-in probes against real services, using an explicitly selected local CRM organization. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,19 +9,24 @@ import { readConfirmedCustomerMemory, syncCustomerMemory } from "@/lib/ai/integr
 import { searchCompanyWiki } from "@/lib/ai/integrations/weknora";
 import { langfuseTraceId } from "@/lib/ai/integrations/langfuse";
 
-const organizationId = "3ea5dbc2-050b-4324-a489-8a17c2b654c3";
-const contactId = "6842302c-a864-4a4e-8dc5-a605f6c10827";
+const defaultOrganizationId = "3ea5dbc2-050b-4324-a489-8a17c2b654c3";
+const organizationId = (
+  process.env.CRM_AGENT_SERVICES_ORGANIZATION_ID ?? defaultOrganizationId
+).toLowerCase();
+const contactId =
+  process.env.CRM_AGENT_SERVICES_CONTACT_ID ?? "6842302c-a864-4a4e-8dc5-a605f6c10827";
 async function main() {
   const url = new URL(process.env.SUPABASE_DB_URL ?? "");
   assert(["localhost", "127.0.0.1"].includes(url.hostname), "local_db_required");
   const pool = new pg.Pool({ connectionString: url.href, max: 2 });
   const action = process.argv[2];
   try {
-    assert.equal(
-      (await pool.query("select slug from organizations where id=$1", [organizationId])).rows[0]
-        ?.slug,
-      "pi-native-demo",
-    );
+    assert.match(organizationId, /^[a-f0-9-]{36}$/);
+    const organization = (
+      await pool.query("select slug from organizations where id=$1", [organizationId])
+    ).rows[0];
+    assert(organization, "local_organization_required");
+    if (organizationId === defaultOrganizationId) assert.equal(organization.slug, "pi-native-demo");
     let result: Record<string, unknown>;
     if (action === "mem0") {
       const memoryId = process.argv[3];
@@ -82,6 +87,10 @@ async function main() {
         unauthorizedStatus: denied.status,
       };
     } else if (action === "mem0-delete") {
+      // This destructive legacy probe was only reviewed for the original demo fixture.
+      assert(organizationId === defaultOrganizationId, "mem0_delete_original_demo_org_only");
+      const binding = integrationBinding(organizationId, "mem0");
+      assert(binding && binding.base_url === "http://127.0.0.1:8888", "local_mem0_required");
       const id = process.argv[3];
       assert.match(id, /^[a-f0-9-]{36}$/);
       const row = (
@@ -102,7 +111,8 @@ async function main() {
       result = { memoryId: id, remoteDeletionVerified: true };
     } else if (action === "langfuse-project" || action === "langfuse") {
       const binding = integrationBinding(organizationId, "langfuse");
-      assert(binding && binding.base_url === "http://127.0.0.1:3006", "local_langfuse_required");
+      const expectedOrigin = process.env.CRM_LANGFUSE_ORIGIN ?? "http://127.0.0.1:3006";
+      assert(binding && binding.base_url === expectedOrigin, "configured_langfuse_required");
       const headers = {
         Authorization: `Basic ${Buffer.from(`${binding.public_key}:${binding.secret_key}`).toString("base64")}`,
       };
@@ -113,8 +123,9 @@ async function main() {
         });
         assert(response.ok, "langfuse_project_auth_failed");
         const projects = (await response.json()) as { data: { id: string }[] };
-        assert(projects.data.some((p) => p.id === "crm-local-demo-project"));
-        result = { projectId: "crm-local-demo-project", authenticated: true };
+        const projectId = process.env.CRM_LANGFUSE_PROJECT_ID ?? "crm-local-demo-project";
+        assert(projects.data.some((p) => p.id === projectId));
+        result = { projectId, authenticated: true };
       } else {
         const runId = process.argv[3];
         assert.match(runId, /^[a-f0-9-]{36}$/);
@@ -218,7 +229,6 @@ async function main() {
       const found = await searchCompanyWiki(pool, organizationId, [sourceId], "产品", 5);
       assert(found.evidence.length > 0, "live_wiki_evidence_required");
       result = {
-        synthetic: true,
         sourceId,
         status: found.status,
         evidenceCount: found.evidence.length,
