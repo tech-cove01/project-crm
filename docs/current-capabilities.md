@@ -2,7 +2,7 @@
 
 更新：2026-10-28。本页区分上游源码能力、本仓后续改动和本机真实验收；当前工作票与服务状态以 [STATUS](STATUS.md) 为准。
 
-源码盘点以 CRM-001 导入基线 `06fac28` 为起点，后续验收依据 CRM-006/007/008/010。来源、许可与文件映射见[第三方声明](../THIRD_PARTY_NOTICES.md)、[导入清单](upstream/import-manifest.json)。本文源码路径均相对仓库根目录。
+源码盘点以 CRM-001 导入基线 `06fac28` 为起点，后续验收依据 CRM-006/007/008/010/013/014。来源、许可与文件映射见[第三方声明](../THIRD_PARTY_NOTICES.md)、[导入清单](upstream/import-manifest.json)。本文源码路径均相对仓库根目录。
 
 “已接线”表示存在源码入口和消费者；“本机已验收”表示对应证据记录了实际服务和结果，两者分别列出。验收均使用本机独立环境与合成资料，不等于生产效果或此刻在线，也不把继承功能算作本仓新增。
 
@@ -10,7 +10,7 @@
 
 这是一套面向销售团队的 CRM：管理客户与商机，结合客户上下文和公司知识生成建议，再经权限、审批及执行回执推动跟进。Agent 并非单独聊天页，而是读取和操作 CRM 的执行入口；但不能把现有代码描述成已验证的全自动销售闭环。
 
-全栈部分由 Next.js / React / TypeScript 工作台与 API、Supabase/PostgreSQL 的业务和权限数据组成；Pi Agent Core 在独立 Node Worker 内驱动模型和工具执行。已有真实切片覆盖“读取客户与记忆 → 检索知识 → 提出商机变更 → 人工批准 → 落库续跑”和运行观测，但这些步骤来自多个独立 Run，固定销售演示仍是后续票据。
+全栈部分由 Next.js / React / TypeScript 工作台与 API、Supabase/PostgreSQL 的业务和权限数据组成；Pi Agent Core 在独立 Node Worker 内驱动模型和工具执行。[中文演示入口](sales-demo.md)首轮两个真实 Run 展示了客户/知识、独立商机提案、明确批准、落库续跑和观测，批准由自动化操作者通过现有 UI 执行。但后续复现出现 partial，稳定性仍未完成，不能称为单 Run 自动销售闭环或稳定演示。实际结果及评分缺口见 [CRM-014](evidence/CRM-014b.md)。
 
 ## 本机真实验收
 
@@ -65,7 +65,7 @@
 - Mem0、WeKnora、Langfuse 是可选适配器；关闭它们不等于删除本地 SQL 事实、原生 RAG 或 SQL 运行记录，但相应外部能力不可用。客户发送渠道也需单独配置和验收。
 - 普通 Worker 处理业务任务不等于外部集成队列会被消费；本机专用定时器需另行运行，Web 与 Worker 需加载一致组织绑定。启动方式见[本地运行](local-development.md)、[可选服务说明](../infra/local-agent-services/README.md)及 [WeKnora 本机接入](weknora-local-development.md)。
 - 百炼费用在 CRM 中仍为 NULL/未知，不是免费。本机 `CRM_LOCAL_WORKBENCH_UNPRICED_MODE=true` 仅对符合条件的新百炼非 Mission Workbench Run 关闭单次金额预算；默认关闭，组织预算不变，token/步骤控制并非硬上限。正式费用计算与续跑 token 统计边界见 [CRM-008](evidence/CRM-008.md)。
-- 本页文档更新只复核已有验收、源码与提交，未新增模型调用或应用测试。公网部署、全渠道发送、组织记忆发布与引用、多 Agent/Mission/意图路由深验均未由这些样本证明。Cloudflare 与正式依赖、安全升级等前置见[部署评估](cloudflare-deployment.md)；私人求职及实习材料保留在公开仓库之外。
+- CRM-015 的文档更新仅复核已有材料；CRM-013 随后完成本机恢复验收，CRM-014 保留部分成功和复现失败，尚未结票。首轮两 Run 确定性评分为 fail/83、fail/79，答案质量项均为 0，不因业务阶段落库或续跑完成而视为已通过。公网部署、全渠道发送、组织记忆发布与引用、多 Agent/Mission/意图路由深验均未由这些样本证明。Cloudflare 与正式依赖、安全升级等前置见[部署评估](cloudflare-deployment.md)；私人求职及实习材料保留在公开仓库之外。
 
 ## 架构材料需纠正的说法
 
