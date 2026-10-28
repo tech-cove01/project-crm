@@ -28,3 +28,7 @@
 - 一次运行快照：Langfuse Web 约 873 MiB、Worker 467 MiB、ClickHouse 728 MiB、SeaweedFS 164 MiB、Redis 11 MiB；Windows 剩余约 2.20 GiB。以上是当前负载下的瞬时使用量，非固定要求；用户其他项目继续运行。
 
 - 已用仓库版 x86 Dockerfile 重新构建，镜像内容与本次使用镜像一致；使用仓库 Compose 恢复已有容器和持久卷后，`/usr/bin/weed` 的 `s3.bucket.list` 查到既有 `langfuse` 桶（8 chunks），此前 Run 的 6 条 observation 与 6 个评分仍可回读。启动后 Web 健康检查 200；本次采样 Windows 可用内存约 3.04 GiB。首次启动后 filer 尚未就绪时执行 bucket 命令会连接失败，等待就绪后重试即可。
+
+## 三项服务同时运行复查
+
+Mem0、WeKnora、Langfuse 与 CRM Web/Worker 的健康接口均为 HTTP 200。此前 CRM Worker 曾无日志退出一次，原因未确定；检查任务队列为空后重启，新合成只读 Run `92da806d-532b-4d4a-925f-557a308074b1` 经 Worker 完成并调用 `crm_get_contact`。三套服务同时在线时一次快照 Windows 可用内存约 2.3 GiB，总 CPU 约 31%；这是短时状态而非长期稳定性测试，重编译或多项目并行可能卡顿。
