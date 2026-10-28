@@ -4,7 +4,7 @@
 
 - 方向：CRM AI-native 项目。
 - 当前阶段：本机已验证百炼 Agent、客户记忆、知识索引检索及部分审批动作，后续按实际业务补齐。
-- 当前票：CRM-010 外部服务接入中；Mem0 确认事实投影和自动队列投递已实测，WeKnora 与 Langfuse 等待镜像及真实联调。工作流和验收见 [实施票据](implementation-plan.md)。
+- 当前票：CRM-010 外部服务接入中；Mem0 确认事实投影、自动队列投递和 Agent 经工具触发检索已实测，WeKnora 与 Langfuse 等待镜像及真实联调。工作流和验收见 [实施票据](implementation-plan.md)。
 - 已有材料：从本仓根目录访问 ../../../develop/，5 个资料包已全部解压并校验；原 zip 移至 ../../../archive/zips/crm。
 - 本轮：project-crm 已移到 project/code，与 project-full-stack 同级；共同工作区维护一份 Skill，各仓库按适用范围建立本地联接。
 - 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。目录迁移不改变两个仓库的 Git 历史。
@@ -22,7 +22,7 @@
 - CRM-007：客户确认记忆、合成 FAQ 百炼向量检索、商机变更审批及语义 Judge 已验证；金额预算未知和外部服务边界见 docs/evidence/CRM-007-capabilities.md。
 - CRM-006：百炼 `qwen3.8-flash` + 工作台 + Worker + `crm_get_contact` 真实完成，详细结果与成本未知边界见 docs/evidence/CRM-006.md。
 
-- CRM-010 Mem0：本机服务写入、语义检索、删除和 CRM 确认事实自动同步已验证；Agent 新 Run 返回 partial，未证明工具链路。专用队列定时器须单独运行。详见 [Mem0 验收](evidence/CRM-010-mem0.md)。
+- CRM-010 Mem0：本机服务写入、语义检索、删除和 CRM 确认事实自动同步已验证；新 Agent Run completed 并经客户工具触发 Mem0 检索，事件脱敏无法确认具体引用哪条重复记忆。专用队列定时器须单独运行。详见 [Mem0 验收](evidence/CRM-010-mem0.md)。
 - CRM-010 WeKnora：本机适配百炼的初始化脚本已准备，镜像下载被网络阻塞，服务和知识检索未验收。详见 [WeKnora 记录](evidence/CRM-010-weknora.md)。
 - CRM-010 Langfuse：依赖镜像准备中，真实服务及 Trace/评分回读未验收；现有适配代码的定向检查通过。详见 [Langfuse 记录](evidence/CRM-010-langfuse.md)。
 
