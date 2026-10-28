@@ -63,6 +63,8 @@ corepack pnpm worker
 本机 `.env.local` 已设置 `CRM_EMBEDDING_PROVIDER=dashscope`，Web 和 Worker 同时使用组织中已验证的百炼加密凭据及 `text-embedding-v4`（1536 维）。省略该配置默认使用原 OpenAI 模型。修改环境配置后应同时重启本项目的 Web 和 Worker。
 
 本机 0410 数据库迁移已应用；新应用与迁移需要同步部署。切换 embedding 模型时旧索引必须重新生成；旧五参数 `retrieve_top_k_chunks` 会明确拒绝调用，需迁移至带模型身份的新接口。合成 FAQ、隔离检查和运行结果见 [CRM-007 验收](evidence/CRM-007-capabilities.md)。不要求启动 Mem0、WeKnora 或 Langfuse 才能使用原生知识库。
+
+启用外部服务时，普通 Worker 的业务事件循环不会处理集成队列。本机启动 Web 后，可用 `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/dev-integration-drain.ts` 启动仅处理集成队列的本机定时器；须设置 `NODE_ENV=development`，且 Web、数据库和 Supabase 地址均为本机。专用入口处理该 Web 所连数据库的全局集成队列，不按组织筛选：必须确认 Web 实际使用同一个本机数据库。每次调用结束后等待 60 秒，不处理客户消息队列。正式部署使用独立 scheduler。
 ## 本机工作台演示模式
 
 本机 `.env.local` 显式设置 `NODE_ENV=development` 与 `CRM_LOCAL_WORKBENCH_UNPRICED_MODE=true`，用于普通百炼 Workbench 任务的审批续跑演示；单次金额预算关闭，原有 token/步骤控制仍在，但不是硬上限。该开关默认关闭，组织预算和 Mission 不变；工作台会显示提示，详细范围和验收见 [CRM-008](evidence/CRM-008.md)。

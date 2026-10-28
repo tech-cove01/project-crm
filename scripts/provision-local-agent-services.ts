@@ -103,7 +103,12 @@ async function main() {
           return [line.slice(0, i), line.slice(i + 1)];
         }),
     );
-    const org = "3ea5dbc2-050b-4324-a489-8a17c2b654c3";
+    const orgArg = process.argv
+      .find((arg) => arg.startsWith("--organization-id="))
+      ?.slice("--organization-id=".length);
+    if (!orgArg || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgArg))
+      throw new Error("valid_organization_id_required");
+    const org = orgArg.toLowerCase();
     const bindings: Record<string, unknown>[] = [
       {
         organization_id: org,
