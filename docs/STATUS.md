@@ -4,7 +4,7 @@
 
 - 方向：CRM AI-native 项目。
 - 当前阶段：本机已验证百炼 Agent、客户记忆、原生与 WeKnora 知识检索、部分审批动作及 Langfuse 观测投递，后续按实际业务补齐。
-- 当前票：CRM-014 本机演示范围已验收，随最终证据提交生效；CRM-013/015 已交付。下一步按需处理 CRM-016 剩余检索样本与语义复核，不以生产稳定性或全评测通过描述本次结果。工作流和验收见 [实施票据](implementation-plan.md)。
+- 当前票：CRM-014 本机演示范围已在 34823c6 记录完成，CRM-013/015 已交付；本次收口仅将手册固定输入章节同步为 v2 三任务。下一步按需处理 CRM-016 剩余检索样本与语义复核，不以生产稳定性或全评测通过描述本次结果。工作流和验收见 [实施票据](implementation-plan.md)。
 - 最近交付：CRM-014 采用三个小任务复现，业务窗口 3 分 31 秒，含观测回查 4 分 29 秒；全部 completed，明确批准后重读阶段正确，三 Trace 实际回读。评分为 needs_review/89、92、89，未调用语义 Judge。[手册](sales-demo.md)、[最新证据](evidence/CRM-014v.md)、[前序失败](evidence/CRM-014b.md)。
 - CRM-014 小提交：1737e16 目标预览、dba4fb7 只读准备、de7d343/bb9d61c 输入约定、de2b9ad 失败及质量诊断、1d90b97 三任务入口、d5df322 本机可选集成间隔。直接检查、真实运行和独立审查分别记录，未降低 gate 或评分门槛。
 - 最新运行快照：2026-10-28 19:54 本机 Web/Worker 及三集成在线，job pending/running/dead 均 0，integration pending/processing/dead 均 0、done=34；受管会话 ae132554-873d-4592-9bb0-c7985bc97bfb，drain 显式 10000ms。Web degraded 仍有原未配置依赖；实时状态用 `npm run local:status`，不要用历史 PID 操作。
