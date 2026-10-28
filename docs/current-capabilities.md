@@ -22,10 +22,10 @@
 | 原生知识检索 | 合成 FAQ 使用百炼 `text-embedding-v4`、1536 维索引，Agent 经 `crm_search_knowledge` 引用；模型和组织隔离检查通过。 | [CRM-007](evidence/CRM-007-capabilities.md)。旧五参数检索接口已拒绝，应用与迁移需同步部署；一次命中不证明业务召回率。 |
 | 审批、执行回执与续跑 | 合成商机批准前未变化，批准后阶段落库、出现 `run_resumed`，随后真实模型续跑至 `completed`。缺渠道的跟进能明确失败。 | [CRM-008](evidence/CRM-008.md)、[CRM-007 审批](evidence/CRM-007-approval.md)。成功续跑使用显式本机演示预算策略；保留此前失败与成本未知的历史。 |
 | Mem0 | 服务写入/搜索/删除、CRM 确认事实自动同步和客户工具触发真实检索通过。 | [CRM-010 Mem0](evidence/CRM-010-mem0.md)。SQL 仍为权威，`infer:false`；脱敏事件不能确认答案具体引用了哪条重复 SQL 记忆。 |
-| WeKnora | 百炼处理合成产品文档生成 5 页，CRM 短查询返回 3 条带来源的 Wiki 证据，Agent 已引用。 | [CRM-010 WeKnora](evidence/CRM-010-weknora.md)。更长的问题曾 `partial/missing_material`、`wiki_status=empty`；完整发布治理与真实业务召回效果未验收。 |
+| WeKnora | 合成 Wiki 短查询和 Agent 引用已验证；CRM-016 在相同版本资料上实测长句可信证据 0→2、短词 3→3、无答案 0→0。 | [原接入](evidence/CRM-010-weknora.md)、[固定样本前后对照](evidence/CRM-016b-retrieval.md)。有界关键词分路不替代语义判断；未验证总体召回率、完整发布治理或真实业务效果。 |
 | Langfuse、规则评估与 Judge | 模型/工具 observations、6 个确定性评分真实回读，重启后记录保留；另一次语义 Judge 完成并持久化。 | [CRM-010 Langfuse](evidence/CRM-010-langfuse.md)、[CRM-007](evidence/CRM-007-capabilities.md)。观测 input/output 为空；确定性 verdict=`fail`（overall=79、answer_quality=0），语义 Judge verdict=`needs_review`，不是效果提升证明。 |
 
-三项外部服务在 2026-10-28 的一次同时运行复查中健康接口通过；Worker 曾无日志退出一次，原因未确定，确认队列为空并重启后新只读 Run 完成。这是短时复查，尚无长期稳定性或 Linux 2 GiB 环境验收。较长 Wiki 查询与评估失败样本由 [CRM-016](implementation-plan.md#求职展示收尾交接2026-10-28) 按需诊断，不能因服务投递成功就写成检索或答案质量通过。
+三项外部服务在 2026-10-28 的一次同时运行复查中健康接口通过；Worker 曾无日志退出一次，原因未确定，确认队列为空并重启后新只读 Run 完成。这是短时复查，尚无长期稳定性或 Linux 2 GiB 环境验收。CRM-016 已完成固定检索样本前后对照及六项既有声明来源核对，后者 5 项通过、1 项失败，发现客户回答含记录值误述和日期猜测。[质量证据](evidence/CRM-016c-quality.md)限定为 agent 对选中声明的比较，原 needs_review/50 与历史失败未改，不能称全部答案质量通过。
 
 ## 继承范围与本仓后续交付
 
@@ -53,7 +53,7 @@
 | 持续业务 Mission | Run API 可创建 `ai_missions`；`lib/ai/agents/mission-wake.ts`、`lib/ai/agents/mission-deadlines.ts` 以及命令/内部响应接口处理唤醒、期限、方向修订和继续执行。定义见 `docs/architecture/mission-state.md`。 | Run 完成不等于业务 Mission 达成；模型自述不能替代业务事实。客户消息唤醒有文本和唯一适用 Mission 等条件，不是无限自主执行。 |
 | 客户与组织记忆 | `components/ai/CustomerMemoryPanel.tsx` 被客户详情页消费；`app/api/v1/ai/customer-memory` 接收人工确认事实并写 SQL/事件；`lib/agent-engine/agent/org-memory.ts` 读取已发布的组织记忆版本。 | 客户偏好、确认事实属于客户上下文，组织规则属于另一权威域；会话 checkpoint 是恢复状态，不能混称长期事实。未见“所有会话自动抽事实并直接采信”的闭环。 |
 | Mem0 可选适配 | `lib/ai/integrations/mem0.ts` + `lib/event-log/register-handlers.ts`：人工确认事实先落 SQL，再以 `infer:false` 投影到 Mem0；读取时仅用外部结果排序本组织拥有的本地 ID，并重读当前 SQL 正文。 | SQL 是事实权威，Mem0 不是必需主存储；有写入结果不确定、人工对账及删除清理路径。当前未见业务层时间衰减策略，不能因使用 Mem0 就宣称已有 decay/自动纠错能力。 |
-| WeKnora 可选适配 | `lib/mcp/tools/evolucao.ts` 调用 `lib/ai/integrations/weknora.ts`；按获授权知识源查询，再读当前已发布页面及来源，记录版本、内容哈希和观察清单；`lib/ai/agents/workbench-observed-evidence.ts` 复核证据。 | 已验收本机合成 Wiki 生成、短查询与 Agent 引用；CRM 以只读密钥检索，不自动生成或发布知识，完整发布治理或混合 ACL 知识库仍未验收。 |
+| WeKnora 可选适配 | `lib/mcp/tools/evolucao.ts` 调用 `lib/ai/integrations/weknora.ts`；字面查询零候选时允许有界关键词分路，结果仍核当前发布页、来源、版本和内容哈希；`lib/ai/agents/workbench-observed-evidence.ts` 复核证据。 | 本机合成资料的三题前后对照已验收，见 CRM-016b；CRM 以只读密钥检索，不自动生成或发布知识，完整发布治理或混合 ACL 知识库仍未验收。 |
 | 原生 RAG | `lib/ai/knowledge/busca.ts`、`lib/agent-engine/agent/search-knowledge.ts`、`lib/ai/rag/`；embedding + PostgreSQL/pgvector，按组织及 Agent 获授权资料检索，保留来源/片段/索引版本。MCP 查询可合并 WeKnora 与尚未由其处理的本地资料。 | 不依赖 WeKnora 才能检索；仍需有效资料、索引、数据库及 embedding 配置。检索阈值、空结果与知识可用性不等于已验证回答正确率。 |
 | Trace、Langfuse 与 Eval | `lib/agent-engine/edge/llm/run-model-call.ts` 和运行时记录观察；`lib/ai/integrations/langfuse.ts` 经 SQL outbox 导出脱敏观测。`app/api/v1/ai/workbench/runs/[id]/evaluation/route.ts` 的 GET 为确定性评估/已有评审，POST 显式触发有成本的语义评审或确定性结果导出。 | SQL 保存权威运行记录，Langfuse 是可选投影；不导出完整 prompt、工具参数/结果或私有内容。没有“每个 Run 自动调用 Judge”的保证。 |
 | MCP 工具入口 | `app/api/mcp/route.ts` 提供 Streamable HTTP + Bearer 认证；`lib/mcp/server.ts` 统一注册工具并检查角色、scope、组织上下文和审计；内部 Agent 也消费既有工具处理器。 | 有真实工具入口及权限代码，不等于任意第三方 MCP 工具都可直接安全执行；新工具仍须声明效果并接入约束。 |
@@ -83,4 +83,4 @@
 
 - **可重复的销售演示：** 将已验证的客户记忆、知识检索、合成商机批准与续跑、Langfuse 回读组织成固定演示，保留各 Run 的输入、结果和失败处理；按 CRM-013/014 验证恢复与复现，不能把多个独立样本写成已完成单次全自动销售闭环。
 - **可控的客户回复：** 在已有渠道和审批机制上补齐普通工作台回复候选生成及发送闭环，分别验证批准、取消、失败与恢复，避免仅展示模型文本。
-- **面向失败样本的检索与评估：** 对较长 Wiki 查询和既有 `fail` 评估按 CRM-016 诊断；只有同条件验证实际改善后，才能称为检索优化或效果提升。记忆自动抽取、衰减与中文意图路由等新能力另按业务需要选择。
+- **面向失败样本的检索与评估：** CRM-016 已完成固定长句的有限改进和选中声明核对，质量误述原样保留。后续可扩大真实资料/无答案样本，并考虑关键记录值的结构化呈现；不能把一次前后对照当整体质量提升。记忆自动抽取、衰减与中文意图路由等新能力另按业务需要选择。

@@ -12,4 +12,4 @@ docker compose --env-file infra/local-agent-services/.env.generated -f infra/loc
 
 首次创建本地账号需要临时将 `WEKNORA_DISABLE_REGISTRATION=false` 加入启动命令的环境；账号创建后应移除该设置并重建服务，恢复关闭注册。私有配置 `.env.generated`、CRM 绑定、数据库和数据卷分别保留，不能上传仓库。初始化和绑定方式见 [本地服务说明](../infra/local-agent-services/README.md)。在当前 CRM 本机环境应使用该说明中现有百炼配置与组织/凭据 ID，并由 Web 和 Worker 加载相同的集成绑定。公网发布不属于本次验收。
 
-Wiki 查询对具体关键词敏感：本次短查询命中并由 Agent 引用，长句查询返回空结果；后续需要用真实资料评估召回及查询改写。
+原 Wiki 接口按正则匹配，历史长句曾返回空结果。CRM-016 现先转义为字面查询，仅在上游零候选时对含汉字输入增加一次有界关键词分路，保留原授权、来源及版本复核；同一合成资料的长句可信证据 0→2、短词 3→3、无答案 0→0。[实际前后对照](evidence/CRM-016b-retrieval.md)仅证明固定样本的有限改进，未验证整体业务召回率或全部终答质量。

@@ -4,11 +4,13 @@
 
 - 方向：CRM AI-native 项目。
 - 当前阶段：本机已验证百炼 Agent、客户记忆、原生与 WeKnora 知识检索、部分审批动作及 Langfuse 观测投递，后续按实际业务补齐。
-- 当前票：正在实施 CRM-016，核对原长句、短句和无答案检索样本，并复核已有 fail/needs_review 的实际原因与语义边界。CRM-013/014/015 已交付本机范围；保留历史结果，不调低评分门槛。工作流和验收见 [实施票据](implementation-plan.md)。
+- 当前票：CRM-016 已完成失败诊断、固定三题检索的有限改进和六项声明来源核对；质量核对中 1 项 fail 如实保留，不代表全部答案质量通过。CRM-013/014/015 已交付本机范围。工作流和验收见 [实施票据](implementation-plan.md)。
 - CRM-016a：实际历史查询与固定三题基线已核实；raw 命中 0/5/0，旧适配器可信证据 0/3/0，源版本/哈希一致。官方接口为正则匹配而非语义检索；未触发模型/embedding，未改资料或业务。独立审查通过，[证据](evidence/CRM-016a-baseline.md)。
-- 最近交付：CRM-014 采用三个小任务复现，业务窗口 3 分 31 秒，含观测回查 4 分 29 秒；全部 completed，明确批准后重读阶段正确，三 Trace 实际回读。评分为 needs_review/89、92、89，未调用语义 Judge。[手册](sales-demo.md)、[最新证据](evidence/CRM-014v.md)、[前序失败](evidence/CRM-014b.md)。
+- 最近交付：CRM-016b（e48b1bd）先做字面转义，仅上游零候选时增加一次有界关键词分路，原授权/发布页/来源/版本复核不变。同资料实测长句 0→2、短词 3→3、无答案 0→0；18 项定向检查、ESLint、typecheck 与独立审查通过。[前后对照](evidence/CRM-016b-retrieval.md)。
+- CRM-016c：六项既有声明的 agent 来源核对为 5 pass、1 fail；客户回答错误声称 revision 差异并夹有无来源日期猜测，原回答和 89/92/89、answer_quality=50 不改。不是模型 Judge、真人审核或全答案语义认证。[质量证据](evidence/CRM-016c-quality.md)。
+- CRM-014 本机演示记录：三个小任务业务窗口 3 分 31 秒，含观测回查 4 分 29 秒；全部 completed，明确批准后重读阶段正确，三 Trace 实际回读。评分 needs_review/89、92、89，未调用语义 Judge。[手册](sales-demo.md)、[证据](evidence/CRM-014v.md)、[前序失败](evidence/CRM-014b.md)。
 - CRM-014 小提交：1737e16 目标预览、dba4fb7 只读准备、de7d343/bb9d61c 输入约定、de2b9ad 失败及质量诊断、1d90b97 三任务入口、d5df322 本机可选集成间隔。直接检查、真实运行和独立审查分别记录，未降低 gate 或评分门槛。
-- 最新运行快照：2026-10-28 19:54 本机 Web/Worker 及三集成在线，job pending/running/dead 均 0，integration pending/processing/dead 均 0、done=34；受管会话 ae132554-873d-4592-9bb0-c7985bc97bfb，drain 显式 10000ms。Web degraded 仍有原未配置依赖；实时状态用 `npm run local:status`，不要用历史 PID 操作。
+- 最新运行快照：2026-10-28 22:56，CRM-016b 提交后在空队列下有序重启自己拥有的受管进程，已加载新实现；会话 36c10642-9f90-4e86-a0ae-bb02d5d0f6db。Web/Worker 可响应，Worker 数据库正常，job pending/running/dead 及 integration pending/processing/dead 均 0、integration done=34，Web 保持既有 degraded。完整脱敏状态在 `.local/crm016/local-status-after.json`；实时状态用 `npm run local:status`，不要用历史 PID 操作。
 - CRM-013a（7211979）：只读状态、一致本机绑定、6 项定向检查及独立审查通过。[证据](evidence/CRM-013a.md)。
 - CRM-013b（3f773cf）：受管启停、脱敏日志与退出诊断通过定向验证及独立审查。[证据](evidence/CRM-013b.md)。
 - CRM-013c：已验证真实登录、正常有序退出、受控异常及恢复；百炼只读 Run `4e30f57b-9738-4c6c-9fdc-d93ca18a341b` completed，专用消费者自然处理两条观测事件为 done，最新队列空闲。Web/Worker/集成服务留在线；这是一时快照，实时请运行 `node scripts/local-crm.mjs status`。[证据](evidence/CRM-013c.md)。
@@ -17,7 +19,7 @@
 - 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。目录迁移不改变两个仓库的 Git 历史。
 - README：面向面试官介绍客户经营场景、Agent 与后端亮点；本机验证范围和外部依赖已区分。旧 project-agent 本机百炼 Qwen 凭据已通过 CRM 加密入口配置；只读 Agent 流程已完成真实验收。
 - 部署选型：先使用本机运行和屏幕共享；暂不购买服务器。需要远程演示时再处理入口、数据库访问和公网前置。
-- 下一步按需处理 CRM-016 尚未覆盖的长句/短句/无答案检索样本；本轮答案引用/旧观察/范围扩大问题已做局部只读诊断，语义质量仍未复核。CRM-014/015 文档已同步。详细规格只在 [实施票据](implementation-plan.md) 维护，公网部署不作为简历前置。
+- 后续按需扩大真实资料/无答案样本，处理已发现的客户回答记录值误述，并考虑关键字段结构化呈现；完整语义质量及生产稳定性仍未验证。CRM-016 本票的固定三题和六项来源核对已完成，未新增模型/embedding、业务 Run 或 Judge。详细规格只在 [实施票据](implementation-plan.md) 维护，公网部署不作为简历前置。
 - 历史验收快照：2026-10-27 22:06 本机检查 Web HTTP 200、Worker 状态和数据库正常，队列 pending/running 均为 0；Web http://localhost:3000，Worker http://127.0.0.1:8787/healthz，Supabase API 55421、PG 55422，183 张业务表。真实登录/引导、4 核心页、合成客户创建修改及刷新读取通过，未登录请求被拒绝。
 - 健康边界：此前 Web 健康检查为 degraded，Supabase 正常、Redis/WAHA 未配置；该状态为本机快照，不代表所有服务可用。百炼真实模型、客户记忆和原生知识检索已验收；客户渠道尚未验收；Mem0、WeKnora 和 Langfuse 本轮结果见下。
 - 登录：仅本机 .local/login-credentials.json；应用源码及全部环境/会话材料分别管理，不上传本机凭据。
@@ -30,7 +32,7 @@
 - CRM-006：百炼 `qwen3.8-flash` + 工作台 + Worker + `crm_get_contact` 真实完成，详细结果与成本未知边界见 docs/evidence/CRM-006.md。
 
 - CRM-010 Mem0：本机服务写入、语义检索、删除和 CRM 确认事实自动同步已验证；新 Agent Run completed 并经客户工具触发 Mem0 检索，事件脱敏无法确认具体引用哪条重复记忆。专用队列定时器须单独运行。详见 [Mem0 验收](evidence/CRM-010-mem0.md)。
-- CRM-010 WeKnora：百炼合成 Wiki 已生成，CRM 真实检索返回带来源结果，Agent 已引用；首次较长查询未命中，召回仍需优化。详见 [WeKnora 记录](evidence/CRM-010-weknora.md)。
+- CRM-010 WeKnora：百炼合成 Wiki、CRM 来源检索与 Agent 引用已验证，首次较长查询未命中的历史保留。CRM-016 对同资料固定长句做有限改进（0→2）；不代表整体召回率。见 [原记录](evidence/CRM-010-weknora.md)、[前后对照](evidence/CRM-016b-retrieval.md)。
 - CRM-010 Langfuse：模型、工具 observations 和确定性评分已真实回读；对象存储卷槽不足已修复，重启后历史记录保留。详见 [Langfuse 记录](evidence/CRM-010-langfuse.md)。
 
 - 2026-10-28 换网前镜像下载受阻；换网后两项镜像均已下载并完成实际联调，详见对应证据。
@@ -40,14 +42,14 @@
 
 ## 交给动手 Agent 的收尾入口
 
-CRM-013/014/015 已按本轮授权完成各自本机范围，接续时先读取本页，再进入 [CRM-013～016 规格与验收](implementation-plan.md#求职展示收尾交接2026-10-28)。
+CRM-013/014/015 的本机范围及 CRM-016 的诊断/固定样本改进已完成，接续时先读取本页，再进入 [CRM-013～016 规格与验收](implementation-plan.md#求职展示收尾交接2026-10-28)。
 
 | 顺序 | 票据 | 要完成的事情 |
 | --- | --- | --- |
 | 已完成本机范围 | CRM-013 | 统一状态/启停、退出日志及真实恢复验收；历史 Worker 退出根因未定位，长期稳定性未测。 |
 | 已完成本机范围 | CRM-014 | 三任务固定演示，含回读 4 分 29 秒；历史失败保留、评分仍需语义复核，不代表长期稳定性。 |
 | 已完成 | CRM-015 | README 和能力盘点已按实际证据同步，全栈 + Pi 与实测边界已区分。 |
-| 按需 / P1 | CRM-016 | 用现有失败样本诊断长句 Wiki 召回和 fail 评估，再决定必要的定向改进。 |
+| 已完成本票范围 | CRM-016 | 固定长句 0→2，短词/无答案不变；六项来源核对 5 pass/1 fail，保留误述及 needs_review，不宣称全质量通过。 |
 
 本轮已从“基础数据库在线、应用及集成离线”恢复并完成 CRM-013 验收；最初共同退出的容器状态不作为新崩溃根因。接续时仍须重新检查实际状态，不把任何历史健康快照当成实时监控。现场资料与生成配置只留本机，不复制到公开提交。客户发送、云部署和新模型/记忆特性仍按原票据另行选择。
 
