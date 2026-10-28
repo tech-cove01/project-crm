@@ -57,6 +57,7 @@ const envSchema = z.object({
   QUEUE_VISIBILITY_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
   // Porta do /healthz (bind 0.0.0.0 no container; 0 = porta efêmera em teste).
   HEALTH_PORT: z.coerce.number().int().min(0).max(65_535).default(8787),
+  HEALTH_HOST: z.enum(["127.0.0.1", "0.0.0.0", "::1"]).optional(),
   // TETO de espera do laço da fila: com a fila vazia é quanto ele dorme entre uma
   // consulta ao relógio e a próxima; com job agendado, ele acorda no vencimento e
   // este valor só limita a soneca. Era 250 e a fila era consultada abrindo uma

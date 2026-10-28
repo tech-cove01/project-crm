@@ -24,6 +24,23 @@ node scripts/local-crm-status.mjs
 
 先开启 Docker Desktop。下列 PowerShell 命令在仓库根目录执行。
 
+已有本机数据库与集成依赖在线时，使用受管入口：
+
+```powershell
+node scripts/local-crm.mjs start
+node scripts/local-crm.mjs status
+node scripts/local-crm.mjs stop
+# 等价 npm 命令：npm run local:start / local:status / local:stop
+```
+
+入口只管理当前仓库此次启动的 Web、Agent Worker 和专用 integration drain，不操作 Docker。3000/8787 已占用或业务队列 pending/running 非零时拒绝接管；集成 pending 可由 drain 处理，processing 非零先拒绝启动。当前 `.env.local` 和 `infra/local-agent-services/.env.crm.generated` 为三进程的共同配置，不重新生成凭据或组织。Worker 健康端口仅监听本机，自动付费 flywheel 在受管模式关闭；没有启动 `dev:crons`。
+
+每次会话在 `.local/local-crm/<session>/` 保存独立脱敏日志和退出事件，`status` 展示受管角色及心跳、健康和队列。日志、锁和状态文件均为本机材料，不上传。`stop` 无需配置继续有效，按 drain → Worker → Web 顺序停止；所有阶段共享关闭截止，超时强停与正常退出分开记录。不循环自动重启，历史无日志退出的根因仍需实际证据。
+
+未知进程或手工启动的旧服务不会被接管/停止。陈旧锁或停止未确认时，先看会话日志并核对当前进程、端口及队列，不能按旧 PID 终止进程或盲目删锁重开。受管 Web 使用当前锁定 Next.js 的本机开发服务器入口，Worker 沿用原应用逻辑；升级 Next 时须复核该启动入口。
+
+下面保留原手工启动方式，勿与受管入口同时启动同一端口。
+
 ```powershell
 # 已缓存的 Supabase CLI，首次准备时已核对官方发布校验和。
 & .\.local\tools\supabase-v2.122.0\bin\supabase.exe `

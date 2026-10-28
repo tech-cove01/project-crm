@@ -317,7 +317,7 @@ export async function startWorker(
   const server = createHealthzServer(pool, log, env.METRICS_WINDOW_MS);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(env.HEALTH_PORT, "0.0.0.0", resolve);
+    server.listen(env.HEALTH_PORT, env.HEALTH_HOST ?? "0.0.0.0", resolve);
   });
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : env.HEALTH_PORT;
