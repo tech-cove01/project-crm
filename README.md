@@ -1,8 +1,10 @@
 # AI Native CRM
 
-面向跨境销售与客户经营的 AI 原生 CRM。项目将客户、商机、沟通记录和企业知识与 Agent 工作台连接，帮助销售人员查找客户上下文、分析商机、准备跟进，并对涉及业务变更的操作进行审查。
+面向跨境销售与客户经营的全栈 AI 原生 CRM。项目将客户、商机、沟通记录和企业知识与 Agent 工作台连接，帮助销售人员查找客户上下文、分析商机、准备跟进，并对涉及业务变更的操作进行审查。
 
 当客户事实散落在会话、客户档案与产品资料中，销售人员不仅需要一个能回答问题的聊天框，还需要能读取业务上下文、解释依据、受权限约束并留下执行记录的助手。这个项目围绕这一任务，结合 CRM 工作台、Agent 执行系统和可插拔的记忆、知识与观测服务。
+
+Web 与 API 使用 Next.js / React / TypeScript，独立 Node Worker 通过 Pi Agent Core 执行模型和工具调用，Supabase/PostgreSQL 保存业务事实、权限与运行记录。项目基于可追溯的上游源码快照；本仓后续接入百炼、修复审批结果语义、补充本机审批续跑模式并完成外部服务联调，详见[来源与本仓改动](docs/current-capabilities.md#继承范围与本仓后续交付)。
 
 ## 项目亮点
 
@@ -31,7 +33,7 @@ flowchart LR
     Trace -. 可选 .-> Langfuse[Langfuse]
 ```
 
-Web/API 与 Worker 分工：前者承接产品交互、权限校验和任务创建，后者处理持续执行与恢复。Supabase 提供 PostgreSQL、认证、存储和实时能力；Mem0、WeKnora、Langfuse 和客户渠道按需要配置。
+Web/API 与 Worker 分工：前者承接产品交互、权限校验和任务创建，后者处理持续执行与恢复。Supabase 提供 PostgreSQL、认证、存储和实时能力；Mem0、WeKnora、Langfuse 是按需启用的适配器。本机已用合成资料验证这三项服务，客户渠道仍需单独接入与验收。
 
 ## 技术栈
 
@@ -39,21 +41,39 @@ Web/API 与 Worker 分工：前者承接产品交互、权限校验和任务创�
 | --- | --- |
 | Web 与交互 | Next.js 16、React 19、TypeScript、Tailwind CSS 4、Radix UI、TanStack Query、React Hook Form、Zod、React Flow、Recharts |
 | 后端与数据 | Node.js、Next.js API、独立 Agent Worker、PostgreSQL、Supabase、Redis、pgvector |
-| Agent | Pi Agent Core / Pi AI、模型网关、MCP、工具权限与审批、多 Agent 协作 |
+| Agent | Pi Agent Core / Pi AI、模型网关、百炼 Qwen、MCP、工具权限与审批、多 Agent 协作 |
 | 记忆、知识与观测 | CRM 确认事实、Mem0（可选）、WeKnora（可选）、Langfuse（可选）、规则评估与 LLM Judge |
 | 工程化 | pnpm、Docker Compose、数据库迁移、Vitest、Testing Library、Playwright、ESLint |
 
-## 本地运行与验证
+## 本机已验证的范围
+
+以下是截至 **2026-10-28** 的本机验收记录，使用合成客户、商机和知识资料，模型请求真实执行并由百炼计费。各项来自不同 Run，尚未串成一份固定的销售演示；源码中的其他 Agent、Mission 和渠道能力不因此视为全部验收。
+
+| 切片 | 实际结果 | 验收依据与限制 |
+| --- | --- | --- |
+| 全栈 CRM | 真实登录、核心页面访问、合成客户创建/修改和刷新读取，未登录请求被拒绝。 | [CRM-002b](docs/evidence/CRM-002b.md)；本机独立 Supabase，不代表已部署公网。 |
+| Pi Agent 执行 | 工作台创建 Run，经 SQL 队列和独立 Worker 调用 `qwen3.8-flash`、`crm_get_contact`，结果在页面可见。 | [CRM-006](docs/evidence/CRM-006.md)；验证了只读客户查询。 |
+| 客户记忆与原生知识 | 人工确认事实写 SQL 并跨 Run 读取；合成 FAQ 经百炼 `text-embedding-v4` 索引、检索并被 Agent 引用。 | [CRM-007](docs/evidence/CRM-007-capabilities.md)；模型和组织隔离已检查，单个样本不代表召回率。 |
+| 审批、落库与续跑 | 合成商机变更先生成提案，人工批准后阶段落库，Agent 续跑至 `completed`。 | [CRM-008](docs/evidence/CRM-008.md)；仅在显式本机演示模式下关闭单次金额预算。 |
+| Mem0 | 确认事实经专用集成队列自动同步；真实写入、搜索、删除及 Agent 客户工具触发检索通过。 | [CRM-010 Mem0](docs/evidence/CRM-010-mem0.md)；SQL 仍为事实权威，脱敏记录无法确认答案引用了哪条重复记忆。 |
+| WeKnora | 百炼处理合成产品资料，CRM 返回带来源的 Wiki 结果，Agent 已引用。 | [CRM-010 WeKnora](docs/evidence/CRM-010-weknora.md)；短查询命中，较长自然语言查询曾返回空结果。 |
+| Langfuse 与评估 | 真实回读模型/工具 observations 和确定性评分，重启后记录保留；另已显式运行语义 Judge。 | [CRM-010 Langfuse](docs/evidence/CRM-010-langfuse.md)、[CRM-007](docs/evidence/CRM-007-capabilities.md)；确定性评估出现 `fail`，语义 Judge 为 `needs_review`，均保留原结果。 |
+
+当前百炼模型费用在 CRM 中仍为未知，不等于免费；演示模式保留组织预算及已有 token/步骤控制，但后两者不是硬上限。客户发送、普通工作台回复候选到批准发送的闭环、组织记忆发布引用和正式成本计算仍未验收，详见[能力与边界](docs/current-capabilities.md)。
+
+## 本地运行
 
 需要 Node.js 22 或更高版本、pnpm 及 Docker。数据库、认证与 Worker 的准备步骤见 [本地运行指南](docs/local-development.md)。该指南记录当前机器的运行流程，其他机器首次初始化还需准备所列工具及数据库基线，避免对已有数据库执行重置。
 
-当前已在本机完成依赖安装、类型检查、生产构建、Supabase 初始化、真实登录、核心页面访问，以及合成客户的创建和修改；Worker 的数据库连接和健康检查通过。已接入阿里云百炼 Qwen，并验证客户记忆跨任务读取、合成 FAQ 的向量索引与检索，以及本机演示模式下合成商机的审批、执行与 Agent 续跑；客户渠道及可选外部服务仍需单独配置和验证。
+Web、Worker 与外部集成队列需要分别启动，并加载一致的组织绑定；普通 Worker 的健康检查不能替代集成队列状态检查。组件初始化见[本地服务说明](infra/local-agent-services/README.md)，WeKnora 本机网络适配见[接入说明](docs/weknora-local-development.md)。
+
+验收结果是历史快照，不能据此认定服务此刻在线。Worker 曾无日志退出一次，原因尚未定位；统一启停和诊断按 [CRM-013](docs/implementation-plan.md#求职展示收尾交接2026-10-28) 推进，实际进度以 [STATUS](docs/STATUS.md) 为准。当前优先本机运行与屏幕共享，未部署 Cloudflare/公网服务，也未完成 Linux 2 GiB 环境验证；公网前置见[部署评估](docs/cloudflare-deployment.md)。
 
 ## 更多资料
 
 - [实施工作流与状态](docs/STATUS.md)
 - [能力与实现边界](docs/current-capabilities.md)
-- [文档索引](docs/index.md)
+- [上游文档索引（历史资料）](docs/index.md)
 - [第三方来源与许可](THIRD_PARTY_NOTICES.md)
 
 项目基于 MIT 许可证发布，详见 [LICENSE](LICENSE)。

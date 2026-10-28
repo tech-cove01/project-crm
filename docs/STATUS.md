@@ -4,7 +4,8 @@
 
 - 方向：CRM AI-native 项目。
 - 当前阶段：本机已验证百炼 Agent、客户记忆、原生与 WeKnora 知识检索、部分审批动作及 Langfuse 观测投递，后续按实际业务补齐。
-- 当前票：CRM-010 本机真实验收已完成；待动手 Agent 按 CRM-013～016 做求职展示收尾，本轮仅登记任务。工作流和验收见 [实施票据](implementation-plan.md)。
+- 当前票：CRM-013 doing，先交付统一本机状态与进程管理，再做恢复验收；CRM-015 文档在独立文件范围并行。用户已明确本 agent 负责 CRM 并要求开工，工作流和验收见 [实施票据](implementation-plan.md)。
+- 最近交付：CRM-015 文档事实、链接和独立审查通过，完成随对应本地提交成功生效；见 [证据](evidence/CRM-015.md)。
 - 已有材料：从本仓根目录访问 ../../../develop/，5 个资料包已全部解压并校验；原 zip 移至 ../../../archive/zips/crm。
 - 本轮：project-crm 已移到 project/code，与 project-full-stack 同级；共同工作区维护一份 Skill，各仓库按适用范围建立本地联接。
 - 旧项目：../../../archive/project-agent 已冻结，GitHub 为私密；project-crm 为独立仓库。目录迁移不改变两个仓库的 Git 历史。
