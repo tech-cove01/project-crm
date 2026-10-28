@@ -17,6 +17,9 @@ if (
   base.search ||
   base.hash
 ) throw new Error("local_development_endpoints_required");
+const intervalMs = Number(process.env.CRM_LOCAL_INTEGRATION_INTERVAL_MS ?? "60000");
+if (!Number.isSafeInteger(intervalMs) || intervalMs < 10_000 || intervalMs > 60_000)
+  throw new Error("local_integration_interval_out_of_range");
 const secret = process.env.INTERNAL_CRON_SECRET || process.env.INTERNAL_SECRET;
 if (!secret) throw new Error("cron_secret_required");
 
@@ -49,10 +52,10 @@ async function main(): Promise<void> {
   while (!shutdown.signal.aborted) {
     await tick();
     if (shutdown.signal.aborted) break;
-    try { await sleep(60_000, undefined, { signal: shutdown.signal }); }
+    try { await sleep(intervalMs, undefined, { signal: shutdown.signal }); }
     catch { if (!shutdown.signal.aborted) throw new Error("integration_drain_wait_failed"); }
   }
   console.info("Local integration drain stopped.");
 }
-console.info("Local integration drain started; interval 60 seconds.");
+console.info(`Local integration drain started; interval ${intervalMs} ms.`);
 void main();

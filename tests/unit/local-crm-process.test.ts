@@ -210,7 +210,7 @@ describe("managed local CRM process ownership", () => {
     await control.assertPortsFree(f.config);
   });
 
-  it("records a real drain HTTP receipt and stops during its minute wait", async () => {
+  it.each(["60000", "10000"])("records a real drain receipt and stops during its %s ms wait", async intervalMs => {
     const server = http.createServer((_req, response) => {
       response.setHeader("content-type", "application/json");
       response.end(JSON.stringify({ data: { scanned: 2, done: 1, dead: 0, projected: 0 }, ignoredPrivateField: "must-not-be-logged" }));
@@ -219,7 +219,7 @@ describe("managed local CRM process ownership", () => {
     const address = server.address() as net.AddressInfo;
     const child = fork(resolve("scripts/local-crm-service.mjs"), ["drain"], {
       execArgv: ["--import", "tsx"], windowsHide: true, stdio: ["ignore", "pipe", "pipe", "ipc"],
-      env: { ...process.env, NODE_ENV: "development", NEXT_PUBLIC_APP_URL: `http://127.0.0.1:${address.port}`, SUPABASE_DB_URL: "postgresql://fixture@127.0.0.1:55422/postgres", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55421", INTERNAL_CRON_SECRET: "fixture-drain-secret" },
+      env: { ...process.env, NODE_ENV: "development", NEXT_PUBLIC_APP_URL: `http://127.0.0.1:${address.port}`, SUPABASE_DB_URL: "postgresql://fixture@127.0.0.1:55422/postgres", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55421", INTERNAL_CRON_SECRET: "fixture-drain-secret", CRM_LOCAL_INTEGRATION_INTERVAL_MS: intervalMs },
     });
     children.push(child);
     let stdout = "";
@@ -231,10 +231,28 @@ describe("managed local CRM process ownership", () => {
       expect(receipt).toMatchObject({ httpStatus: 200, ok: true, scanned: 2, done: 1, dead: 0 });
       expect(Number.isFinite(Date.parse(receipt.at))).toBe(true);
       expect(stdout).not.toContain("must-not-be-logged");
+      expect(stdout).toContain(`interval ${intervalMs} ms`);
       child.send({ type: "stop" });
       await until(() => child.exitCode !== null || child.signalCode !== null, 3000);
       expect(child.exitCode).toBe(0);
     } finally { server.closeAllConnections(); await new Promise<void>(accept => server.close(() => accept())); }
+  });
+
+  it.each(["9999", "60001", "NaN"])("rejects an unsafe drain interval %s before HTTP", async intervalMs => {
+    const child = fork(resolve("scripts/local-crm-service.mjs"), ["drain"], {
+      execArgv: ["--import", "tsx"], windowsHide: true, stdio: ["ignore", "pipe", "pipe", "ipc"],
+      env: { ...process.env, NODE_ENV: "development", NEXT_PUBLIC_APP_URL: "http://127.0.0.1:1", SUPABASE_DB_URL: "postgresql://fixture@127.0.0.1:55422/postgres", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55421", INTERNAL_CRON_SECRET: "fixture-drain-secret", CRM_LOCAL_INTEGRATION_INTERVAL_MS: intervalMs },
+    });
+    children.push(child);
+    let stdout = "";
+    let stderr = "";
+    child.stdout!.on("data", chunk => { stdout += String(chunk); });
+    child.stderr!.on("data", chunk => { stderr += String(chunk); });
+    child.send({ type: "initialize", root: process.cwd(), graceMs: 3000 });
+    await until(() => child.exitCode !== null || child.signalCode !== null);
+    expect(child.exitCode).toBe(1);
+    expect(stdout).not.toContain("integration_drain_tick");
+    expect(stderr).toContain("local_crm_service_start_failed");
   });
 
   it("waits for an actual in-flight drain receipt before exiting on stop", async () => {

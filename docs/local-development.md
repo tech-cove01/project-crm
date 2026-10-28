@@ -130,3 +130,5 @@ $env:AI_INTEGRATION_BINDINGS = $bindingLine.Substring('AI_INTEGRATION_BINDINGS='
 本机 `.env.local` 显式设置 `NODE_ENV=development` 与 `CRM_LOCAL_WORKBENCH_UNPRICED_MODE=true`，用于普通百炼 Workbench 任务的审批续跑演示；单次金额预算关闭，原有 token/步骤控制仍在，但不是硬上限。该开关默认关闭，组织预算和 Mission 不变；工作台会显示提示，详细范围和验收见 [CRM-008](evidence/CRM-008.md)。
 
 销售演示使用 `npm run demo:sales -- prepare` 生成本次中文任务与范围，只读检查，不创建模型任务或自动批准。实际操作、预期结果和失败处理见 [3–5 分钟销售演示](sales-demo.md)。
+
+三任务演示使用 `npm run demo:sales -- prepare --split`。本机专用 integration drain 默认每 60 秒执行一条远端操作；可在 `.env.local` 显式设置 `CRM_LOCAL_INTEGRATION_INTERVAL_MS=10000`（合法范围 10000–60000）缩短观测等待。先检查队列和受管会话，再正常 stop/start 加载配置；只重启自己的会话，不接管其它进程。该配置不改变服务端单次消费上限或生产 scheduler，Langfuse 仍需按实际 Trace 回读。
