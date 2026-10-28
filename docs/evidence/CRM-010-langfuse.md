@@ -23,6 +23,7 @@
 - 切换网络后，官方 Langfuse 4.49.0 Web、Worker 镜像下载完整；独立 PostgreSQL、Redis、ClickHouse 和 SeaweedFS 随后分阶段启动。管理员通过 CRM 接口启用 Langfuse，本机项目鉴权与健康检查成功。
 - 本机合成客户只读 Run `b73606ef-7604-4001-b3ad-fe4b42642cc8` 为 `completed`，调用 `crm_get_contact`。从 Langfuse Observations API v2 实际回读 6 条 observation（含 2 条模型、2 条工具），各条 input/output 均为空。
 - 对该 Run 显式执行确定性评估并投递，Scores API v3 回读 6 个分数，`crm.overall=79`、`crm.answer_quality=0`，评估 verdict 为 `fail`。这是现有评测给出的诊断结果，不代表模型质量结论或集成失败。
+- 后续已单独核对本客户 Run：两条真实客户记忆 ID 被标为 knowledge 证据，类型化引用匹配失败，并非没有读到记忆；原报告与六项远端评分一致。详见 [CRM-016d 原始失败诊断](CRM-016d-original-customer-failure.md)，与后来同为 79 分的商机失败区分。
 - 首次投递因 SeaweedFS 的 `volume.max=2` 导致两个默认卷占满槽位，Langfuse 集合无可写卷、S3 返回 500，CRM 投递超时并按队列退避。保留数据卷将上限调整到 5 后，原队列中的 2 条 spans 与 1 条 scores 事件均最终为 `done`，实际回读已确认；期间用稳定事件 ID 手动重试一次 scores，未新增业务记录。
 - `infra/local-agent-services/compose.yml` 已同步上限 5，重启不要恢复旧的 2；5 只适用于本机示例，并非长期容量保证。上游 SeaweedFS Dockerfile 为 arm64，本机 x86_64 使用 `chrislusf/seaweedfs:3.95` 官方镜像和 `/usr/bin/weed -logtostderr=true` 入口构建 `crm-agent-services-seaweedfs:3.95`，可复建配置已保存为 `infra/local-agent-services/SeaweedFS.amd64.Dockerfile`；凭据从生成文件复制到专用 S3 配置卷，未写入镜像。
 - 一次运行快照：Langfuse Web 约 873 MiB、Worker 467 MiB、ClickHouse 728 MiB、SeaweedFS 164 MiB、Redis 11 MiB；Windows 剩余约 2.20 GiB。以上是当前负载下的瞬时使用量，非固定要求；用户其他项目继续运行。
