@@ -36,7 +36,7 @@ v2 依次使用 `runs.contact.task`、`runs.knowledge.task`、`runs.approval.tas
 
 ## 固定输入与验收边界
 
-三个任务的自然语言字段均要求简体中文，JSON 键、枚举和观察标量保持原值。客户任务 `runs.contact` 仅调用 `crm_get_contact`，逐条列出 `confirmed_customer_memory` 的 body 原文、id、confirmed 及实际返回状态；不判定未来触达同意，不把联系人偏好升级为公司政策，真正读取失败仍须报告。
+三个任务的自然语言字段均要求简体中文，JSON 键、枚举和观察标量保持原值。客户任务 `runs.contact` 仅调用 `crm_get_contact`；成功时 summary 为 JSON 文本，外层只列 `status/coverage/providerStatus/memories`，按返回顺序保留每条记忆的 `id/body/confirmed/revision`，包括正文重复的记录。逐值复制，不附加时间字段或版本差异分析；引用使用 contact 的实际 ID，记忆 ID 不冒充 knowledge 证据。不判定未来触达同意，不把联系人偏好升级为公司政策；真实错误或不完整读取优先如实说明。
 
 知识任务 `runs.knowledge` 仅调用 `crm_search_knowledge`，`pergunta` 精确为“产品”、`quantidade` 为 5；只列本次实际返回的证据/片段 ID、来源标题和检索状态，不推演完整产品目录，不因不足 5 条自动判定缺料。知识引用不用父知识源 ID 替代实际证据，工具真实失败或明确阻止查询的缺口仍须报告。
 
