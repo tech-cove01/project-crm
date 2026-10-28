@@ -12,6 +12,7 @@
     "local:start": "node scripts/local-crm.mjs start",
     "local:status": "node scripts/local-crm.mjs status",
     "local:stop": "node scripts/local-crm.mjs stop",
+    "demo:sales": "node scripts/sales-demo.mjs",
     "demo:seed": "tsx --env-file=.env.local scripts/seed-demo.ts",
     "ai:agents:ensure-builtins": "tsx --env-file=.env --env-file=.env.local scripts/ensure-builtin-agents.ts",
     "build": "next build",
