@@ -1,6 +1,6 @@
 # 当前能力与二开边界
 
-更新：2026-10-28。本页区分上游源码能力、本仓后续改动和本机真实验收；当前工作票与服务状态以 [STATUS](STATUS.md) 为准。
+更新：2026-10-29。本页区分上游源码能力、本仓后续改动和本机真实验收；当前工作票与服务状态以 [STATUS](STATUS.md) 为准。
 
 源码盘点以 CRM-001 导入基线 `06fac28` 为起点，后续验收依据 CRM-006/007/008/010/013/014。来源、许可与文件映射见[第三方声明](../THIRD_PARTY_NOTICES.md)、[导入清单](upstream/import-manifest.json)。本文源码路径均相对仓库根目录。
 
@@ -26,6 +26,8 @@
 | Langfuse、规则评估与 Judge | 模型/工具 observations、6 个确定性评分真实回读，重启后记录保留；另一次语义 Judge 完成并持久化。 | [CRM-010 Langfuse](evidence/CRM-010-langfuse.md)、[CRM-007](evidence/CRM-007-capabilities.md)。观测 input/output 为空；确定性 verdict=`fail`（overall=79、answer_quality=0），语义 Judge verdict=`needs_review`，不是效果提升证明。 |
 
 三项外部服务在 2026-10-28 的一次同时运行复查中健康接口通过；Worker 曾无日志退出一次，原因未确定，确认队列为空并重启后新只读 Run 完成。这是短时复查，尚无长期稳定性或 Linux 2 GiB 环境验收。CRM-016 已完成固定检索样本前后对照及六项既有声明来源核对，后者 5 项通过、1 项失败，发现客户回答含记录值误述和日期猜测。[历史质量证据](evidence/CRM-016c-quality.md)保留该 fail；后续[原客户 79 分诊断](evidence/CRM-016d-original-customer-failure.md)和[新答案修复验收](evidence/CRM-016e-customer-answer-fix.md)已补齐。新客户 Run 的完整清单与同四条工具事实逐值一致，仍为 needs_review/89、answer_quality=50；不是全局事实强校验或全部语义质量通过。
+
+CRM-017 的同源小样本对照中，冻结有答案题 Hit@5 0/6→6/6，同时无答案误召回 0/3→3/3；原 Agent 八项计划为 5 pass、2 fail、1 blocked，后续另用新提案验证审批输出修复。此次 Langfuse 完整回读未核实，所有比例限单合成文档样本。[检索对照](evidence/CRM-017b-retrieval-evaluation.md)、[Agent 结果](evidence/CRM-017c-agent-evaluation.md)、[独立修复验证](evidence/CRM-017e-approval-answer-fix.md)。
 
 ## 继承范围与本仓后续交付
 

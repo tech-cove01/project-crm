@@ -17,7 +17,9 @@
 
 每项在唯一 Run 的工具观察、产品最终文本、结构化证据与必要数据库/事件事实之间核对；C03–C07 的自然语言声明经逐条 agent 来源复核并绑定源哈希，未用模型自评作真值。资料主要是一位合成客户、一份合成 Wiki 文档与一个无客户关联的合成商机，不是七个独立客户或盲测样本。不得由此推算总体准确率。
 
-实际 8 个 job / 8 条聚合模型调用均 done、attempts=1、provider=`dashscope`、model=`qwen3.8-flash`、status=ok；记录 input 30569、output 4518、cache-read 74752、cache-write 0 tokens，缓存统计单列、不与输入简单相加。cost 为 NULL / 未知。C07 等待决定 15.09 秒（自动化操作）；各项时长见表，不能据小样本推断稳定 P95。知识路径的原生 embedding 另按实际记录，不把整个流程说成零模型请求。
+实际 8 个 job / 8 条聚合模型调用均 done、attempts=1、provider=`dashscope`、model=`qwen3.8-flash`、status=ok；记录 input 30569、output 4518、cache-read 74752、cache-write 0 tokens，缓存统计单列、不与输入简单相加。cost 为 NULL / 未知。C07 等待决定 15.09 秒（自动化操作）；各项时长见表，不能据小样本推断稳定 P95。知识路径的原生 embedding 不写入上述 `llm_calls`，其实际请求次数、tokens 和费用未知，不记为零，也不把整个流程称为零模型请求。
+
+后续只读核查四次知识工具观察均有原生相似度和授权索引版本，结合当次执行源码推断对应 4 次逻辑 `embedText` 调用；这不是提供商 HTTP 请求或重试次数的实测。当前配置及索引为 `dashscope/text-embedding-v4`、1536 维，缺少每次 embedding 的模型回执，不能将当前配置当历史请求账单。私有核查 `.local/crm017c/4b3d28a6-2259-4222-a1f9-e777646f5d06/embedding-audit-1793263266121.json` 的文件 SHA-256 为 `25faf478d573ea357802629da0a30a1e6df9f228c79e7f40d9060ef8b88678f2`。
 
 C02 首次创建尝试在登录阶段失败，回执无创建意图，日志和只读 SQL 均确认未发 Run POST；后续才首次创建该 Run。C02、C06 首次观察时 Run 已终态而 job 仍 running，随后只读复核同一 Run 的 job=done、attempts=1；原始快照保留，没有重跑模型。C02 的 worker 完成日志晚于首次快照 146ms。
 
