@@ -4,7 +4,7 @@ import { z } from "zod";
 import { enabledIntegration, type IntegrationBinding } from "./config";
 import { integrationFetch } from "./http";
 import { integrationQuery } from "./db";
-import { matchesWikiKeywords, planWikiQuery } from "./wiki-query";
+import { supportsWikiQuery, planWikiQuery } from "./wiki-query";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const id = z
@@ -178,7 +178,7 @@ export async function searchCompanyWiki(
           ),
         );
         if (page.knowledge_base_id !== kb) throw new Error("wiki_page_scope_mismatch");
-        if (usedFallback && !matchesWikiKeywords([page.title, page.slug, page.content.slice(0, 12000)], planned.terms)) continue;
+        if (usedFallback && !supportsWikiQuery([page.title, page.content.slice(0, 12000)], planned)) continue;
         const documentIds = [...new Set(page.source_refs.map((ref) => ref.split("|")[0]!))].sort();
         const docs = await Promise.all(
           documentIds.map((ref) => document(binding, kb, ref, signal, fetchImpl)),

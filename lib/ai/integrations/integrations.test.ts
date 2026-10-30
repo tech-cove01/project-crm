@@ -635,6 +635,49 @@ describe("WeKnora current-source Wiki evidence", () => {
     expect(searches).toBe(2);
     expect(f.manifests).toEqual([]);
   });
+  it.each(["missing property", "slug only", "late constraint"])("rejects fallback evidence with %s instead of accepting topical overlap", async variant => {
+    const f = fixture();
+    const query = variant === "late constraint"
+      ? "设备维护计划检查周期负责人审批归档保存期限"
+      : "设备保修的自动续约周期是多少？";
+    f.page.title = "设备保修";
+    f.page.content = variant === "late constraint"
+      ? "设备维护计划包含检查周期负责人审批归档保存。"
+      : "设备保修可自动提醒，检查周期为一个月。";
+    if (variant === "slug only") f.page.slug = "设备保修自动续约周期";
+    const original = f.http.getMockImplementation()!;
+    let searches = 0;
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug, title: query }] })
+      : original(url));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true });
+    expect(searches).toBe(2);
+    expect(f.manifests).toEqual([]);
+  });
+  it("retains a fallback page that actually contains the requested non-CRM attributes", async () => {
+    const f = fixture();
+    f.page.title = "设备保修";
+    f.page.content = "设备保修自动续约周期为一年。";
+    const original = f.http.getMockImplementation()!;
+    let searches = 0;
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug }] })
+      : original(url));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "设备保修的自动续约周期是多少？", 3, undefined, f.http);
+    expect(result).toMatchObject({ status: "complete", fallbackUsed: true });
+    expect(result.evidence).toHaveLength(1);
+    expect(f.manifests).toHaveLength(1);
+  });
+  it("does not broaden a query whose support terms exceed the bounded plan", async () => {
+    const f = fixture();
+    f.http.mockImplementation(async () => j({ pages: [] }));
+    const query = Array.from({ length: 33 }, (_, index) => `词汇 Brand${index}`).join("，");
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: false, queryMode: "literal" });
+    expect(f.http).toHaveBeenCalledTimes(1);
+    expect(f.manifests).toEqual([]);
+  });
   it.each(["stale", "foreign"])("never retries when literal candidates are rejected as %s", async reason => {
     const f = fixture();
     if (reason === "stale") f.doc.updated_at = "2026-10-02T01:00:00Z";

@@ -5,6 +5,8 @@ const genericWords = new Set([
   "查询", "查找", "查看", "告诉", "介绍", "提供", "回答", "说明", "需要", "可以", "进行",
   "公司", "企业", "产品", "服务", "系统", "资料", "信息", "数据", "知识", "知识库",
   "内容", "情况", "结果", "答案", "问题", "当前", "现有", "所有", "本次",
+  // Question operators and request scaffolding, not domain attributes or synonyms.
+  "当作", "使用", "要求", "区别", "上有", "哪种", "多少", "几天",
   "a", "an", "the", "and", "or", "of", "to", "for", "what", "which", "how", "is", "are", "please", "crm",
 ]);
 
@@ -22,7 +24,8 @@ function keywordPattern(term: string): string {
 
 export function planWikiQuery(query: string) {
   const bounded = query.slice(0, 2000);
-  const terms: string[] = [];
+  const supportTerms: string[] = [];
+  let supportComplete = query.length <= bounded.length;
   if (/\p{Script=Han}/u.test(bounded)) {
     const segmenter = new Intl.Segmenter("zh-CN", { granularity: "word" });
     // Preserve a contiguous Latin phrase as one term rather than counting its words as independent hits.
@@ -36,24 +39,30 @@ export function planWikiQuery(query: string) {
         const key = word.toLowerCase();
         if (word.length < 2 || genericWords.has(key) || seen.has(key) || /^\d+$/.test(word)) continue;
         seen.add(key);
-        terms.push(word);
-        if (terms.length === 6) break;
+        if (supportTerms.length === 32) {
+          supportComplete = false;
+          break;
+        }
+        supportTerms.push(word);
       }
-      if (terms.length === 6) break;
+      if (!supportComplete) break;
     }
   }
+  // Candidate discovery stays small; support checks must not lose later constraints.
+  const terms = supportTerms.slice(0, 6);
   return {
     literal: escapeWikiRegex(bounded),
     terms,
-    fallback: terms.length ? `(${terms.map(keywordPattern).join("|")})` : null,
+    supportTerms,
+    supportComplete,
+    fallback: supportComplete && terms.length ? `(${terms.map(keywordPattern).join("|")})` : null,
   };
 }
 
-export function matchesWikiKeywords(fields: string[], terms: string[]): boolean {
-  if (!terms.length) return false;
-  const matches = terms.filter(term => {
+/** Lexical coverage only: matching every term does not establish an answer's truth or completeness. */
+export function supportsWikiQuery(fields: string[], plan: ReturnType<typeof planWikiQuery>): boolean {
+  return plan.supportComplete && plan.supportTerms.length > 0 && plan.supportTerms.every(term => {
     const pattern = new RegExp(keywordPattern(term), "iu");
     return fields.some(field => pattern.test(field));
   });
-  return matches.length >= Math.min(2, terms.length);
 }
