@@ -103,6 +103,11 @@ const payloadSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 type Payload = z.infer<typeof payloadSchema>;
+class LangfuseSpanRejection extends Error {
+  constructor() {
+    super("langfuse_span_receipt_incomplete");
+  }
+}
 const attr = (
   key: z.infer<typeof attributeKey>,
   value: string | number,
@@ -355,7 +360,7 @@ export async function exportLangfuseEvent(row: EventRow, pool: Pool, fetchImpl?:
     "x-langfuse-ingestion-version": "4",
   };
   if (payload.kind === "spans") {
-    await integrationFetch(
+    const response = await integrationFetch(
       binding,
       "/api/public/otel/v1/traces",
       {
@@ -374,6 +379,27 @@ export async function exportLangfuseEvent(row: EventRow, pool: Pool, fetchImpl?:
       },
       fetchImpl,
     );
+    // HTTP acceptance is not persistence proof; also reject an explicit OTLP partial rejection.
+    let receipt: unknown;
+    try {
+      receipt = await response.json();
+    } catch {
+      throw new Error("langfuse_span_receipt_invalid");
+    }
+    const parsed = z
+      .object({
+        partialSuccess: z
+          .object({
+            rejectedSpans: z
+              .union([z.number().int().nonnegative(), z.string().regex(/^\d+$/)])
+              .optional(),
+          })
+          .optional(),
+      })
+      .safeParse(receipt);
+    if (!parsed.success) throw new Error("langfuse_span_receipt_invalid");
+    if (BigInt(parsed.data.partialSuccess?.rejectedSpans ?? 0) > 0n)
+      throw new LangfuseSpanRejection();
   } else {
     const batch = payload.scores.map(({ timestamp, ...body }) => ({
       id: body.id,
@@ -420,7 +446,14 @@ export const langfuseExportHandler: EventHandler = {
             detail: "integration_disabled",
           }
         : { consumer_key: this.key, status: "ok" };
-    } catch {
+    } catch (error) {
+      // OTLP explicitly forbids retrying a partially accepted batch.
+      if (error instanceof LangfuseSpanRejection)
+        return {
+          consumer_key: this.key,
+          status: "skipped",
+          detail: "langfuse_spans_rejected_nonretryable",
+        };
       return { consumer_key: this.key, status: "error", detail: "langfuse_export_failed" };
     }
   },

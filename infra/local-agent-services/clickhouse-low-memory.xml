@@ -1,14 +1,23 @@
 <clickhouse>
   <!-- Local single-user validation, not a production sizing recommendation. -->
-  <max_server_memory_usage>536870912</max_server_memory_usage>
+  <!-- Leave container headroom for allocations outside tracked query memory. -->
+  <max_server_memory_usage>1073741824</max_server_memory_usage>
   <mark_cache_size>16777216</mark_cache_size>
   <uncompressed_cache_size>16777216</uncompressed_cache_size>
-  <background_pool_size>4</background_pool_size>
+  <!-- Historical diagnostic-log merges must not starve the small ingestion budget. -->
+  <background_pool_size>1</background_pool_size>
+  <background_merges_mutations_concurrency_ratio>1</background_merges_mutations_concurrency_ratio>
   <background_schedule_pool_size>8</background_schedule_pool_size>
   <background_buffer_flush_schedule_pool_size>2</background_buffer_flush_schedule_pool_size>
   <background_message_broker_schedule_pool_size>2</background_message_broker_schedule_pool_size>
   <background_distributed_schedule_pool_size>2</background_distributed_schedule_pool_size>
   <max_thread_pool_size>128</max_thread_pool_size>
+  <!-- Stop generating high-volume diagnostic tables; existing tables/data remain intact.
+       Query/error logs and Langfuse telemetry tables are retained. -->
+  <text_log remove="remove"/>
+  <trace_log remove="remove"/>
+  <asynchronous_metric_log remove="remove"/>
+  <part_log remove="remove"/>
   <merge_tree>
     <number_of_free_entries_in_pool_to_lower_max_size_of_merge>0</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
     <number_of_free_entries_in_pool_to_execute_mutation>0</number_of_free_entries_in_pool_to_execute_mutation>

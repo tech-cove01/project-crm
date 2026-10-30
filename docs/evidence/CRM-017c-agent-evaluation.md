@@ -25,6 +25,6 @@ C02 首次创建尝试在登录阶段失败，回执无创建意图，日志和�
 
 七项确定性 evaluation GET 依次为 needs_review **89/89/92/92/92/71/89**，semantic Judge 未配置；这些规则分与上述来源审查结论不同，不能用规则分覆盖 C04/C07 的 fail。初次 C02 回查遇到登录或请求通用错误；后来单次新登录复用会话只读回查成功，原错误保留。
 
-Langfuse 回查尚有缺口：C01 首次远端回读只有 1 条 observation，未回读模型/工具 observation，虽然两条 spans 投递事件已 done；后续七条 observations GET 和 C01 trace GET 未取得 HTTP 响应，结果保留为 unknown。C01 outbox 中六条 spans 的时间均在当次查询范围内，不能把只看到一条简单归因于时间窗口。队列 done 不等于远端完整回读。
+当时 Langfuse 回查有缺口：C01 首次远端回读只有 1 条 observation，未回读模型/工具 observation，虽然两条 spans 投递事件已 done；后续七条 observations GET 和 C01 trace GET 因诊断脚本异常，结果保留为 unknown。2026-10-30 查明原生 Fetch `status` 被误当方法调用，旧 TypeError 不能证明“未取得 HTTP 响应”；另外确有 ClickHouse 超内存导致异步落库失败。修复和旧七 Run 的实际恢复见 [CRM-018b](CRM-018b-langfuse-readback.md)。旧结果不覆盖，队列 done 不等于远端完整回读。
 
 只读来源、计划及审查材料位于 `.local/crm017c/4b3d28a6-2259-4222-a1f9-e777646f5d06/`，最终离线汇总 `summary-offline-1793261795416.json`（文件 SHA-256 `cfbd220be0550282b36b685e7f173df7b4dddba75ba00357de8f594f20bef057`）、回查 `readbacks-diagnostic-1793261615307.json`；源与 review 哈希由独立 agent 重算通过。未向客户发送消息，未调用语义 Judge。有关独立修复验证另行补充，不能改变本表历史结果。

@@ -114,7 +114,9 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
-    mem_limit: 768m
+      - ./clickhouse-low-memory.xml:/etc/clickhouse-server/config.d/low-memory.xml:ro
+      - ./clickhouse-low-memory-users.xml:/etc/clickhouse-server/users.d/low-memory.xml:ro
+    mem_limit: 1536m
     cpus: 0.75
     restart: "no"
     healthcheck:

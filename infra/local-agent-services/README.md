@@ -12,9 +12,13 @@
 | WeKnora API | http://127.0.0.1:8088/health | v0.8.2 | 512MB |
 | Langfuse | http://127.0.0.1:3006 | 4.49.0 | Web 1536MB，Worker 768MB |
 | 独立 PostgreSQL | 127.0.0.1:5438 | 15.8.1.085 | 256MB |
-| ClickHouse / Redis / S3 | 仅 Docker 内网，S3 本机 8333 | 25.12.5.44 / 7.2.7 / SeaweedFS 3.95 | 768 / 64 / 192MB |
+| ClickHouse / Redis / S3 | 仅 Docker 内网，S3 本机 8333 | 25.12.5.44 / 7.2.7 / SeaweedFS 3.95 | 1536 / 64 / 192MB |
 
 所有宿主端口仅绑定 loopback。数据库、文件、向量、事件分别保存到命名卷，未复用或清空 CRM 数据库。Docker VM 保持 4GB；容器上限之和并非同时占用，但这一组合仍较重。已验证 Web 的 384MB/640MB Node 堆不足以启动本版本，不能为了看上去轻量而保留会崩溃的配置。重型 build 与服务联调建议错峰；可用 compose `stop langfuse-web langfuse-worker clickhouse seaweedfs redis` 暂停可观测性栈，恢复后继续投递队列，切勿 `down -v`。
+
+ClickHouse 内部跟踪内存上限为 1GiB，容器另留 512MiB 余量；Compose 只读挂载本目录 `clickhouse-low-memory.xml` 和 `clickhouse-low-memory-users.xml`，已有镜像也能加载相同配置。默认 profile 的 `max_block_size=1024` 缩小宽 I/O 列聚合的处理块；仅升至 1GiB 时查询仍出现超内存，必须一并加载该 profile。原 512MiB 内部限额在 CRM-017 期间出现 `MEMORY_LIMIT_EXCEEDED`，导致 Langfuse HTTP 已接受但异步落库失败。调整后须实际回读精确 span ID，不能把健康检查或队列 done 当成落库保证；这里是本机配置，不是生产容量建议。
+
+本机后台合并池及并发比率均为 1，避免历史系统诊断表的多路合并与遥测写入争抢内存；停止 `text_log/trace_log/asynchronous_metric_log/part_log` 表的新日志写入。历史表和数据不删除，查询日志、服务错误日志及 Langfuse 遥测表保留；需要深度系统 profiling 时应另行选择资源充足的诊断配置。
 
 ## 初始化（仅一次）
 
@@ -107,6 +111,14 @@ pnpm exec tsx --env-file=.env.e2e --env-file=infra/local-agent-services/.env.crm
 先通过 CRM 的显式 Eval POST 生成报告，再通过已鉴权的 `ai-integration-drain` 专用接口投递并等待 Worker 落库。Langfuse v4 使用 Observations API v2 和 Scores API v3 回读，不能用旧 `/traces/:id` 的 404 判断入库失败；见[官方 API 文档](https://langfuse.com/docs/api-and-data-platform/features/public-api)。探针必须查到对应 run 的模型、工具、分数，并确认 input/output 均为空（隐私保护），不能将 HTTP 200 或队列 done 当作完整验收。
 
 验证输出只含 ID、数量、哈希和分数，写入受忽略的 `.env.verification.generated`。真实模型调用成功不代表业务任务完成；部分结果、Judge 失败、来源缺失必须保留。
+
+已有 Run 的完整 span 回读可单独执行，不调用模型、Judge 或投递消费者：
+
+```bash
+node --import tsx scripts/readback-langfuse.ts ORGANIZATION_UUID RUN_UUID [RUN_UUID ...]
+```
+
+它以现有 outbox 中精确 span ID、名称与父子关系对照 Observations API v2，按 cursor 完整分页，并显式读取 I/O 字段检查为空；缺字段不视为脱敏通过。报告保存在忽略目录 `.local/langfuse-readbacks/`，不打印原始 I/O 或密钥。这只验证 span 链，不代表远端评分已回读；HTTP 接受仍不能证明后续异步入库成功。OTLP 明确拒绝的 partial batch 不自动重试，消费者记录 `langfuse_spans_rejected_nonretryable`，不能当作导出成功。
 
 探针默认使用上游 `pi-native-demo` 组织；在本机新建的演示组织中验证时，设置 `CRM_AGENT_SERVICES_ORGANIZATION_ID` 为当前组织 ID。Mem0 查询探针还需要将 `CRM_AGENT_SERVICES_CONTACT_ID` 设为相应的合成联系人 ID；涉及删除的旧探针仍只允许上游演示组织与本机 Mem0。Langfuse 默认验证 `http://127.0.0.1:3006` 上的 `crm-local-demo-project`；若明确选择其他实例，可分别设置 `CRM_LANGFUSE_ORIGIN` 和 `CRM_LANGFUSE_PROJECT_ID`，并确保 CRM 的服务端绑定指向同一地址和项目。探针仍要求 CRM 数据库位于本机，且运行记录属于所选组织；项目鉴权成功不代表 Trace 或评分已实际写入，需继续执行 `langfuse RUN_ID` 回读。
 

@@ -2,9 +2,13 @@
 
 更新：2026-10-30（Asia/Shanghai）。
 
-当前修复：用户要求继续处理无答案误召回与 Langfuse 完整回读，登记为 CRM-018a/b。正在定位并修复，两项分别验证、审查、提交及推送；CRM-017 原测量与失败记录保留，扩充评测集留待用户后续补充。
+当前修复：CRM-018a/b 两项已完成验证。无答案误召回采用保守词面门禁；Langfuse 修正回查、内存与系统日志合并压力，旧七 Run 的 49 个 span 已恢复并完整回读。两项分别提交；CRM-017 原测量与失败保留，扩充评测集留待用户后续补充。
 
-CRM-018a 已完成：完整词项覆盖门禁，同资料真实回归无答案误召回 3/3→0/3、有答案 Hit@5 6/6→5/6，已明确保留同义表达假阴性及相关页面损失；28 项定向检查、ESLint、typecheck、独立审查/复算通过。[证据](evidence/CRM-018a-no-answer-retrieval.md)。Langfuse 修复仍在进行。
+CRM-018a（549ee32）已完成：完整词项覆盖门禁，同资料真实回归无答案误召回 3/3→0/3、有答案 Hit@5 6/6→5/6，已明确保留同义表达假阴性及相关页面损失；28 项定向检查、ESLint、typecheck、独立审查/复算通过。[证据](evidence/CRM-018a-no-answer-retrieval.md)。
+
+CRM-018b 已验证：旧回查脚本误用 native status 方法，服务还存在 ClickHouse 超内存的真实异步写入失败。修正配置、缩小查询块及限制系统日志合并后，10 原事件稳定 ID 显式重放，旧七 Trace 49/49 真实回读（含 17 model、17 tool，I/O 为空）；单次隔离合成遥测 6/6、固定 60 秒内 Web/Worker 内存错误 0。16 项相关检查、ESLint、typecheck 和独立核验通过，未新建业务 Run/模型调用；不宣称生产稳定性或远端评分通过。[证据](evidence/CRM-018b-langfuse-readback.md)。
+
+最新运行快照：2026-10-30 12:27（Asia/Shanghai），空队列下有序重启本仓拥有的 Web/Worker/drain，已加载两项新实现，会话 `06873539-fa54-46ba-9f46-7bc12ff2e6d4`。Web/Worker HTTP 200、Worker DB 正常，job pending/running/dead 及 integration pending/processing/dead 均 0，integration done=57；Web 保持既有 degraded。脱敏快照 `.local/langfuse-fix/local-status-after.json`，实时用 `npm run local:status`。
 
 ## 最后收尾：评测、量化与交接（2026-10-29）
 
