@@ -19,6 +19,7 @@
 - 原技术约定和说明存于 docs/upstream/AGENTS.md、docs/upstream/CLAUDE.md，作为源码参考；用户指令及本仓工作流优先。源码语言与机器值保持现状，不做无关全量翻译。
 - 原助手配置与 GitHub 工作流已存为 docs/upstream 下的非活动快照。不要运行 skills:sync 覆盖当前共享联接，也不自动激活来源包 hooks 或发布工作流。
 - 当前实施任务只在 docs/implementation-plan.md 维护，本机实际进度在 docs/STATUS.md。上游 tasks/todo.md、docs/current-state.md 和历史报告不等于本仓当前状态。
+- 2026-10-31 用户约定：首页 README 展示项目、功能、技术栈、设计和运行方式，不放压测数据、执行工作流、开发状态/工作记录及其入口链接；任务状态、进度和工作流统一由 docs/STATUS.md 组织，规格和原始证据继续保留在既有文档目录。
 
 <!-- BEGIN:nextjs-agent-rules -->
 

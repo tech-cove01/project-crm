@@ -85,7 +85,6 @@ flowchart LR
 - [客户、知识与商机审批演示](docs/sales-demo.md)
 - [Mem0、WeKnora 与 Langfuse 配置](infra/local-agent-services/README.md)
 - [Pi Agent 运行时设计](docs/architecture/pi-native-runtime.md)
-- [开发状态与工作记录](docs/STATUS.md)
 
 ## 目录
 
