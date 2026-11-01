@@ -669,6 +669,65 @@ describe("WeKnora current-source Wiki evidence", () => {
     expect(result.evidence).toHaveLength(1);
     expect(f.manifests).toHaveLength(1);
   });
+  it.each([
+    {
+      name: "architecture terminology",
+      query: "设备多步工具调用框架",
+      title: "设备架构",
+      content: "设备架构执行多步工具调用。",
+      accepted: true,
+    },
+    {
+      name: "directional file transfer",
+      query: "备份工具能否替用户把文件全自动搬过去？",
+      title: "备份工具",
+      content: "备份工具支持文件自动迁移。",
+      accepted: true,
+    },
+    {
+      name: "unconditional outbound policy",
+      query: "设备资料导出政策是否允许直接外发电子邮件？",
+      title: "设备资料导出政策",
+      content: "设备资料导出须等待人工明确决定后执行。本政策不授权外部消息。",
+      accepted: true,
+    },
+    {
+      name: "conditional outbound exception",
+      query: "设备资料导出政策是否允许直接外发电子邮件？",
+      title: "设备资料导出政策",
+      content: "设备资料导出须等待人工明确决定后执行。如果未经批准，本政策不授权外部消息。",
+      accepted: false,
+    },
+    {
+      name: "positive parent channel without email support",
+      query: "设备资料导出政策是否允许直接外发电子邮件？",
+      title: "设备资料导出政策",
+      content: "设备资料导出须等待人工明确决定后执行。本政策支持外部消息。",
+      accepted: false,
+    },
+    {
+      name: "wrong numeric unit",
+      query: "设备保修14天",
+      title: "设备保修",
+      content: "设备保修14次。",
+      accepted: false,
+    },
+  ])("checks $name against the actual page before creating its receipt", async ({ query, title, content, accepted }) => {
+    const f = fixture();
+    f.page.title = title;
+    f.page.content = content;
+    const original = f.http.getMockImplementation()!;
+    let searches = 0;
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug }] })
+      : original(url));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
+    expect(searches).toBe(2);
+    expect(result).toMatchObject({ status: accepted ? "complete" : "empty", fallbackUsed: true });
+    expect(result.evidence).toHaveLength(accepted ? 1 : 0);
+    expect(f.manifests).toHaveLength(accepted ? 1 : 0);
+    if (accepted) expect(f.manifests[0]).toMatchObject({ page_version: 3, content_hash: sha(content) });
+  });
   it("does not broaden a query whose support terms exceed the bounded plan", async () => {
     const f = fixture();
     f.http.mockImplementation(async () => j({ pages: [] }));
