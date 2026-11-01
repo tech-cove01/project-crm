@@ -163,6 +163,20 @@ describe("Workbench structured result channel", () => {
     ).toBeNull();
   });
 
+  it("retains explicitly unconfirmed business facts without hiding a current-task evidence gap", async () => {
+    const channel = createWorkbenchResultChannel({ mode: "inspect" });
+    const observed = { ...candidate, summary: "只读复盘已完成；预算和日期仍未确认。",
+      missingInformation: [], unconfirmedFacts: ["客户已确认预算和上线日期尚未确定"], wakeCondition: "none" as const };
+    expect(await channel.tools[SUBMIT_WORKBENCH_RESULT_TOOL]!.execute!(observed, {} as never))
+      .toEqual({ accepted: true });
+    expect(resultDocument(channel.submitted()!)).toMatchObject({ unconfirmedFacts: observed.unconfirmedFacts });
+    expect(workbenchResultPartialReason({ finalText: observed.summary, submission: observed, budgetExhausted: false })).toBeNull();
+    expect(workbenchResultPartialReason({ finalText: observed.summary,
+      submission: { ...observed, missingInformation: ["当前商机读取失败，尚无阶段依据"] }, budgetExhausted: false }))
+      .toBe("missing_material");
+    expect(workbenchResultSchema.safeParse({ ...observed, unconfirmedFacts: Array(9).fill("超出边界") }).success).toBe(false);
+  });
+
   it("replaces a prior provisional summary after a resumed model submission", () => {
     expect(
       workbenchFinalText({

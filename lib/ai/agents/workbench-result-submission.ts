@@ -65,6 +65,8 @@ export const workbenchResultSchema = z
       .describe(
         "Only facts needed to answer the current requested task. Optional future actions, forbidden reads and unrelated policies are not missing information for a completed read-only query.",
       ),
+    unconfirmedFacts: z.array(z.string().trim().min(1).max(240)).max(8).optional()
+      .describe("Observed null fields or explicitly unconfirmed future-business conditions that do not prevent answering the current task. Keep these boundaries in summary too. Never put failed reads, unavailable evidence or unresolved current-task conflicts here instead of missingInformation."),
     nextStep: z.string().trim().max(500),
     wakeCondition: z.enum([
       "none",
@@ -203,6 +205,7 @@ export const WORKBENCH_RESULT_INSTRUCTION = [
   "若工具结果包含联系人 is_blocked/is_anonymized/cpf_available、商机 status/stage_id/value_cents/currency/expected_close_date 或会话 status/channel/unread_count，可在对应 evidence.assertions 填入实际看到的字段和值；不要推测缺失字段，也不要提交姓名、电话、消息正文或密钥。",
   "missingInformation 列出仍缺的事实；nextStep 写一个可验证的下一步；wakeCondition 只描述建议，实际唤醒由 CRM 决定。",
   "missingInformation 只包含阻止完成当前用户任务的材料；只读查询已得到所需事实时应为 []。用户明确禁止查询的知识、未来外联所需同意、演示数据不是真实客户等，不自动构成本次只读任务的缺口；未来动作的前置条件写在 nextStep，不升级本次范围。",
+  "unconfirmedFacts 可记录已观察的空字段或明确尚未确认的未来业务条件，summary 也须如实说明。只读复盘要求报告预算/日期未确认时，报告这一事实即可，不因没有补齐这些值而判本次取证失败；填入 unconfirmedFacts，不填 missingInformation。真实读取失败、当前任务必需的证据缺失或未解冲突仍必须填 missingInformation，不能移入 unconfirmedFacts 伪装完成。",
   "严格复制观察值：JSON null 保持 null，不替换为斜杠或字符串。run_event 没有实际事件 UUID 时省略该证据，不用全零 UUID。空列表仅证明本次查询为空，不能证明数据丢失、系统回归或其他模块故障。客户记忆与公司政策是不同范围，不将政策空结果说成客户记忆丢失。",
   "记录 revision 只能逐字复制已返回的值；不能根据不同的记录 ID 或时间戳推断 revision 不同，也不能根据相同正文推断记录相同。未请求时间时不附加时间字段；需要时间时仅复制已观察的值，不猜测、补全或修正日期。",
   "结构化提交不执行任何 CRM 动作，也不代替人工批准。",

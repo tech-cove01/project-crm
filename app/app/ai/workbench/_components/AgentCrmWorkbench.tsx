@@ -60,6 +60,7 @@ type Detail = Run & {
     summary: string;
     evidence: Array<{ sourceType: string; sourceId: string; claim: string }>;
     missingInformation: string[];
+    unconfirmedFacts?: string[];
     nextStep: string;
     wakeCondition: string;
   } | null;
@@ -1639,6 +1640,9 @@ export function AgentCrmWorkbench({
                     {detail.result_document.missingInformation.length > 0 && (
                       <p>缺失信息：{detail.result_document.missingInformation.join("；")}</p>
                     )}
+                    {detail.result_document.unconfirmedFacts?.length ? (
+                      <p>尚未确认的业务事实：{detail.result_document.unconfirmedFacts.join("；")}</p>
+                    ) : null}
                     {detail.result_document.nextStep && (
                       <p>建议下一步：{detail.result_document.nextStep}</p>
                     )}

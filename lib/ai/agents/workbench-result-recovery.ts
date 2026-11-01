@@ -84,7 +84,7 @@ export async function recoverWorkbenchResult(input: {
     role: "user",
     content: [
       "只完成结果提交。此前 CRM 读取结果已在上文；不要再次读取、修改 CRM 或发送消息。",
-      "现在必须调用 submit_workbench_result 一次。缺少的事实写入 missingInformation；",
+      "现在必须调用 submit_workbench_result 一次。仅阻止当前任务的缺证写入 missingInformation；已观察的非阻塞未确认事实写入 unconfirmedFacts，并在 summary 保留边界；",
       "每条 evidence.assertions 最多 4 项；只复制实际观察字段。schema 被拒时只修正格式，不新增事实。",
       "summary 简短归纳，不抄写全部工具结果；只保留必要的类型正确的证据，无法逐值核对时省略 assertions。",
       "已提出但未由 CRM 确认完成的动作不能写成已执行。不要输出普通文本答案。",
