@@ -330,6 +330,7 @@ export async function runWorkbenchStartJob(
     );
     const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
     const resultChannel = createWorkbenchResultChannel({
+      mode: run.mode,
       hasPendingApproval: () => proposalInputs.some(({ tool }) => {
         const effect = workbenchToolEffect(tool)?.effect;
         return effect === "irreversible" || effect === "external";

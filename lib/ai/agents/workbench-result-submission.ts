@@ -86,19 +86,27 @@ export const workbenchResultDocumentSchema = workbenchResultSchema
 
 /** An in-memory output port. It cannot read or mutate CRM and is not an approval. */
 export function createWorkbenchResultChannel(options: {
+  mode?: "inspect" | "act";
   hasPendingApproval?: () => boolean | Promise<boolean>;
 } = {}): {
   tools: ToolSet;
   submitted: () => WorkbenchResultSubmission | null;
 } {
   let value: WorkbenchResultSubmission | null = null;
+  // Inspect cannot stage an action proposal. Do not advertise an unreachable wait state.
+  const inputSchema: z.ZodType<WorkbenchResultSubmission> = options.mode === "inspect"
+    ? workbenchResultSchema.extend({
+        wakeCondition: z.enum(["none", "customer_reply", "internal_response", "deadline"])
+          .describe("For a completed read-only assessment use none. A policy saying future actions need approval is not a pending proposal for this run."),
+      })
+    : workbenchResultSchema;
   const tools = {
     [SUBMIT_WORKBENCH_RESULT_TOOL]: tool({
       description:
         "Submit the user-visible result once, after reading evidence. For contact/lead/conversation evidence, optionally include safe scalar assertions copied from the observed CRM tool result. This records an assessment; it does not execute, approve, or verify CRM actions. Never include secrets or personal contact details in assertions.",
-      inputSchema: workbenchResultSchema,
+      inputSchema,
       execute: async (candidate) => {
-        const parsed = workbenchResultSchema.safeParse(candidate);
+        const parsed = inputSchema.safeParse(candidate);
         if (!parsed.success) return { accepted: false, reason: "invalid_schema" };
         if (value !== null) return { accepted: false, reason: "already_submitted" };
         if (parsed.data.wakeCondition === "human_approval" && !(await options.hasPendingApproval?.()))

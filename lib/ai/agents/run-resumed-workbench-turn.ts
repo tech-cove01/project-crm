@@ -175,6 +175,7 @@ export async function runResumedWorkbenchTurn(input: {
     );
     const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
     const resultChannel = createWorkbenchResultChannel({
+      mode: input.mode,
       hasPendingApproval: async () => {
         if (proposalInputs.some(({ tool }) => {
           const effect = workbenchToolEffect(tool)?.effect;

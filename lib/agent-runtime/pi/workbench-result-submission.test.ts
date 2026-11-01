@@ -12,6 +12,34 @@ import {
 } from "@/lib/ai/agents/workbench-result-submission";
 
 describe("Pi structured result adapter", () => {
+  it("advertises inspect wake states and corrects an impossible approval wait within two reserved turns", async () => {
+    const channel = createWorkbenchResultChannel({ mode: "inspect", hasPendingApproval: () => true });
+    const schema = adaptAiTools(channel.tools)[0]?.inputSchema;
+    expect(schema).toMatchObject({ properties: { wakeCondition: {
+      enum: ["none", "customer_reply", "internal_response", "deadline"],
+    } } });
+    const candidate = { summary: "已核对只读准备；未来变更需单独提案，不代表当前待批。",
+      evidence: [], missingInformation: [], nextStep: "站内演示", wakeCondition: "none" };
+    const faux = fauxProvider({ provider: "crm-result-test", models: [{ id: "crm-result-model" }] });
+    faux.setResponses([
+      fauxAssistantMessage(fauxToolCall(SUBMIT_WORKBENCH_RESULT_TOOL, { ...candidate, wakeCondition: "human_approval" }), { stopReason: "toolUse" }),
+      context => {
+        expect(channel.submitted()).toBeNull();
+        expect(JSON.stringify(context.messages)).toContain("Validation failed for tool");
+        return fauxAssistantMessage(fauxToolCall(SUBMIT_WORKBENCH_RESULT_TOOL, candidate), { stopReason: "toolUse" });
+      },
+      fauxAssistantMessage("must not add another turn"),
+    ]);
+    const runtime = new PiAgentRuntime(() => ({ model: faux.getModel() as never,
+      streamFn: faux.provider.streamSimple.bind(faux.provider) as never }));
+    const result = await runPiAiSdkCall({ system: "只读复盘", messages: [{ role: "user", content: "汇总已有证据" }],
+      tools: channel.tools, model: { provider: "crm-result-test", model: "crm-result-model", apiKey: "fake" },
+      runtime, maxSteps: 2, finalTurn: { reserveTurns: 2, allowedToolNames: [SUBMIT_WORKBENCH_RESULT_TOOL], instruction: "仅提交本次结果" },
+      shouldStopAfterTurn: () => channel.submitted() !== null });
+    expect(result.turnCount).toBe(2);
+    expect(channel.submitted()).toEqual(candidate);
+  });
+
   it.each([false, true])("reserves the bounded final submission and keeps a denied approval partial (denied=%s)", async (denied) => {
     const channel = createWorkbenchResultChannel({ hasPendingApproval: () => false });
     const read = vi.fn(async () => ({ lead: { status: "open" } }));

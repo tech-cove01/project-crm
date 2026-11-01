@@ -107,6 +107,16 @@ describe("Workbench structured result channel", () => {
       .toEqual({ accepted: true });
   });
 
+  it("excludes approval waits from inspect even if a stale approval source says pending", async () => {
+    const channel = createWorkbenchResultChannel({ mode: "inspect", hasPendingApproval: () => true });
+    const submit = channel.tools[SUBMIT_WORKBENCH_RESULT_TOOL]!;
+    expect(await submit.execute!({ ...candidate, wakeCondition: "human_approval" }, {} as never))
+      .toEqual({ accepted: false, reason: "invalid_schema" });
+    expect(channel.submitted()).toBeNull();
+    expect(await submit.execute!({ ...candidate, missingInformation: [], wakeCondition: "none" }, {} as never))
+      .toEqual({ accepted: true });
+  });
+
   it("keeps only the first result when parallel submissions await the same approval lookup", async () => {
     let release!: (value: boolean) => void;
     const pending = new Promise<boolean>((resolve) => { release = resolve; });
