@@ -1,6 +1,6 @@
 # CRM-021b2：有界提交纠错与专家引用边界
 
-2026-11-01。当前记录实现和离线回归，**本修复尚未执行新的真实模型 Run**。[规格](../CRM-021-spec.md)与原 CRM-020 失败保留，不把新修复改写为旧样本通过。
+2026-11-01。本记录写入时为实现和离线回归，**当时尚未执行修复后的真实模型 Run**；后续逐次失败与最终有限复查见[真实协作证据](CRM-021b-collaboration-verified.md)。[规格](../CRM-021-spec.md)与原 CRM-020 失败保留，不把新修复改写为旧样本通过。
 
 ## 新一次真实失败揭示的问题
 
@@ -32,4 +32,4 @@
 
 实现文件为 `lib/agent-runtime/types.ts`、`schema-rejection.ts`、`pi/runtime.ts`；`lib/ai/agents/collaboration.ts`、`collaboration-runtime.ts`、`workbench-collaboration.ts`、`workbench-result-recovery.ts`，以及父 start/resume 的末尾窗口接线和 result-submission 的一条说明。其余改动为对应直接测试；没有更改 CRM-021a2 的待审展示逻辑。
 
-后续须冻结新基线和新只读 Run。可复用未变化的合成商机 `88f0e2e0-1091-432f-a188-0dcc92e47382`，明确该商机已有上述失败 root，不重新执行旧 Run，不新建或批准业务提案。新的角色结果、父提交、typed 证据、真实缺口和计量需逐项验收；离线回归不能证明模型必定成功或全答案语义真值已校准。
+本切片完成时提出冻结新基线并复用合成商机 `88f0e2e0-1091-432f-a188-0dcc92e47382`。后续132产生持久pending复核后，未人为解除阻断，而另获授权隔离一条合成商机；各次新Run、四份旧失败保全与最终结果见[真实协作证据](CRM-021b-collaboration-verified.md)。没有重新执行或批准旧Run；离线回归与本次有限真实复查都不能证明模型必定成功或全答案语义真值已校准。

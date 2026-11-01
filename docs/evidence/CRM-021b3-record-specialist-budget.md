@@ -1,6 +1,6 @@
 # CRM-021b3：单记录专家提前收束
 
-2026-11-01。当前为实现与离线回归记录，尚无修复后的新真实模型 Run。旧 CRM-020、021 的失败与原分母保留。
+2026-11-01。本实现与离线回归记录完成时，尚无修复后的新真实模型 Run；随后逐次失败与最终有限复查见[真实协作证据](CRM-021b-collaboration-verified.md)。旧 CRM-020、021 的失败与原分母保留。
 
 ## 已确认的不同失败
 
@@ -24,4 +24,4 @@ effective maxSteps = min(plan.maxTurnsPerSpecialist, 实际暴露记录工具数
 
 `workbench-collaboration.test.ts` 最终 **12 passed**，其中直接使用当前 Pi 0.86.1 与本地 faux provider 验证：单记录第二请求已看不到工具；显式双记录仍可两次读取后输出；即便在无工具最终阶段仍幻觉请求其他工具，也继续 partial。另用隔离模型调用替身断言政策仍为三轮、无工具 scope 仍 partial。`collaboration-runtime.test.ts` 的 **13 项**在本改动下通过，合计 25 项直接相关检查。首组两文件为 24 passed，追加“末阶段仍幻觉必须 partial”反例后只重跑受影响文件，12 项通过，没有重复运行无关测试。
 
-两变更源码/测试文件的限定 ESLint、全仓 `tsc --noEmit -p tsconfig.typecheck.json` 与 `git diff --check` 通过。独立审查通过，已修正测试说明中 Pi 实跑与调用替身的范围区分。本实现切片只读旧证据、修改 `lib/ai/agents/workbench-collaboration.ts` 与对应测试，并写本记录；没有 SQL、HTTP、模型或服务操作。后继真实验证单独封存并记录，不提前称通过。
+两变更源码/测试文件的限定 ESLint、全仓 `tsc --noEmit -p tsconfig.typecheck.json` 与 `git diff --check` 通过。独立审查通过，已修正测试说明中 Pi 实跑与调用替身的范围区分。本实现切片只读旧证据、修改 `lib/ai/agents/workbench-collaboration.ts` 与对应测试，并写本记录；当时没有 SQL、HTTP、模型或服务操作。后继真实验证已另行封存于[真实协作证据](CRM-021b-collaboration-verified.md)，原132失败/pending不改。
