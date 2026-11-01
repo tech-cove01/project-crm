@@ -69,7 +69,7 @@ describe("workbench selected CRM targets", () => {
       toolIds: [toolName], handoffToolEnabled: false, handoffSignal: { triggered: false },
       pipelineIds: ["same-pipeline"], targetScope: selected,
     });
-    await expect(tools[toolName].execute!({ lead_id: OTHER }, { toolCallId: "call", messages: [] } as never))
+    await expect(tools[toolName]!.execute!({ lead_id: OTHER }, { toolCallId: "call", messages: [] } as never))
       .resolves.toMatchObject({ permitido: false, motivo: "workbench_target_out_of_scope" });
     expect(fixture.handler).not.toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
