@@ -192,6 +192,16 @@ describe("Workbench pending presentation", () => {
       .toEqual({ finalText: "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。", resultDocument: null });
   });
 
+  it("does not publish a parent's success claim when a failed child still requires review and no proposal exists", () => {
+    const incomplete = { ...premature, summary: "三位专家均已覆盖，客户子任务工具缺口已由父 Agent 补齐。" };
+    const snapshot = JSON.stringify(incomplete);
+    expect(workbenchVisibleResult({ ...waiting, pending: false, collaborationBlocked: true,
+      finalText: incomplete.summary, submission: incomplete })).toEqual({
+      finalText: "协作证据尚待复核，相关动作仍被业务层阻断。请先完成复核。", resultDocument: null,
+    });
+    expect(JSON.stringify(incomplete)).toBe(snapshot);
+  });
+
   it("preserves the later completed model text and structured result when no proposal remains", () => {
     const completed = { ...candidate, summary: "已在决定后读取实际状态。", missingInformation: [], wakeCondition: "none" as const };
     expect(workbenchVisibleResult({ ...waiting, pending: false, finalText: completed.summary, submission: completed }))

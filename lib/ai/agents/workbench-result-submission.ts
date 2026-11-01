@@ -128,7 +128,8 @@ export function resultDocument(submission: WorkbenchResultSubmission) {
 const PENDING_ACTION_TEXT = "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。";
 const PENDING_REPLY_TEXT = "Agent 回复草稿已保存在 CRM，尚未发送。批准后将进入正式发送队列。";
 const PENDING_REVIEW_TEXT = "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。";
-const PENDING_PRESENTATION_TEXTS = new Set([PENDING_ACTION_TEXT, PENDING_REPLY_TEXT, PENDING_REVIEW_TEXT]);
+const BLOCKED_REVIEW_TEXT = "协作证据尚待复核，相关动作仍被业务层阻断。请先完成复核。";
+const PENDING_PRESENTATION_TEXTS = new Set([PENDING_ACTION_TEXT, PENDING_REPLY_TEXT, PENDING_REVIEW_TEXT, BLOCKED_REVIEW_TEXT]);
 
 /** Pending proposals are Harness state, not a model-submitted completed assessment. */
 export function workbenchVisibleResult(input: {
@@ -138,6 +139,8 @@ export function workbenchVisibleResult(input: {
   collaborationBlocked: boolean;
   pendingSendMessage: boolean;
 }) {
+  if (input.collaborationBlocked && !input.pending)
+    return { finalText: BLOCKED_REVIEW_TEXT, resultDocument: null };
   if (input.pending) {
     const finalText = input.collaborationBlocked
       ? PENDING_REVIEW_TEXT
