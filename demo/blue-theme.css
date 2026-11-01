@@ -28,3 +28,12 @@
 .topbar .project-page-link, .project-sidebar-links a { color: #1d4ed8; }
 .agent-composer-box:focus-within { border-color: #719aeb; box-shadow: 0 0 0 3px #2563eb0d; }
 ::selection { background: #dce9ff; color: #172b4d; }
+
+/* Keep the working content readable without enlarging the compact top toolbar. */
+.main .subtitle, .main .field, .agent-panel-body .field { font-size: 15px; line-height: 1.75; }
+.main .small, .agent-panel-body .small { font-size: 14px; line-height: 1.75; }
+.agent-identity h1 { font-size: 18px; }
+.agent-contextbar, .agent-contextbar > button { font-size: 14px; }
+.agent-prompt { font-size: 16px; }
+.agent-trace .event p, .assistant-label > span { font-size: 14px; }
+.project-sidebar-links { font-size: 14px; line-height: 1.6; }
