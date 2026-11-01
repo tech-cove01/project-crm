@@ -1,0 +1,30 @@
+/* Blue and white showcase palette; business status colors keep their meaning. */
+:root {
+  --bg: #f4f7fc;
+  --surface: #ffffff;
+  --sidebar: #f5f8ff;
+  --elevated: #eef3fb;
+  --text: #172b4d;
+  --muted: #586b86;
+  --subtle: #61728b;
+  --border: #dce5f1;
+  --strong: #bdcce1;
+  --accent: #2563eb;
+  --focus: #2563eb;
+  --soft: #eaf1ff;
+  --info: #1d4ed8;
+  --info-bg: #edf3ff;
+}
+.brand svg { fill: var(--accent); }
+.btn.primary, .agent-send { background: var(--accent); border-color: var(--accent); }
+.btn.primary:hover, .agent-send:hover { background: #1d4ed8; border-color: #1d4ed8; }
+.btn.primary:disabled, .agent-send:disabled { background: #7e9bcc; border-color: #7e9bcc; }
+.navitem { color: #49607f; }
+.navitem:hover, .hub-link:hover { color: #1d4ed8; background: #eaf1ff; }
+.navitem.active, .hub-link.selected { color: #1d4ed8; background: #e5edff; }
+.avatar, .hub-icon, .product-icon { color: #375c9b; background: #edf3ff; }
+.agent-welcome .welcome-symbol { background: #edf3ff; color: var(--accent); }
+.agent-suggestion:hover { border-color: #8daff0; background: #f5f8ff; }
+.topbar .project-page-link, .project-sidebar-links a { color: #1d4ed8; }
+.agent-composer-box:focus-within { border-color: #719aeb; box-shadow: 0 0 0 3px #2563eb0d; }
+::selection { background: #dce9ff; color: #172b4d; }
