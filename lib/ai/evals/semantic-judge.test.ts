@@ -114,7 +114,7 @@ describe("LLM Agent semantic judge adapter", () => {
       verdict: "needs_review",
       score: 72,
       rubricRevision: WORKBENCH_SEMANTIC_RUBRIC_REVISION,
-      judgeId: "workbench_semantic_v2:provider-1:model-1",
+      judgeId: "workbench_semantic_v3:provider-1:model-1",
     });
     expect(mockedRunModelCall).toHaveBeenCalledWith(
       expect.anything(),
@@ -152,6 +152,51 @@ describe("LLM Agent semantic judge adapter", () => {
         signal: new AbortController().signal,
       }),
     ).rejects.toMatchObject({ name: "semantic_judge_schema_invalid" });
+  });
+
+  it("refuses to judge silently truncated tool material before making a model call", async () => {
+    const value = subject();
+    value.run.runtimeMessages[0] = {
+      role: "tool", toolCallId: "large", toolName: "crm_get_lead",
+      content: JSON.stringify({ padding: "x".repeat(1600), stage_id: "late-fact" }),
+    };
+    await expect(judge().judge({
+      profile: resolveAgentEvalProfile("crm_intelligence_v1"), run: value.run,
+      deterministicReport: value.report, signal: new AbortController().signal,
+    })).rejects.toMatchObject({ name: "semantic_judge_material_incomplete" });
+    expect(mockedRunModelCall).not.toHaveBeenCalled();
+  });
+
+  it("includes persisted action status independently of model submitted claims", async () => {
+    const value = subject();
+    value.run.proposals = [{ id: "proposal-1", toolName: "crm_move_lead_stage", status: "rejected" }];
+    mockedRunModelCall.mockResolvedValue({ provider: "provider-1", model: "model-1", result: {
+      text: JSON.stringify({ verdict: "pass", score: 100, findings: [], rubric: [
+        { key: "task_fit", score: 4, rationale: "完整" },
+        { key: "factual_support", score: 4, rationale: "有据" },
+        { key: "missing_material_honesty", score: 4, rationale: "诚实" },
+        { key: "actionability", score: 4, rationale: "明确" },
+      ] }),
+    } } as never);
+    await judge().judge({ profile: resolveAgentEvalProfile("crm_intelligence_v1"), run: value.run,
+      deterministicReport: value.report, signal: new AbortController().signal });
+    const content = mockedRunModelCall.mock.calls[0]?.[2].messages[0]?.content;
+    expect(typeof content).toBe("string");
+    const material = JSON.parse(content as string);
+    expect(material.actionProposals).toEqual(value.run.proposals);
+    expect(material.coverage.complete).toBe(true);
+  });
+
+  it.each(["omitted_observations", "truncated_answer"])("rejects %s without invoking a model", async kind => {
+    const value = subject();
+    if (kind === "omitted_observations") value.run.runtimeMessages = Array.from({ length: 25 }, (_, n) => ({
+      role: "tool" as const, toolCallId: String(n), toolName: "crm_get_lead", content: "{}",
+    }));
+    else value.run.finalText = "x".repeat(14001);
+    await expect(judge().judge({ profile: resolveAgentEvalProfile("crm_intelligence_v1"), run: value.run,
+      deterministicReport: value.report, signal: new AbortController().signal,
+    })).rejects.toMatchObject({ name: "semantic_judge_material_incomplete" });
+    expect(mockedRunModelCall).not.toHaveBeenCalled();
   });
 
   it("finds the schema-valid object after provider reasoning that contains braces", async () => {
