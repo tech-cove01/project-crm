@@ -2,9 +2,9 @@
 
 更新：2026-11-01（Asia/Shanghai）。
 
-## 当前交接：CRM-020 首轮受限结果
+## 当前交接：CRM-020 有限批次已收尾
 
-用户要求动手后，本批按[有限规格与停止条件](CRM-020-spec.md)实施，替代下方历史规划中的“仅文档”授权限制。[票据](implementation-plan.md#crm-020四主线有限补充2026-11-01)保留每项实际范围。**两轮产品修复额度已用尽，产品修改和业务/模型首轮已停止；最后一轮独立核验及交接尚待收口。**不追加第三轮修复、替代批准 Run 或重复同输入取最好答案。
+用户要求动手后，本批按[有限规格与停止条件](CRM-020-spec.md)实施，替代下方历史规划中的“仅文档”授权限制。[票据](implementation-plan.md#crm-020四主线有限补充2026-11-01)保留每项实际范围。**两轮产品修复及最后一次独立核验均已结束，证据与交接已收口；本批受限结束，未全部通过。**不追加第三轮修复、替代批准 Run 或重复同输入取最好答案。
 
 | 项目 | 当前结果与证据 |
 | --- | --- |
@@ -15,10 +15,11 @@
 | 数据边界与检索 | 六个 Mem0/Wiki 边界及恢复通过；新查询 K02 无答案符合预期、K03/K04 漏检、K01 捕获未知且不重跑。C 草稿搜索隔离不足已单独归档，资格差异及非盲测限制保留。[证据](evidence/CRM-020d-data-boundaries.md)。 |
 | 协作实现与真实结果 | 已补持久复核、同商机动作准入、重读和工作台 UI/API，0411/0412 与 baseline 同步。63 项相关离线检查及全仓 typecheck 通过；真实 D01 三 child 有取证但摘要为空，父 partial/empty_final_answer，正常汇总 **fail**。0412 最后不同商机/旧任务边界/双连接竞争因验证器错误仍 **unknown/blocked**。[实现与未知](evidence/CRM-020e-collaboration-review.md)、[真实 Run](evidence/CRM-020c-main-chain.md)。 |
 | 观测、规则与 Judge | 已补材料裁剪门禁/Rubric 3 和 child Trace 聚合。四 root 含三 child 的 67/67 span、34/34 score 精确回读，一次稳定 ID 遥测重投前后业务/模型不增。唯一 B01 Judge pass/92，合并仍 needs_review/92；B02/B03/D01 规则均 needs_review/89，不覆盖业务失败。[记录](evidence/CRM-020f-observation-evaluation.md)。 |
+| 最后独立核验 | 固定干净源码 `50230e3`，已保存证据离线复算一致；G01 培训命中 C 一条，G02 上线日期为空，两项符合预期。C 正文未改，单独资格事务恢复发布为 v3；已曝光、非盲测。没有新模型/Judge、业务 Run 或审批，原失败与 0412 unknown 不变。[最终记录](evidence/CRM-020g-final-independent.md)。 |
 
 最终业务计量：4 root、3 child，5 job 均 done/attempts=1；9 条聚合 `llm_calls`（含 Judge 1），input/output=42034/4166，cache read/write=110080/0，九条费用均 null/未知。缓存单列，不叠加成输入；这些行数不等于 provider HTTP 请求数。商机仍为原阶段及精确更新时间，阶段活动为 0，业务/集成队列空闲；元数据文件与哈希见主链证据。准备事实同步及融合知识读取可能使用嵌入，不称全批零 embedding。
 
-本仓服务已加载提交后的修复，受管会话 `241e7c33-c7e6-47e4-8319-c51148b9980c`；本轮未操作其他项目服务或镜像。最新现场健康将于最终核验后更新，实时使用 `npm run local:status`。
+最终现场健康（2026-11-01 14:01:06，Asia/Shanghai）：Web HTTP 200、沿用既有 degraded，Worker HTTP 200/DB ok/排水器已加载；Mem0、WeKnora、Langfuse 健康端点均 200，探针不等于认证访问验证。业务队列 pending/running/dead 均 0，集成 pending/processing/dead 均 0、done=81。受管会话 `241e7c33-c7e6-47e4-8319-c51148b9980c` 保持运行；本轮未操作其他项目服务或镜像。实时使用 `npm run local:status`，此处仅为交接快照。
 
 后续须明确选择的失败项：B03 提案生成、D01 空摘要/父终答、0412 未完成的数据库竞争，以及检索改写漏检。本批不自动继续这些项，也不能使用“四条全部通过”“完整同商机自动闭环”“全部语义质量已校准”等表述。下方补充计划为原规划快照，事实以本节和各票新证据为准。
 
