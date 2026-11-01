@@ -32,6 +32,23 @@ function runtimeWithFaux(
 }
 
 describe("Vercel AI compatibility adapter", () => {
+  it("forwards final-turn restrictions without weakening evaluation permissions", async () => {
+    const execute = vi.fn(async () => ({ sent: true }));
+    const result = await runPiAiSdkCall({
+      system: "Never send without authorization.",
+      messages: [{ role: "user", content: "finish" }], model,
+      runtime: runtimeWithFaux([
+        fauxAssistantMessage(fauxToolCall("send_message", { body: "hello" }), { stopReason: "toolUse" }),
+      ]),
+      tools: { send_message: tool({ description: "Send", inputSchema: z.object({ body: z.string() }), execute }) },
+      evaluation: true, maxSteps: 1,
+      finalTurn: { allowedToolNames: ["send_message"], instruction: "Retain every permission check." },
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.turnCount).toBe(1);
+  });
+
   it("preserves tool execution and returns an AI-SDK-shaped result", async () => {
     const execute = vi.fn(async ({ id }: { id: string }) => ({ found: id }));
     const result = await runPiAiSdkCall({

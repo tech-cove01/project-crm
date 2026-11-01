@@ -113,6 +113,8 @@ describe("Workbench initial organization memory", () => {
     );
     expect(mocks.model).toHaveBeenCalledOnce();
     const input = mocks.model.mock.calls[0]![1];
+    expect(input).toMatchObject({ maxSteps: 8,
+      finalTurn: { allowedToolNames: ["submit_workbench_result"] } });
     expect(input.system).toContain("CRM playbook\n\n=== memória da organização");
     expect(input.system).toContain(policyRow.content);
     expect(input.system).toContain("Revisão: sha256:");

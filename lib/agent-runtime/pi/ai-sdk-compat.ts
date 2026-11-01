@@ -233,6 +233,7 @@ export interface PiAiSdkCallInput {
   tools?: ToolSet;
   model: RuntimeModelBinding;
   maxSteps?: number;
+  finalTurn?: AgentTurnInput["finalTurn"];
   abortSignal?: AbortSignal;
   evaluation?: boolean;
   runtime?: AgentRuntime;
@@ -260,6 +261,7 @@ export async function runPiAiSdkCall(input: PiAiSdkCallInput) {
     model: input.model,
     tools,
     maxTurns: input.maxSteps ?? 1,
+    ...(input.finalTurn ? { finalTurn: input.finalTurn } : {}),
     abortSignal: input.abortSignal,
     ...(input.transformContext ? { transformContext: input.transformContext } : {}),
     ...(input.contextProbe ? { contextProbe: input.contextProbe } : {}),

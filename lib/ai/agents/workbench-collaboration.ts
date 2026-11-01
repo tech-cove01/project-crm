@@ -330,12 +330,20 @@ function structuredValue(message: Extract<RuntimeMessage, { role: "tool" }>): un
   }
 }
 
+function failedToolObservation(message: Extract<RuntimeMessage, { role: "tool" }>): boolean {
+  if (message.isError) return true;
+  const value = structuredValue(message) as {
+    permitido?: boolean; isError?: boolean; ok?: boolean; error?: unknown;
+  } | null;
+  return value?.permitido === false || value?.isError === true ||
+    value?.ok === false || value?.error != null;
+}
 
 function toolEvidence(
   message: Extract<RuntimeMessage, { role: "tool" }>,
   specialistKey: string,
 ): KnowledgeEvidence[] {
-  if (message.isError) return [];
+  if (failedToolObservation(message)) return [];
   if (["crm_search_knowledge", "crm_get_org_memory"].includes(message.toolName)) {
     const evidence = normalizeKnowledgeEvidence(structuredValue(message));
     if (evidence.length || message.toolName === "crm_search_knowledge") return evidence;
@@ -442,6 +450,10 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
           ],
           tools,
           maxSteps: input.plan.maxTurnsPerSpecialist,
+          finalTurn: {
+            allowedToolNames: [],
+            instruction: "本轮仅根据上文已有的成功工具观察输出你的只读报告正文，不再调用工具。保留真实缺口、拒绝和冲突；没有可用事实时明确说明，不编造或声称完成写入。",
+          },
           abortSignal: input.signal,
           beforeToolCall: ({ name }) => {
             const effect = workbenchToolEffect(name);
@@ -506,7 +518,7 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
       const evidence = toolMessages.flatMap((message) =>
         toolEvidence(message, input.task.specialist.key),
       );
-      const claims = toolMessages.flatMap((message) =>
+      const claims = toolMessages.filter((message) => !failedToolObservation(message)).flatMap((message) =>
         extractToolClaims({
           message,
           specialistKey: input.task.specialist.key,
@@ -514,11 +526,13 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
         }),
       );
       const missingMaterial = [
-        ...(toolErrors ? ["failed_tool_observations"] : []),
+        ...(toolErrors || toolMessages.some(failedToolObservation)
+          ? ["failed_tool_observations"] : []),
         ...(toolMessages.some(unavailableKnowledge) ? ["published_knowledge_sources"] : []),
         ...(toolCalls === 0 ? ["tool_observations"] : []),
       ];
       const extractedAnswer = extractProductFinalAnswer(modelResult.result.text);
+      if (!extractedAnswer.text.trim()) missingMaterial.push("specialist_summary");
       if (extractedAnswer.inspection.internalDraftCodes.length > 0 && !extractedAnswer.sanitized)
         missingMaterial.push("safe_specialist_summary");
       if (extractedAnswer.inspection.likelyTruncated)

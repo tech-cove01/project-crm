@@ -231,6 +231,7 @@ export interface RunModelCallInput {
   model?: string;
   /** Teto do loop de tool-calls do AgentRuntime; o call site fornece o knob. */
   maxSteps?: number;
+  finalTurn?: AgentTurnInput["finalTurn"];
   /** Teto por chamada auxiliar; nunca aumenta o limite configurado pela organização. */
   maxOutputTokens?: number;
   /** Cancelamento propagado pelo chamador; a falha continua registrada em llm_calls. */
@@ -745,6 +746,7 @@ export async function runModelCall(
           : {}),
       },
       maxSteps: input.maxSteps,
+      ...(input.finalTurn ? { finalTurn: input.finalTurn } : {}),
       abortSignal: input.abortSignal,
       evaluation: runtimeMode === RUNTIME_EVALUATION_MODE,
       ...(input.transformContext ? { transformContext: input.transformContext } : {}),

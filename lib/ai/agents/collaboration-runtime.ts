@@ -54,6 +54,15 @@ function combineCost(values: Array<number | null>): number | null {
   return known.length === values.length ? known.reduce((sum, value) => sum + value, 0) : null;
 }
 
+function requireSpecialistSummary(result: AgentSpecialistResult): AgentSpecialistResult {
+  if (result.status === "failed" || result.summary.trim()) return result;
+  return {
+    ...result,
+    status: "partial",
+    missingMaterial: [...new Set([...result.missingMaterial, "specialist_summary"])],
+  };
+}
+
 export function detectCollaborationConflicts(
   results: readonly AgentSpecialistResult[],
 ): AgentCollaborationConflict[] {
@@ -218,15 +227,18 @@ export class BoundedAgentCollaborationRuntime {
         const task = tasks[cursor++]!;
         const child = await this.store.ensureChild(plan, task);
         if ((child.status === "completed" || child.status === "partial") && child.result) {
-          results.push(child.result);
+          // Old empty results remain immutable in storage, but cannot become
+          // successful input to a new parent synthesis after a restart.
+          const result = requireSpecialistSummary(child.result);
+          results.push(result);
           await appendParent("specialist_completed", {
             childRunId: child.id,
-            specialistKey: child.result.specialistKey,
-            status: child.result.status,
-            toolCalls: child.result.toolCalls,
-            evidenceCount: child.result.evidence.length,
-            claimCount: child.result.claims.length,
-            missingMaterialCount: child.result.missingMaterial.length,
+            specialistKey: result.specialistKey,
+            status: result.status,
+            toolCalls: result.toolCalls,
+            evidenceCount: result.evidence.length,
+            claimCount: result.claims.length,
+            missingMaterialCount: result.missingMaterial.length,
           });
           continue;
         }
@@ -286,11 +298,11 @@ export class BoundedAgentCollaborationRuntime {
           });
           continue;
         }
-        const result: AgentSpecialistResult = {
+        const result = requireSpecialistSummary({
           childRunId: child.id,
           specialistKey: task.specialist.key,
           ...executed,
-        };
+        });
         await this.store.completeChild(child.id, executionAttemptId, result);
         results.push(result);
         await appendParent("specialist_completed", {

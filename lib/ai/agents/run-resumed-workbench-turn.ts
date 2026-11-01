@@ -261,6 +261,10 @@ export async function runResumedWorkbenchTurn(input: {
         ...(contextProbe ? { contextProbe } : {}),
         tools: gatedTools as ToolSet,
         maxSteps: input.budget.maxSteps ?? agentConfig.maxSteps,
+        finalTurn: {
+          allowedToolNames: [SUBMIT_WORKBENCH_RESULT_TOOL],
+          instruction: "本轮只根据此前真实工具观察调用 submit_workbench_result 提交结果，不再读取或暂存 CRM 动作。真实失败、缺口和待审状态必须保留；没有实际提案不得声称等待批准，不用普通文本或虚构事实代替提交。",
+        },
         abortSignal: abortController.signal,
         shouldStopAfterTurn: ({ cumulativeUsage, costCents }) =>
           resultChannel.submitted() !== null ||

@@ -104,6 +104,7 @@ describe("resumed workbench turn", () => {
       const result = await runPiAiSdkCall({
         system: input.system, messages: input.messages, runtimeMessages: input.runtimeMessages,
         tools: input.tools, maxSteps: input.maxSteps, abortSignal: input.abortSignal,
+        finalTurn: input.finalTurn,
         shouldStopAfterTurn: () => true, onEvent: input.onEvent, model, runtime,
       });
       return { result, events: result.events,
@@ -128,6 +129,8 @@ describe("resumed workbench turn", () => {
     expect(savedMessages[0]).toEqual({ role: "system", content: providerContext });
     expect(savedMessages.some((message) => message.role === "assistant" && message.content === "Earlier finding.")).toBe(true);
     expect(mocks.model).toHaveBeenCalledOnce();
+    expect(mocks.model.mock.calls[0]?.[1]).toMatchObject({ maxSteps: 2,
+      finalTurn: { allowedToolNames: ["submit_workbench_result"] } });
     expect(status).toBe("completed");
   });
 

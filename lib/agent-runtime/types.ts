@@ -158,6 +158,12 @@ export interface AgentTurnInput {
   abortSignal?: AbortSignal;
   tools?: RuntimeTool[];
   maxTurns?: number;
+  /** Reserve the existing last turn for a bounded answer/submission phase. */
+  finalTurn?: {
+    /** Intersected with the tools still available; never grants a new tool. */
+    allowedToolNames: readonly string[];
+    instruction: string;
+  };
   toolExecution?: "parallel" | "sequential";
   transformContext?: (
     messages: RuntimeMessage[],

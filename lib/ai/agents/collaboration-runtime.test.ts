@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   OPPORTUNITY_REVIEW_PLAN,
@@ -94,6 +94,36 @@ function completed(toolCalls = 2): Omit<AgentSpecialistResult, "childRunId" | "s
 }
 
 describe("bounded Agent collaboration runtime", () => {
+  it("persists an empty summary as partial even when tools and the executor reported success", async () => {
+    const store = new FakeStore();
+    const runtime = new BoundedAgentCollaborationRuntime(store, {
+      execute: async ({ task }) => ({ ...completed(3),
+        summary: task.specialist.key === "customer_evidence" ? "   " : "有依据的摘要" }),
+    });
+    const outcome = await runtime.runReadOnlySpecialists(
+      OPPORTUNITY_REVIEW_PLAN, tasks(), new AbortController().signal);
+
+    expect(outcome.status).toBe("partial");
+    expect(outcome.results[0]).toMatchObject({ status: "partial", summary: "   ",
+      missingMaterial: ["specialist_summary"] });
+    expect(store.children.get("customer_evidence")?.result?.status).toBe("partial");
+  });
+
+  it("does not rerun or rewrite a historical empty child, and cannot treat it as complete", async () => {
+    const store = new FakeStore();
+    const old: AgentSpecialistResult = { ...completed(3), summary: "", childRunId: "child-customer_evidence",
+      specialistKey: "customer_evidence" };
+    store.children.set("customer_evidence", { id: old.childRunId, status: "completed", result: old });
+    const execute = vi.fn(async () => completed());
+    const outcome = await new BoundedAgentCollaborationRuntime(store, { execute })
+      .runReadOnlySpecialists(OPPORTUNITY_REVIEW_PLAN, tasks().slice(0, 1), new AbortController().signal);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(store.children.get("customer_evidence")?.result).toEqual(old);
+    expect(outcome.status).not.toBe("complete");
+    expect(outcome.results[0]).toMatchObject({ status: "partial", missingMaterial: ["specialist_summary"] });
+  });
+
   it("runs independent read specialists concurrently under one aggregate budget", async () => {
     const store = new FakeStore();
     let active = 0;
