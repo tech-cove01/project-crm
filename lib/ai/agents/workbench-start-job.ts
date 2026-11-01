@@ -320,7 +320,10 @@ export async function runWorkbenchStartJob(
       { organizationId: job.organization_id, jobId: runId },
       modelAgentConfig,
       deps.log,
-      { readOnly: run.mode === "inspect", workbenchProposalTools: true },
+      { readOnly: run.mode === "inspect", workbenchProposalTools: true, targetScope: {
+        leadId: scope.leadId ?? undefined, contactId: scope.contactId ?? undefined,
+        conversationId: scope.conversationId ?? undefined,
+      } },
     );
     const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
     const resultChannel = createWorkbenchResultChannel();
@@ -617,6 +620,7 @@ export async function runWorkbenchStartJob(
           { organizationId: job.organization_id, jobId: runId },
           agentConfig,
           deps.log,
+          { targetScope: { leadId: scope.leadId ?? undefined, contactId: scope.contactId ?? undefined, conversationId: scope.conversationId ?? undefined } },
         )
       : null;
     const proposalRows: Array<{ id: string; tool: string; status: "pending" | "executed" }> = [];

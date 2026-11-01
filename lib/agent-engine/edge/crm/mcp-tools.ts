@@ -20,6 +20,7 @@ import { claimOfJob } from "@/lib/agent-engine/queue/claim";
 import type { Tool } from "ai";
 
 import { pickToolsFromMcp, type RuntimeHandoffSignal } from "@/lib/ai/runtime/tools";
+import type { WorkbenchTargetScope } from "@/lib/ai/runtime/workbench-target-scope";
 import { mintEphemeralToken, revokeEphemeralToken } from "@/lib/ai/runtime/mcp_token";
 import { IDS_DO_HARNESS, motivoDoHarness } from "@/lib/mcp/tools/ferramentas-do-harness";
 import type { McpAuthResult } from "@/lib/mcp/auth";
@@ -53,6 +54,8 @@ export interface McpTurnTools {
 
 export interface McpTurnToolOptions {
   readOnly?: boolean;
+  /** Resolved exact objects selected in the workbench; ordinary turns omit this. */
+  targetScope?: WorkbenchTargetScope;
   /** Sandbox exposes this side effect only so preview can persist a proposal. */
   workbenchProposalTools?: boolean;
   /** Approval executor may mount only the exact external action being approved. */
@@ -155,6 +158,7 @@ export async function buildMcpTurnTools(
     // por isso TODA escrita de lead era recusada — com a capacidade ligada na
     // tela e o card parado. Quem passava era só o dispatcher antigo.
     pipelineIds: agentConfig.pipelineIds,
+    targetScope: options?.targetScope,
   });
 
   return {

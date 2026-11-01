@@ -10,6 +10,7 @@ import { loadAgentVersionConfig } from "@/lib/agent-engine/agent/agent-config";
 import { buildMcpTurnTools } from "@/lib/agent-engine/edge/crm/mcp-tools";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
 
 export const dynamic = "force-dynamic";
 type RouteCtx = { params: Promise<{ id: string; proposalId: string }> };
@@ -34,6 +35,10 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (proposal.tool_name !== "crm_update_lead" || proposal.status !== "executed" || !proposal.compensation_args)
     return fail("undo_unavailable", "该操作没有可用的业务撤销动作。", 409, { requestId });
 
+  let scope: Awaited<ReturnType<typeof resolveWorkbenchScope>>;
+  try { scope = await resolveWorkbenchScope(admin, authz.org.orgId, run.scope as never); }
+  catch { return fail("scope_not_found", "CRM 对象关联已变化；没有认领或执行撤销。", 409, { requestId }); }
+
   const { data: claimed } = await admin.from("ai_agent_action_proposals")
     .update({ status: "undoing" }).eq("organization_id", authz.org.orgId).eq("id", proposalId).eq("status", "executed")
     .select("id").maybeSingle();
@@ -42,7 +47,6 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   const runtimeState = run.runtime_state as { versionId?: unknown };
   const versionId = typeof runtimeState?.versionId === "string" ? runtimeState.versionId : null;
   const base = versionId ? await loadAgentVersionConfig(getRequestPool(), authz.org.orgId, run.agent_id, versionId) : null;
-  const scope = run.scope as { pipelineId?: string };
   const agent = base ? { ...base, pipelineIds: scope.pipelineId ? [scope.pipelineId] : [] } : null;
   if (!agent?.toolIds.includes("crm_update_lead")) {
     await admin.from("ai_agent_action_proposals").update({ status: "undo_failed" }).eq("organization_id", authz.org.orgId).eq("id", proposalId).eq("status", "undoing");
@@ -50,13 +54,16 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   }
 
   const deps = requestTurnDeps();
-  const mcp = await buildMcpTurnTools(deps.crmCfg, { organizationId: authz.org.orgId, jobId: id }, agent, deps.log);
+  const mcp = await buildMcpTurnTools(deps.crmCfg, { organizationId: authz.org.orgId, jobId: id }, agent, deps.log, { targetScope: scope });
   try {
     const tool = mcp?.tools.crm_update_lead;
     if (!tool?.execute) throw new Error("undo_tool_unavailable");
     await appendWorkbenchEvent(admin, { organizationId: authz.org.orgId, runId: id, type: "tool_started", payload: { proposalId, tool: "crm_update_lead" } });
     const result = await tool.execute(proposal.compensation_args as Record<string, unknown>, { toolCallId: randomUUID(), messages: [], context: {} });
-    if (result && typeof result === "object" && "error" in result) throw new Error("undo_write_failed");
+    if (result && typeof result === "object" &&
+        ("error" in result || "permitido" in result && result.permitido === false ||
+          "isError" in result && result.isError === true || "ok" in result && result.ok === false))
+      throw new Error("undo_write_failed");
     const { error } = await admin.from("ai_agent_action_proposals").update({ status: "undone", result_summary: { outcome: "undone" } }).eq("organization_id", authz.org.orgId).eq("id", proposalId).eq("status", "undoing");
     if (error) throw new Error("undo_status_update_failed");
     await appendWorkbenchEvent(admin, { organizationId: authz.org.orgId, runId: id, type: "tool_completed", payload: { proposalId, tool: "crm_update_lead", status: "success" } });

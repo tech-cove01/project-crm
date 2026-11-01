@@ -390,7 +390,11 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
       { organizationId: this.root.organizationId, jobId: input.childRunId },
       childConfig,
       this.deps.log,
-      { readOnly: true },
+      { readOnly: true, targetScope: {
+        leadId: this.root.scope.leadId ?? undefined,
+        contactId: this.root.scope.contactId ?? undefined,
+        conversationId: this.root.scope.conversationId ?? undefined,
+      } },
     );
     let toolCalls = 0;
     let toolErrors = 0;

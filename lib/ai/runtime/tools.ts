@@ -28,6 +28,7 @@ import { recusaDeCapacidadeParaOModelo } from "@/lib/mcp/recusa-para-o-modelo";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { podeChamarFerramenta, recusaParaOModelo } from "@/lib/leads/escopo-de-funil";
+import { allowsWorkbenchTarget, type WorkbenchTargetScope } from "./workbench-target-scope";
 
 export interface RuntimeHandoffSignal {
   triggered: boolean;
@@ -51,6 +52,8 @@ export interface PickToolsInput {
    * direção segura é agir de menos.
    */
   pipelineIds?: readonly string[];
+  /** Exact selected objects, supplied only by the workbench's resolved scope. */
+  targetScope?: WorkbenchTargetScope;
   /** Mutable signal — runtime checks after each step. */
   handoffSignal: RuntimeHandoffSignal;
 }
@@ -101,6 +104,19 @@ function wrapMcpTool(
       try {
         ensureScope(input.auth.scopes, def.requiresScope);
         ensureRole(input.auth.role, def.requiresRole);
+
+        if (!allowsWorkbenchTarget(input.targetScope, argsRecord)) {
+          void auditMcpToolCall({
+            ctx: input.ctx,
+            toolName: def.name,
+            args: argsRecord,
+            durationMs: Date.now() - startedAt,
+            success: false,
+            errorMessage: "workbench_target_out_of_scope",
+          });
+          return { permitido: false, motivo: "workbench_target_out_of_scope",
+            mensagem: "工具目标不在当前工作台选定的对象范围内；没有读取或修改该对象。" };
+        }
 
         // ── ESCOPO DE FUNIL (spec 17 passo 3) ────────────────────────────────
         //

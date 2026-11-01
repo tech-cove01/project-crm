@@ -165,7 +165,10 @@ export async function runResumedWorkbenchTurn(input: {
       { organizationId, jobId: input.jobId },
       agentConfig,
       deps.log,
-      { readOnly: input.mode === "inspect", workbenchProposalTools: true },
+      { readOnly: input.mode === "inspect", workbenchProposalTools: true, targetScope: {
+        leadId: input.scope.leadId ?? undefined, contactId: input.scope.contactId ?? undefined,
+        conversationId: input.scope.conversationId ?? undefined,
+      } },
     );
     const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
     const resultChannel = createWorkbenchResultChannel();

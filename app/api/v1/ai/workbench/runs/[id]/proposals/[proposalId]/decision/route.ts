@@ -309,8 +309,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (!agent || !agent.toolIds.includes(proposal.tool_name))
     return fail("tool_not_allowed", "这个 Agent 当前版本未授权该 CRM 工具。", 409,
       { requestId });
+  let resolvedScope: Awaited<ReturnType<typeof resolveWorkbenchScope>>;
   try {
-    await resolveWorkbenchScope(admin, authz.org.orgId, scopeInput);
+    resolvedScope = await resolveWorkbenchScope(admin, authz.org.orgId, scopeInput);
   } catch {
     return fail("scope_not_found", "CRM 对象范围已变化；操作保持未执行。", 409,
       { requestId });
@@ -321,9 +322,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     { organizationId: authz.org.orgId, jobId: id },
     agent,
     deps.log,
-    proposal.tool_name === "crm_request_human_handoff"
-      ? { confirmationTools: ["crm_request_human_handoff"] }
-      : undefined,
+    { targetScope: { leadId: resolvedScope.leadId, contactId: resolvedScope.contactId, conversationId: resolvedScope.conversationId },
+      ...(proposal.tool_name === "crm_request_human_handoff" ? { confirmationTools: ["crm_request_human_handoff"] } : {}) },
   );
   try {
     const tool = mcp?.tools[proposal.tool_name];
