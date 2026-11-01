@@ -175,6 +175,8 @@ describe("bounded collaboration review", () => {
       if (text.startsWith("select mission_id")) return { rows: [{ mission_id: null }] };
       if (text.startsWith("select collaboration_review"))
         return { rows: [{ status: "running", collaboration_review: null }] };
+      if (text.startsWith("select to_char(clock_timestamp()"))
+        return { rows: [{ checked_at: "2026-11-01T06:00:00.123456Z" }] };
       if (text.startsWith("update public.ai_workbench_runs")) throw new Error("write_failed");
       return { rows: [] };
     });
@@ -184,5 +186,37 @@ describe("bounded collaboration review", () => {
     ).rejects.toThrow("write_failed");
     expect(query).toHaveBeenCalledWith("rollback");
     expect(query.mock.calls.some(([sql]) => sql === "commit")).toBe(false);
+  });
+
+  it("uses the database microsecond clock for review and cancellation despite a skewed host", async () => {
+    const checkedAt = "2026-11-01T06:00:00.123456Z";
+    const prior = { version: 1, revision: 1, status: "pending", planKey: "opportunity_review_v1",
+      childRunIds: [], conflicts: [], observations: [], unavailable: 0, checkedAt: "2026-01-01T00:00:00Z" };
+    const query = vi.fn(async (text: string, _values?: unknown[]) => ({ rows:
+      text.startsWith("select collaboration_review") ? [{ status: "partial", collaboration_review: prior }] :
+      text.startsWith("select to_char(clock_timestamp()") ? [{ checked_at: checkedAt }] :
+      text.trimStart().startsWith("insert into public.ai_agent_run_events") ? [{ sequence: 1 }] : [] }));
+    const pool = { connect: async () => ({ query, release: vi.fn() }) } as unknown as Pool;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2036-11-01T06:00:00Z"));
+    try {
+      const review = await persistCollaborationReview(pool, { organizationId: "org", runId: "run",
+        outcome: outcome(), expectedRevision: 1, actorUserId: "manager", reason: "Reread current facts", resolved: true });
+      expect(review.checkedAt).toBe(checkedAt);
+      const cancellation = query.mock.calls.filter(([sql]) => sql.includes("r.created_at<="));
+      expect(cancellation).toHaveLength(2);
+      expect(cancellation.every(([, values]) => values?.[2] === checkedAt)).toBe(true);
+      expect(query).toHaveBeenCalledWith("commit");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("rolls back before changing review or proposals when the database clock is unavailable", async () => {
+    const query = vi.fn(async (text: string) => ({ rows: text.startsWith("select collaboration_review")
+      ? [{ status: "running", collaboration_review: null }] : [] }));
+    const pool = { connect: async () => ({ query, release: vi.fn() }) } as unknown as Pool;
+    await expect(persistCollaborationReview(pool, { organizationId: "org", runId: "run", outcome: outcome() }))
+      .rejects.toThrow("collaboration_review_clock_unavailable");
+    expect(query.mock.calls.some(([sql]) => sql.startsWith("update"))).toBe(false);
+    expect(query).toHaveBeenCalledWith("rollback");
   });
 });

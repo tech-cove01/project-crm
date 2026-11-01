@@ -305,6 +305,12 @@ export async function persistCollaborationReview(
       throw new Error("collaboration_review_revision_changed");
     if (input.actorUserId && (!prior || prior.status !== "pending" || run.status !== "partial"))
       throw new Error("collaboration_review_not_pending");
+    // Run creation and SQL admission use the DB clock. Keep its microseconds;
+    // host time (or a JS Date round-trip) can misclassify old/new runs.
+    const { rows: clock } = await client.query<{ checked_at: string }>(
+      `select to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as checked_at`,
+    );
+    if (!clock[0]?.checked_at) throw new Error("collaboration_review_clock_unavailable");
     const review = collaborationReviewSchema.parse({
       version: 1,
       revision: (prior?.revision ?? 0) + 1,
@@ -312,7 +318,7 @@ export async function persistCollaborationReview(
       planKey: input.outcome.planKey,
       childRunIds: input.outcome.results.map((r) => r.childRunId),
       conflicts: input.outcome.conflicts,
-      checkedAt: new Date().toISOString(),
+      checkedAt: clock[0].checked_at,
       unavailable: input.unavailable ?? 0,
       observations: input.observations ?? [],
       ...(input.actorUserId ? { reviewedBy: input.actorUserId, reason: input.reason } : {}),
