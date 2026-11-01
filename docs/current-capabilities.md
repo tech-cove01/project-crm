@@ -1,6 +1,6 @@
 # 当前能力与二开边界
 
-更新：2026-10-30。本页区分上游源码能力、本仓后续改动和本机真实验收；当前工作票与服务状态以 [STATUS](STATUS.md) 为准。
+更新：2026-11-01。本页区分上游源码能力、本仓后续改动和本机真实验收；当前工作票与服务状态以 [STATUS](STATUS.md) 为准。
 
 源码盘点以 CRM-001 导入基线 `06fac28` 为起点，后续验收依据 CRM-006/007/008/010/013/014。来源、许可与文件映射见[第三方声明](../THIRD_PARTY_NOTICES.md)、[导入清单](upstream/import-manifest.json)。本文源码路径均相对仓库根目录。
 
@@ -10,11 +10,11 @@
 
 这是一套面向销售团队的 CRM：管理客户与商机，结合客户上下文和公司知识生成建议，再经权限、审批及执行回执推动跟进。Agent 并非单独聊天页，而是读取和操作 CRM 的执行入口；但不能把现有代码描述成已验证的全自动销售闭环。
 
-全栈部分由 Next.js / React / TypeScript 工作台与 API、Supabase/PostgreSQL 的业务和权限数据组成；Pi Agent Core 在独立 Node Worker 内驱动模型和工具执行。[中文演示入口](sales-demo.md)现以三个独立任务展示客户事实、知识证据、商机提案与批准续跑，最新本机复现均 completed、含观测回查约 4 分 29 秒。批准由自动化操作者通过现有 UI 明确执行；这是固定合成样本，不能称为单 Run 自动销售闭环或生产稳定性验证。[最新结果](evidence/CRM-014v.md)与[前序失败](evidence/CRM-014b.md)分别保留。
+全栈部分由 Next.js / React / TypeScript 工作台与 API、Supabase/PostgreSQL 的业务和权限数据组成；Pi Agent Core 在独立 Node Worker 内驱动模型和工具执行。[中文演示入口](sales-demo.md)以三个独立任务展示客户事实、知识证据、商机提案与批准续跑。CRM-014 历史固定复现均 completed、含观测回查约 4 分 29 秒，批准由自动化操作者通过现有 UI 明确执行；[原成功](evidence/CRM-014v.md)与[前序失败](evidence/CRM-014b.md)分别保留。CRM-020 后续同商机新样本的批准和协作首轮失败见下文，不能用旧演示成功覆盖；这些样本均不证明单 Run 自动销售闭环或生产稳定性。
 
 ## 本机真实验收
 
-| 能力 | 最新已记录的结果 | 证据与限制 |
+| 能力 | 相应票据已记录的结果 | 证据与限制 |
 | --- | --- | --- |
 | CRM、认证与数据 | 真实登录、四个核心页面、合成客户创建/修改/刷新读取、未登录拒绝访问。 | [CRM-002b](evidence/CRM-002b.md)。只验证了这些页面和数据操作，未覆盖全部渠道与销售业务。 |
 | 百炼 + Pi + Worker | 工作台真实 Run 经 SQL 队列和 Worker 调用 `qwen3.8-flash` 与 `crm_get_contact`，最终 `completed`，页面显示结果。 | [CRM-006](evidence/CRM-006.md)。只读客户查询已通过，不等于全部内置 Agent 或多 Agent 场景已验证。 |
@@ -31,6 +31,10 @@ CRM-017 的同源小样本对照中，冻结有答案题 Hit@5 0/6→6/6，同�
 
 CRM-018 已补修这两处：同一已曝光题集的无答案误召回 3/3→0/3，但有答案 Hit@5 6/6→5/6，仍有词面门禁的同义表达损失；Langfuse 修复回查和 ClickHouse 资源竞争后，显式重投原遥测，旧七 Run 49/49 span 精确回读，固定 60 秒隔离样本窗口内存错误为 0。原评测和质量判定不改，不宣称泛化召回或长期稳定性。[检索修复](evidence/CRM-018a-no-answer-retrieval.md)、[观测修复](evidence/CRM-018b-langfuse-readback.md)。
 
+CRM-020 补充使用新关联客户/商机与独立合成产品原文：B01 三条不同事实及 A/B 引用核对成立，B02 拒绝后重读成立；B03 未产生提案、D01 三 child 摘要为空且父终答缺失，均保留 fail。精确对象门禁、HTTP 403/409 负例及三个受控恢复组有定向证据；六个记忆/来源边界通过，但新检索题两个漏检、一个 unknown。持久协作复核和同商机动作准入已实现，最后数据库竞争核验未完成，不能宣称正常协作或全路径原子控制通过。[主链](evidence/CRM-020c-main-chain.md)、[授权](evidence/CRM-020b-http-authorization.md)、[数据](evidence/CRM-020d-data-boundaries.md)、[协作边界](evidence/CRM-020e-collaboration-review.md)。
+
+本批四 Trace 含专家的 67/67 span 与 34/34 score 已精确回读，稳定 ID 遥测重投未增加业务或模型；唯一 B01 Judge 使用完整材料/Rubric 3，pass/92，合并仍 needs_review/92。其余业务失败与旧规则分保留；尚未真人校准，不称整体答案质量通过。[观测与有限评测](evidence/CRM-020f-observation-evaluation.md)。
+
 ## 继承范围与本仓后续交付
 
 核心 CRM、Pi 运行框架、四个内置 Agent、工具与审批机制、记忆/知识/观测适配器等主要架构来自上游快照。导入及历史报告不作为本人独立设计实现的证据。以下仅列本仓导入后的实际新增、修复和联调；完整记录见[实施票据](implementation-plan.md)。
@@ -41,6 +45,7 @@ CRM-018 已补修这两处：同一已曝光题集的无答案误召回 3/3→0/
 | CRM-007 | 增加百炼 embedding、按模型身份检索与迁移保护；修复批准动作的明确失败与副作用未知状态，避免缺渠道时虚报执行成功。 | `2728456`、`7e02c28`；[能力记录](evidence/CRM-007-capabilities.md)、[审批记录](evidence/CRM-007-approval.md)。不代表重写原生 RAG 或审批框架。 |
 | CRM-008 | 增加默认关闭的本机演示预算开关，并在批准/恢复时复核条件，使百炼费用未知时的合成审批续跑可演示。 | `804b401`；[验收](evidence/CRM-008.md)。正式费用计算未完成，不能称已解决生产成本控制。 |
 | CRM-010 | 配置并验证三项真实服务：补本机集成队列定时入口、WeKnora 百炼网络适配、Langfuse 对象存储可写卷槽与 x86_64 镜像适配。 | `53f1824`、`4e733d6`、`f6351c1`；[Mem0](evidence/CRM-010-mem0.md)、[WeKnora](evidence/CRM-010-weknora.md)、[Langfuse](evidence/CRM-010-langfuse.md)。适配器主体来自上游，接入和联调不算从零实现三项服务。 |
+| CRM-020 | 补工作台显式对象守卫、协作持久复核及动作门禁、Judge 材料完整性与提案状态、root/child Trace 对账。 | `3835414`、`9fb0d5c`、`ec7c2fc`、`01b1254`；各票保留实际验收和失败。沿用既有 Agent、审批及评测机制，协作最终竞争仍未知，不将继承框架说成本次从零开发。 |
 
 ## 源码能力矩阵
 
@@ -53,7 +58,7 @@ CRM-018 已补修这两处：同一已曝光题集的无答案误召回 3/3→0/
 | 四个内置 Agent | `lib/ai/agents/builtins.ts` 定义 `crm_intelligence`、`sales_operations`、`customer_communications`、`crm_supervisor`；Run API 调用 `ensureBuiltinAgents`。 | 本机已完成客户只读查询、知识引用及特定审批动作；四种角色并未分别完成业务深验，名称不是效果证明。 |
 | 工具约束、审批与执行 | `lib/ai/agents/tool-effects.ts` 区分工具效果；`app/api/v1/ai/workbench/runs/[id]/proposals/[proposalId]/decision/route.ts` 接收决定；`lib/ai/agents/approved-workbench-tool.ts`、`lib/ai/agents/workbench-approved-action.ts` 负责批准动作、回执及后续处理。 | 合成商机阶段变更及本机演示模式续跑已验收；仍须逐动作验证，不能泛称所有外部副作用都恰好执行一次。 |
 | 审批后发送的具体缺口 | `lib/ai/agents/workbench-start-job.ts` 与 `lib/ai/agents/run-resumed-workbench-turn.ts` 均传入 `candidates: []`。 | 虽有发送消费者，普通工作台当前没有自动生成回复候选的完整接线；不能宣称“工作台生成回复 → 人批 → 发给客户”已闭环。这是可独立二开的业务缺口。 |
-| 多 Agent 协作 | `lib/ai/agents/workbench-collaboration.ts` → `lib/ai/agents/collaboration-runtime.ts`，计划选择在 `lib/ai/agents/collaboration.ts`；专业子 Agent 主要只读调查，结果与证据持久化，由父 Agent 统一处理写入。 | 是有限的专业分工，不是任意动态 Agent 图；Mission 场景将 `maxParallel` 限制为 1，不能宣传所有场景并行。 |
+| 多 Agent 协作 | `lib/ai/agents/workbench-collaboration.ts` → `lib/ai/agents/collaboration-runtime.ts`，计划选择在 `lib/ai/agents/collaboration.ts`；沿用只读专家，新增 `workbench-collaboration-review.ts` 和既有工作台复核 UI/API 以持久保存冲突并重取证。 | 有限专业分工，Mission `maxParallel=1`；020e 离线检查成立，真实正常样本空摘要/父终答失败、最后锁竞争未知，不称全链路协作通过或任意动态 Agent 图。 |
 | 持续业务 Mission | Run API 可创建 `ai_missions`；`lib/ai/agents/mission-wake.ts`、`lib/ai/agents/mission-deadlines.ts` 以及命令/内部响应接口处理唤醒、期限、方向修订和继续执行。定义见 `docs/architecture/mission-state.md`。 | Run 完成不等于业务 Mission 达成；模型自述不能替代业务事实。客户消息唤醒有文本和唯一适用 Mission 等条件，不是无限自主执行。 |
 | 客户与组织记忆 | `components/ai/CustomerMemoryPanel.tsx` 被客户详情页消费；`app/api/v1/ai/customer-memory` 接收人工确认事实并写 SQL/事件；`lib/agent-engine/agent/org-memory.ts` 读取已发布的组织记忆版本。 | 客户偏好、确认事实属于客户上下文，组织规则属于另一权威域；会话 checkpoint 是恢复状态，不能混称长期事实。未见“所有会话自动抽事实并直接采信”的闭环。 |
 | Mem0 可选适配 | `lib/ai/integrations/mem0.ts` + `lib/event-log/register-handlers.ts`：人工确认事实先落 SQL，再以 `infer:false` 投影到 Mem0；读取时仅用外部结果排序本组织拥有的本地 ID，并重读当前 SQL 正文。 | SQL 是事实权威，Mem0 不是必需主存储；有写入结果不确定、人工对账及删除清理路径。当前未见业务层时间衰减策略，不能因使用 Mem0 就宣称已有 decay/自动纠错能力。 |
@@ -69,7 +74,7 @@ CRM-018 已补修这两处：同一已曝光题集的无答案误召回 3/3→0/
 - Mem0、WeKnora、Langfuse 是可选适配器；关闭它们不等于删除本地 SQL 事实、原生 RAG 或 SQL 运行记录，但相应外部能力不可用。客户发送渠道也需单独配置和验收。
 - 普通 Worker 处理业务任务不等于外部集成队列会被消费；本机专用定时器需另行运行，Web 与 Worker 需加载一致组织绑定。启动方式见[本地运行](local-development.md)、[可选服务说明](../infra/local-agent-services/README.md)及 [WeKnora 本机接入](weknora-local-development.md)。
 - 百炼费用在 CRM 中仍为 NULL/未知，不是免费。本机 `CRM_LOCAL_WORKBENCH_UNPRICED_MODE=true` 仅对符合条件的新百炼非 Mission Workbench Run 关闭单次金额预算；默认关闭，组织预算不变，token/步骤控制并非硬上限。正式费用计算与续跑 token 统计边界见 [CRM-008](evidence/CRM-008.md)。
-- CRM-015 的文档更新仅复核已有材料；CRM-013/014 随后完成各票记录的本机范围。首轮评分 fail/83、79 及后续 partial 未删除；最新三任务为 needs_review/89、92、89，answer_quality 均为 50，仍未做语义 Judge，不因业务完成而视为全评测通过。公网部署、全渠道发送、组织记忆发布与引用、多 Agent/Mission/意图路由深验均未由这些样本证明。Cloudflare 与正式依赖、安全升级等前置见[部署评估](cloudflare-deployment.md)；私人求职及实习材料保留在公开仓库之外。
+- CRM-015 的文档更新仅复核已有材料；CRM-013/014 随后完成各票记录的本机范围。首轮评分 fail/83、79 及后续 partial 未删除；该 CRM-014 三任务当时为 needs_review/89、92、89，answer_quality 均为 50，这三条没有做语义 Judge，不因业务完成而视为全评测通过。本批 CRM-020 的 B01 单次 Judge 另记。公网部署、全渠道发送、组织记忆发布与引用、多 Agent/Mission/意图路由深验均未由这些样本证明。Cloudflare 与正式依赖、安全升级等前置见[部署评估](cloudflare-deployment.md)；私人求职及实习材料保留在公开仓库之外。
 
 ## 架构材料需纠正的说法
 
