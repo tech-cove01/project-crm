@@ -108,15 +108,16 @@ CRM-007 标记完成表示本次**核验票据**已完成，不表示全部客�
 - [x] CRM-021a / 批准提案：新合成任务生成真实唯一提案，一次明确批准后效果/回执各一次，续跑重读与四键终答一致；待审展示误述另由确定性护栏处理。[真实验收](evidence/CRM-021a-approved-chain.md)。
   - 已补销售 revision 4/工作台暂存契约、无实际提案拒绝等待批准提交和终态保底；定向离线回归、限定 ESLint 及独立审查通过。新真实批准 `22306fc2…` 的提案/一次效果/回执/决定后重读与终答已核对；待审提前 claim 误述另补 021a2 展示护栏，原输出保留。[代码切片](evidence/CRM-021a-proposal-contract.md)。
   - 021a2 已补实际 pending 的服务端展示/doc=null，保留原模型提交及完成后新结果；25 项直接回归、限定 ESLint 与独立审查通过，未用新模型替换原待审误述。[展示护栏](evidence/CRM-021a2-pending-display.md)。
-- [ ] CRM-021b / 协作汇总：定位 child 空摘要/父空终答，修复结果形成与传递；直接回归和真实三专家汇总核验，缺口不伪成功。
+- [x] CRM-021b / 协作汇总：新 `ead5e7d1…` 三 child 与父任务均 completed，中文汇总、7 条实际来源及 7 项 scalar assertions 核对成立；四次新失败和旧 pending 保留，不外推稳定性。[实际验收](evidence/CRM-021b-collaboration-verified.md)。
   - 已在原轮数内保留 child/父末轮产出，空摘要与结构化拒绝保留 partial；相关 71 项通过、1 项 live 排除，全仓 typecheck、限定 ESLint、独立代码审查通过。新 `995e7150…` child 非空，但父 schema 5>4、知识引用混用及角色多读仍失败；021b2 继续修复，未重跑取最好答案。[实现切片](evidence/CRM-021b-collaboration-summary.md)。
-  - 021b2 已补原预算内至多两轮 schema 纠错、明确 typed 引用和 revision 3 最小专家范围；118 项通过、1 项 live 排除，限定 ESLint、合并 typecheck 与独立审查通过。新基线真实只读后继待验，旧失败不改。[提交纠错](evidence/CRM-021b2-submission-repair.md)。
+  - 021b2 已补原预算内至多两轮 schema 纠错、明确 typed 引用和 revision 3 最小专家范围；118 项通过、1 项 live 排除，限定 ESLint、合并 typecheck 与独立审查通过。后继 132 的父提交已接受，客户多余工具请求仍失败，继续按新根因修复，旧失败不改。[提交纠错](evidence/CRM-021b2-submission-repair.md)。
   - 021b2 后继 `132fd6b2…` 父提交已接受，但客户取证后额外请求不存在工具，child/父仍 partial；021b3 修单对象角色取证后收束。021b4 同步隐藏待复核时“缺口已补齐”的模型完成评估，即使没有业务提案；26 项直接回归及独立审查通过，不清旧 review 或覆盖失败。[待复核展示](evidence/CRM-021b4-review-display.md)。
+  - 021b3 的 25 项相关检查与真实单记录两轮收束成立；021b5 修 inspect 不可能的等待批准枚举，31 项相关检查；021b6 区分未确认业务事实与当前阻塞材料、补中文展示，32 项相关检查。各切片限定 ESLint、全仓 typecheck 与独立审查通过，计数不重复相加。[专家预算](evidence/CRM-021b3-record-specialist-budget.md)、[只读合同](evidence/CRM-021b5-inspect-result-contract.md)、[未知分流](evidence/CRM-021b6-unconfirmed-facts.md)。
 - [x] CRM-021c / 检索漏检：通用修复支持词面误拒；17 题完整捕获，原 F01/K03/K04 恢复、五个无答案为空，保留来源与授权。D02/F06 各缺一页的既有覆盖不足仍列为限制，不称完整知识库召回。[实际回归](evidence/CRM-021c-retrieval-regression.md)。
   - 保留属性 AND/数字单位/来源检查；64 项直接检查、限定 ESLint、独立审查通过。真实后继 169 GET 全部 200、17 次机械回执尝试新增 1 行，前后来源快照与所列业务计数不变；首次预算表达式仪器失败保留。[代码切片](evidence/CRM-021c-retrieval-coverage.md)。
-- [x] CRM-021d / 并发验证：独立连接补齐 0412 不同商机、人工 cutoff 与竞争；五个有限组均取得通过证据，原产品/仪器失败分列，不外推全路径原子性。[最终证据](evidence/CRM-021d-concurrency.md)。
+- [x] CRM-021d / 并发验证：五个有限PG组通过，包括两组准入/cutoff及三组双连接竞争；补齐 0412 不同商机、人工 cutoff 与竞争的选定场景，原产品/仪器失败分列，不外推全路径原子性。[最终证据](evidence/CRM-021d-concurrency.md)。
   - 首次真实 PG：P01 通过，P02 实证应用/数据库时钟导致复核后新任务误挡；021d1 改用同事务数据库 UTC 微秒 cutoff，11 项直接检查和独立代码审查通过。修后 P02/P03 通过，P04 私有 SQL 格式守卫错误保留；只修仪器后 P04/P05 的真实锁等待、效果/回执唯一性通过。三次自有行清理及旧对象不变已核，已通过组不重跑。[时钟缺陷](evidence/CRM-021d1-database-clock.md)。
-- [ ] CRM-021e / 收口：各项必要观测/来源/SQL 对账和独立审查，更新状态与能力，逐功能 commit、全部 push 并独立核对远端。
+- [x] CRM-021e / 收口：六root含专家145/145 span完整回读，失败尝试、计量与排水器中断/原队列恢复保留；状态、能力和各功能证据已收口，随功能提交推送并独立核对远端。[交接与限制](evidence/CRM-021e-closeout.md)。
 
 ### CRM-020：四主线有限补充（2026-11-01）
 
