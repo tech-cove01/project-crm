@@ -425,6 +425,10 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
       const tools = Object.fromEntries(
         Object.entries(mcp?.tools ?? {}).filter(([name]) => allowed.has(name)),
       ) as ToolSet;
+      const selectedRecords = ["customer_evidence", "opportunity_diagnosis"].includes(input.task.specialist.key);
+      const maxSteps = selectedRecords
+        ? Math.min(input.plan.maxTurnsPerSpecialist, Object.keys(tools).length + 1)
+        : input.plan.maxTurnsPerSpecialist;
       const modelResult = await executePiTurnModelCall(
         {
           pool: getRequestPool(),
@@ -461,7 +465,7 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
             },
           ],
           tools,
-          maxSteps: input.plan.maxTurnsPerSpecialist,
+          maxSteps,
           finalTurn: {
             allowedToolNames: [],
             instruction: "本轮仅根据上文已有的成功工具观察输出你的只读报告正文，不再调用工具。保留真实缺口、拒绝和冲突；没有可用事实时明确说明，不编造或声称完成写入。",
