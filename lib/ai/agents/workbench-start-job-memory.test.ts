@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobRow } from "@/lib/agent-engine/queue/queue";
 import type { Pool } from "pg";
+import type { RuntimeMessage } from "@/lib/agent-runtime";
 
 const mocks = vi.hoisted(() => ({
   model: vi.fn(),
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   admin: vi.fn(),
   collaboration: vi.fn(),
   selectPlan: vi.fn(),
+  mcpTools: {} as Record<string, unknown>,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.admin }));
 vi.mock("@/lib/agent-engine/agent/pi-turn-execution", () => ({
@@ -31,7 +33,7 @@ vi.mock("@/lib/agent-engine/agent/agent-config", () => ({
   }),
 }));
 vi.mock("@/lib/agent-engine/edge/crm/mcp-tools", () => ({
-  buildMcpTurnTools: async () => ({ tools: {}, cleanup: vi.fn() }),
+  buildMcpTurnTools: async () => ({ tools: mocks.mcpTools, cleanup: vi.fn() }),
 }));
 vi.mock("@/lib/ai/agents/workbench-scope", () => ({
   resolveWorkbenchScope: async () => ({
@@ -72,6 +74,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.selectPlan.mockReturnValue(null);
   mocks.collaboration.mockResolvedValue(null);
+  mocks.mcpTools = {};
   mocks.model.mockRejectedValue(new Error("stop_after_model_input"));
   mocks.query.mockImplementation(async (sql: string) => ({
     rows: sql.includes("from org_memory_pointers") ? [policyRow] : [],
@@ -103,6 +106,84 @@ beforeEach(() => {
       };
       return builder;
     },
+  });
+});
+
+describe("Workbench start pending proposal presentation", () => {
+  it("closes the actual staged proposal with server pending text and preserves the model transcript", async () => {
+    const proposals: Array<Record<string, unknown>> = [];
+    const runUpdates: Array<Record<string, unknown>> = [];
+    let savedMessages: RuntimeMessage[] = [];
+    mocks.admin.mockReturnValue({
+      from(table: string) {
+        let savedProposal: Record<string, unknown> | null = null;
+        const builder = {
+          select: () => builder, eq: () => builder, in: () => builder,
+          order: () => builder, limit: () => builder,
+          upsert: (row: Record<string, unknown>) => {
+            if (table === "ai_agent_run_states") savedMessages = row.messages as RuntimeMessage[];
+            if (table === "ai_agent_action_proposals") {
+              savedProposal = { id: "proposal-1", ...row };
+              proposals.push(savedProposal);
+            }
+            return builder;
+          },
+          update: (row: Record<string, unknown>) => {
+            if (table === "ai_workbench_runs") runUpdates.push(row);
+            return builder;
+          },
+          maybeSingle: async () => ({
+            data: table === "ai_workbench_runs"
+              ? { id: "run1", status: "running", agent_id: "agent1", task: "提出商机动作",
+                  mode: "act", runtime_state: { versionId: "agent-version1" },
+                  mission_id: null, scope: {}, budget: {} }
+              : savedProposal,
+            error: null,
+          }),
+          then: (resolve: (result: unknown) => unknown) => Promise.resolve(resolve({
+            data: table === "ai_agent_action_proposals" ? proposals : null, error: null,
+          })),
+        };
+        return builder;
+      },
+    });
+    const externalExecute = vi.fn(async () => ({ sent: true }));
+    mocks.mcpTools = { crm_send_whatsapp_message: { execute: externalExecute } };
+    const claimedSummary = "客户消息已经发送，动作已完成。";
+    const transcript: RuntimeMessage[] = [
+      { role: "user", content: "提出商机动作" },
+      { role: "assistant", content: "发送通知", toolCalls: [{
+        id: "external-1", name: "crm_send_whatsapp_message", arguments: { body: "待批准通知" },
+      }] },
+      { role: "tool", toolCallId: "external-1", toolName: "crm_send_whatsapp_message", content: "Staged for human confirmation" },
+      { role: "assistant", content: claimedSummary },
+    ];
+    const originalTranscript = structuredClone(transcript);
+    mocks.model.mockImplementation(async (_deps, input) => {
+      await expect(input.tools.crm_send_whatsapp_message.execute({ body: "待批准通知" }, {}))
+        .resolves.toMatchObject({ content: expect.stringContaining("Staged for human confirmation") });
+      await expect(input.tools.submit_workbench_result.execute({
+        summary: claimedSummary, evidence: [], missingInformation: [],
+        nextStep: "无", wakeCondition: "none",
+      }, {})).resolves.toEqual({ accepted: true });
+      return { result: { text: claimedSummary, turnCount: 1, runtimeMessages: transcript },
+        usage: { inputTokens: 1, outputTokens: 1 }, costCents: 0 };
+    });
+
+    await runWorkbenchStartJob(job, pool, "worker1");
+
+    expect(mocks.model).toHaveBeenCalledOnce();
+    expect(externalExecute).not.toHaveBeenCalled();
+    expect(proposals).toEqual([expect.objectContaining({
+      tool_name: "crm_send_whatsapp_message", tool_args: { body: "待批准通知" }, status: "pending",
+    })]);
+    expect(runUpdates.at(-1)).toMatchObject({
+      status: "awaiting_confirmation",
+      final_text: "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。",
+      result_document: null, error_code: null,
+    });
+    expect(savedMessages).toEqual(originalTranscript);
+    expect(transcript).toEqual(originalTranscript);
   });
 });
 

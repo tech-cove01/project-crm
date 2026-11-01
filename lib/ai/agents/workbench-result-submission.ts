@@ -125,6 +125,33 @@ export function resultDocument(submission: WorkbenchResultSubmission) {
   };
 }
 
+const PENDING_ACTION_TEXT = "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。";
+const PENDING_REPLY_TEXT = "Agent 回复草稿已保存在 CRM，尚未发送。批准后将进入正式发送队列。";
+const PENDING_REVIEW_TEXT = "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。";
+const PENDING_PRESENTATION_TEXTS = new Set([PENDING_ACTION_TEXT, PENDING_REPLY_TEXT, PENDING_REVIEW_TEXT]);
+
+/** Pending proposals are Harness state, not a model-submitted completed assessment. */
+export function workbenchVisibleResult(input: {
+  finalText: string;
+  submission: WorkbenchResultSubmission | null;
+  pending: boolean;
+  collaborationBlocked: boolean;
+  pendingSendMessage: boolean;
+}) {
+  if (input.pending) {
+    const finalText = input.collaborationBlocked
+      ? PENDING_REVIEW_TEXT
+      : input.pendingSendMessage
+        ? PENDING_REPLY_TEXT
+        : PENDING_ACTION_TEXT;
+    return { finalText, resultDocument: null };
+  }
+  return {
+    finalText: input.finalText || null,
+    resultDocument: input.submission ? resultDocument(input.submission) : null,
+  };
+}
+
 /** Run completion is not business-outcome verification; evidence gaps remain partial. */
 export function workbenchResultPartialReason(input: {
   finalText: string;
@@ -150,7 +177,9 @@ export function workbenchFinalText(input: {
   candidateBodies: string[];
 }): string {
   if (input.submission) return input.submission.summary;
-  return [input.priorText, input.fallbackText, ...input.candidateBodies]
+  // Only an exact prior server placeholder is excluded; never rewrite new model/user content.
+  const priorText = PENDING_PRESENTATION_TEXTS.has(input.priorText ?? "") ? null : input.priorText;
+  return [priorText, input.fallbackText, ...input.candidateBodies]
     .filter((value): value is string => Boolean(value))
     .join("\n\n");
 }

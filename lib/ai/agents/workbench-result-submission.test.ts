@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createWorkbenchResultChannel,
   resultDocument,
+  workbenchVisibleResult,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   workbenchResultSchema,
   workbenchResultPartialReason,
@@ -161,5 +162,69 @@ describe("Workbench structured result channel", () => {
         candidateBodies: [],
       }),
     ).toBe(candidate.summary);
+  });
+});
+
+describe("Workbench pending presentation", () => {
+  const premature = { ...candidate, summary: "已在决定后只读复核所选商机阶段。",
+    evidence: [{ ...candidate.evidence[0]!, claim: "已在决定后只读复核所选商机阶段。" }],
+    missingInformation: [], wakeCondition: "human_approval" as const };
+  const waiting = { finalText: premature.summary, submission: premature,
+    pending: true, collaborationBlocked: false, pendingSendMessage: false };
+
+  it("publishes authoritative pending text and hides premature model evidence without mutating it", () => {
+    const prior = JSON.stringify(premature);
+    const visible = workbenchVisibleResult(waiting);
+    expect(visible.resultDocument).toBeNull();
+    expect(visible.finalText).toBe("当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。");
+    expect(visible.finalText).not.toContain("决定后");
+    expect(JSON.stringify(premature)).toBe(prior);
+  });
+
+  it("keeps the existing more specific unsent reply-draft message", () => {
+    expect(workbenchVisibleResult({ ...waiting, pendingSendMessage: true })).toEqual({
+      finalText: "Agent 回复草稿已保存在 CRM，尚未发送。批准后将进入正式发送队列。", resultDocument: null,
+    });
+  });
+
+  it("gives collaboration blocking precedence over both approval and send display", () => {
+    expect(workbenchVisibleResult({ ...waiting, collaborationBlocked: true, pendingSendMessage: true }))
+      .toEqual({ finalText: "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。", resultDocument: null });
+  });
+
+  it("preserves the later completed model text and structured result when no proposal remains", () => {
+    const completed = { ...candidate, summary: "已在决定后读取实际状态。", missingInformation: [], wakeCondition: "none" as const };
+    expect(workbenchVisibleResult({ ...waiting, pending: false, finalText: completed.summary, submission: completed }))
+      .toEqual({ finalText: completed.summary, resultDocument: resultDocument(completed) });
+  });
+
+  it("preserves existing nonpending partial and missing-submission presentation", () => {
+    expect(workbenchVisibleResult({ ...waiting, pending: false, submission: candidate }))
+      .toEqual({ finalText: waiting.finalText, resultDocument: resultDocument(candidate) });
+    expect(workbenchVisibleResult({ ...waiting, pending: false, finalText: "", submission: null }))
+      .toEqual({ finalText: null, resultDocument: null });
+  });
+
+  it("does not reuse any exact server pending placeholder as a post-decision fallback", () => {
+    const placeholders = [waiting, { ...waiting, pendingSendMessage: true }, { ...waiting, collaborationBlocked: true }]
+      .map((input) => workbenchVisibleResult(input).finalText!);
+    for (const priorText of placeholders) {
+      const finalText = workbenchFinalText({ submission: null, priorText, fallbackText: "", candidateBodies: [] });
+      expect(finalText).toBe("");
+      expect(workbenchResultPartialReason({ finalText, submission: null, budgetExhausted: false }))
+        .toBe("empty_final_answer");
+    }
+  });
+
+  it("preserves real new output and arbitrary prior text without natural-language filtering", () => {
+    const placeholder = workbenchVisibleResult(waiting).finalText!;
+    expect(workbenchFinalText({ submission: null, priorText: placeholder, fallbackText: "本次缺少结果材料。", candidateBodies: [] }))
+      .toBe("本次缺少结果材料。");
+    expect(workbenchFinalText({ submission: null, priorText: "说明：" + placeholder, fallbackText: "", candidateBodies: [] }))
+      .toBe("说明：" + placeholder);
+    expect(workbenchFinalText({ submission: null, priorText: null, fallbackText: placeholder, candidateBodies: [] }))
+      .toBe(placeholder);
+    expect(workbenchFinalText({ submission: { ...candidate, summary: "已取得实际结果。" }, priorText: placeholder,
+      fallbackText: "", candidateBodies: [] })).toBe("已取得实际结果。");
   });
 });

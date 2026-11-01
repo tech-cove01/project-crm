@@ -32,7 +32,7 @@ import { aggregateWorkbenchLlmUsage, type WorkbenchLlmCallUsage } from "@/lib/ai
 import { recoverWorkbenchResult } from "@/lib/ai/agents/workbench-result-recovery";
 import {
   createWorkbenchResultChannel,
-  resultDocument,
+  workbenchVisibleResult,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   WORKBENCH_RESULT_INSTRUCTION,
   WORKBENCH_PROPOSAL_TOOL_INSTRUCTION,
@@ -518,9 +518,9 @@ export async function runResumedWorkbenchTurn(input: {
       fallbackText: result.finalText,
       candidateBodies: result.candidates.map((candidate) => candidate.body),
     });
-    const { count: pendingCount, error: pendingReadError } = await admin
+    const { data: pendingProposals, count: pendingCount, error: pendingReadError } = await admin
       .from("ai_agent_action_proposals")
-      .select("id", { count: "exact", head: true })
+      .select("id, tool_name", { count: "exact" })
       .eq("organization_id", organizationId)
       .eq("run_id", runId)
       .eq("status", "pending");
@@ -565,13 +565,17 @@ export async function runResumedWorkbenchTurn(input: {
       });
       return;
     }
+    const visibleResult = workbenchVisibleResult({
+      finalText, submission: submittedResult, pending: (pendingCount ?? 0) > 0, collaborationBlocked,
+      pendingSendMessage: (pendingProposals ?? []).some((proposal) => proposal.tool_name === "send_message"),
+    });
     await input.beforeSideEffect?.();
     const { error: updateError } = await admin
       .from("ai_workbench_runs")
       .update({
         status,
-        final_text: finalText || null,
-        result_document: submittedResult ? resultDocument(submittedResult) : null,
+        final_text: visibleResult.finalText,
+        result_document: visibleResult.resultDocument,
         error_code: status === "partial" ? partialReason : null,
         runtime_state: {
           ...input.runtimeState,

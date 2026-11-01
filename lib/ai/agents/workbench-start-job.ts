@@ -39,7 +39,7 @@ import { assertLocalWorkbenchBudgetAllowed } from "@/lib/ai/agents/local-workben
 import { recoverWorkbenchResult } from "@/lib/ai/agents/workbench-result-recovery";
 import {
   createWorkbenchResultChannel,
-  resultDocument,
+  workbenchVisibleResult,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   WORKBENCH_RESULT_INSTRUCTION,
   WORKBENCH_PROPOSAL_TOOL_INSTRUCTION,
@@ -899,13 +899,17 @@ export async function runWorkbenchStartJob(
       : partialReason
         ? "partial"
         : "completed";
+    const visibleResult = workbenchVisibleResult({
+      finalText, submission: submittedResult, pending, collaborationBlocked,
+      pendingSendMessage: proposalRows.some((proposal) => proposal.status === "pending" && proposal.tool === "send_message"),
+    });
     await beforeSideEffect();
     const { error: closeError } = await admin
       .from("ai_workbench_runs")
       .update({
         status,
-        final_text: finalText || null,
-        result_document: submittedResult ? resultDocument(submittedResult) : null,
+        final_text: visibleResult.finalText,
+        result_document: visibleResult.resultDocument,
         runtime_state: {
           ...runtime,
           proposals: lastSequence,

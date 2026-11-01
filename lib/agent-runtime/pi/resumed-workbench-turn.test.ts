@@ -60,6 +60,7 @@ describe("resumed workbench turn", () => {
   it("delivers the current memory revision to real Pi after JSON restore and persists that same context", async () => {
     vi.clearAllMocks();
     let status = "running";
+    let savedRun: Record<string, unknown> | null = null;
     let savedMessages: RuntimeMessage[] = [];
     const admin = {
       from(table: string) {
@@ -69,8 +70,11 @@ describe("resumed workbench turn", () => {
             savedMessages = JSON.parse(JSON.stringify(row.messages));
             return Promise.resolve({ error: null });
           },
-          update: (row: { status?: string }) => {
-            if (table === "ai_workbench_runs" && row.status) status = row.status;
+          update: (row: Record<string, unknown>) => {
+            if (table === "ai_workbench_runs") {
+              savedRun = row;
+              if (typeof row.status === "string") status = row.status;
+            }
             return builder;
           },
           maybeSingle: async () => ({ data: table === "ai_workbench_runs" ? { status } : null, error: null }),
@@ -132,6 +136,118 @@ describe("resumed workbench turn", () => {
     expect(mocks.model.mock.calls[0]?.[1]).toMatchObject({ maxSteps: 2,
       finalTurn: { allowedToolNames: ["submit_workbench_result"] } });
     expect(status).toBe("completed");
+    expect(savedRun).toMatchObject({
+      status: "completed", final_text: "已按当前规则完成核对。",
+      result_document: {
+        revision: 1, trust: "model_submitted", summary: "已按当前规则完成核对。",
+        evidence: [], missingInformation: [], nextStep: "人工复核", wakeCondition: "none",
+      },
+      error_code: null,
+    });
+  });
+
+  it.each([
+    { tool: "crm_move_lead_stage", blocked: false, status: "awaiting_confirmation",
+      text: "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。" },
+    { tool: "send_message", blocked: false, status: "awaiting_confirmation",
+      text: "Agent 回复草稿已保存在 CRM，尚未发送。批准后将进入正式发送队列。" },
+    { tool: "send_message", blocked: true, status: "partial",
+      text: "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。" },
+  ])("uses persisted $tool pending state when no new proposal is made (blocked=$blocked)", async ({
+    tool, blocked, status: expectedStatus, text,
+  }) => {
+    vi.clearAllMocks();
+    let status = "running";
+    let savedRun: Record<string, unknown> | null = null;
+    let savedMessages: RuntimeMessage[] = [];
+    const pending = [{ id: "existing-proposal", tool_name: tool, sequence: 7, status: "pending" }];
+    const insert = vi.fn();
+    const selections: Array<{
+      table: string; columns: string; options?: { count?: string; head?: boolean };
+      filters: Array<[string, unknown]>;
+    }> = [];
+    const admin = {
+      from(table: string) {
+        const filters: Array<[string, unknown]> = [];
+        let options: { count?: string; head?: boolean } | undefined;
+        const builder = {
+          select: (columns: string, selectedOptions?: typeof options) => {
+            options = selectedOptions;
+            selections.push({ table, columns, options, filters });
+            return builder;
+          },
+          eq: (column: string, value: unknown) => { filters.push([column, value]); return builder; },
+          order: () => builder, limit: () => builder, insert,
+          upsert: (row: { messages: RuntimeMessage[] }) => {
+            savedMessages = row.messages;
+            return Promise.resolve({ error: null });
+          },
+          update: (row: Record<string, unknown>) => {
+            if (table === "ai_workbench_runs") {
+              savedRun = row;
+              if (typeof row.status === "string") status = row.status;
+            }
+            return builder;
+          },
+          maybeSingle: async () => ({
+            data: table === "ai_workbench_runs" ? { status }
+              : table === "ai_agent_action_proposals" ? { sequence: 7 } : null,
+            error: null,
+          }),
+          then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve({
+            data: table === "ai_agent_action_proposals" && !options?.head ? pending : null,
+            error: null, count: table === "ai_agent_action_proposals" ? pending.length : null,
+          })),
+        };
+        return builder;
+      },
+    };
+    const transcript: RuntimeMessage[] = [
+      { role: "user", content: "继续核对当前动作" },
+      { role: "assistant", content: "动作已经执行，当前任务已完成。" },
+    ];
+    const originalTranscript = structuredClone(transcript);
+    mocks.model.mockImplementation(async (_deps, input) => {
+      await expect(input.tools.submit_workbench_result.execute({
+        summary: "动作已经执行，当前任务已完成。", evidence: [], missingInformation: [],
+        nextStep: "无", wakeCondition: "none",
+      }, {})).resolves.toEqual({ accepted: true });
+      return { result: { text: "任务完成", turnCount: 1, runtimeMessages: transcript },
+        usage: { inputTokens: 1, outputTokens: 1 }, costCents: 0 };
+    });
+    const normalQuery = mocks.query.getMockImplementation()!;
+    mocks.query.mockImplementation(async (sql: string) => {
+      if (blocked && sql.includes("fn_assert_ai_collaboration_write_allowed"))
+        throw Object.assign(new Error("collaboration_review_required"), { code: "P0001" });
+      return normalQuery(sql);
+    });
+    try {
+      await runResumedWorkbenchTurn({
+        admin: admin as never, organizationId: "org-1", runId: "run-1", jobId: "job-1",
+        agentId: "agent-1", missionId: null, versionId: "version-1", runtimeState: { versionId: "version-1" },
+        task: "继续核对当前动作", mode: "act",
+        scope: { contactId: null, leadId: null, conversationId: null, pipelineId: null, channelId: null },
+        messages: [{ role: "user", content: "继续核对当前动作" }],
+        budget: { maxSteps: 2 }, priorFinalText: "上轮宣称操作已经完成。",
+      });
+    } finally {
+      mocks.query.mockImplementation(normalQuery);
+    }
+
+    expect(mocks.model).toHaveBeenCalledOnce();
+    expect(insert).not.toHaveBeenCalled();
+    expect(savedRun).toMatchObject({
+      status: expectedStatus, final_text: text, result_document: null,
+      error_code: blocked ? "collaboration_review_required" : null,
+    });
+    expect(status).toBe(expectedStatus);
+    expect(selections).toContainEqual({
+      table: "ai_agent_action_proposals", columns: "id, tool_name", options: { count: "exact" },
+      filters: [["organization_id", "org-1"], ["run_id", "run-1"], ["status", "pending"]],
+    });
+    expect(savedMessages).toEqual(originalTranscript);
+    expect(transcript).toEqual(originalTranscript);
+    expect(pending).toEqual([{ id: "existing-proposal", tool_name: tool, sequence: 7, status: "pending" }]);
   });
 
   it("stops a stale Mission direction without retrying the model or reporting resume_failed", async () => {
