@@ -1,0 +1,52 @@
+.tutorial-entry { color: #1d4ed8; border-color: #c7d9fb; background: #f0f5ff; }
+.tutorial-entry:hover { background: #e5eeff; border-color: #93b4f4; }
+.project-sidebar-links .tutorial-entry { padding: 0; min-height: 28px; border: 0; background: none; font: inherit; cursor: pointer; }
+.tutorial-layer { position: fixed; inset: 0; z-index: 10000; isolation: isolate; }
+.tutorial-dim { position: absolute; inset: 0; background: #0f234c80; }
+.tutorial-layer[data-layout="step"] .tutorial-dim { background: transparent; }
+.tutorial-spotlight { position: absolute; pointer-events: none; border: 2px solid #7aabff; border-radius: 12px; box-shadow: 0 0 0 5000px #10244b99, 0 0 0 5px #2563eb26; }
+.tutorial-layer[data-layout="welcome"] .tutorial-spotlight { display: none; }
+.tutorial-card { position: absolute; width: 380px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; background: #fff; color: #172b4d; border: 1px solid #d6e3f6; border-radius: 18px; padding: 24px; box-shadow: 0 22px 70px #10244b38; font-size: 14px; line-height: 1.75; }
+.tutorial-layer[data-layout="welcome"] .tutorial-card { width: 470px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.tutorial-topline { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.tutorial-kicker { color: #2563eb; font-size: 12px; font-weight: 650; letter-spacing: .04em; }
+.tutorial-exit { border: 0; background: transparent; color: #61728b; font: inherit; padding: 4px; cursor: pointer; white-space: nowrap; font-size: 12px; }
+.tutorial-exit:hover { color: #1d4ed8; }
+.tutorial-card h2 { font-size: 21px; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 12px; }
+.tutorial-description { margin: 0 0 16px; color: #526681; }
+.tutorial-example { background: #f1f6ff; border: 1px solid #dce8fc; border-radius: 10px; color: #365e9f; padding: 12px 14px; font-size: 13px; margin-bottom: 18px; }
+.tutorial-points { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+.tutorial-points span { background: #f3f6fb; color: #586b86; padding: 3px 9px; border-radius: 5px; font-size: 12px; }
+.tutorial-progress { display: flex; gap: 5px; margin: 0 0 20px; }
+.tutorial-progress span { height: 3px; flex: 1; border-radius: 10px; background: #e5edf9; }
+.tutorial-progress span.done { background: #83a8f2; }
+.tutorial-progress span.current { background: #2563eb; }
+.tutorial-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.tutorial-control-right { display: flex; gap: 8px; flex-wrap: wrap; }
+.tutorial-card button:focus-visible { outline: 3px solid #759ff0; outline-offset: 3px; }
+.tutorial-button { min-height: 40px; padding: 8px 15px; border-radius: 9px; border: 1px solid #d5e1f3; color: #405b81; background: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 550; }
+.tutorial-button:hover { background: #f1f6ff; }
+.tutorial-button.primary { color: #fff; background: #2563eb; border-color: #2563eb; }
+.tutorial-button.primary:hover { background: #1d4ed8; }
+.tutorial-button:disabled { opacity: .5; cursor: default; }
+.tutorial-button:disabled:hover { background: inherit; }
+.tutorial-button.primary:disabled:hover { background: #2563eb; }
+.tutorial-operation { display: flex; flex-wrap: wrap; gap: 8px; }
+.tutorial-status { font-size: 12px; color: #586b86; margin: 12px 0 0; }
+.tutorial-status strong { color: #1d4ed8; }
+.tutorial-footnote { margin: 18px 0 0; font-size: 11px; color: #75839a; }
+@media (max-width: 680px) {
+  .agent-chat-header { flex-wrap: wrap; }
+  .agent-header-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; gap: 4px; }
+  .agent-header-actions .tutorial-entry { white-space: nowrap; }
+  .tutorial-card { padding: 19px; width: calc(100vw - 24px); max-width: none; max-height: 48dvh; border-radius: 16px; }
+  .tutorial-layer[data-layout="welcome"] .tutorial-card { width: calc(100vw - 32px); max-height: calc(100dvh - 48px); }
+  .tutorial-topline { margin-bottom: 11px; }
+  .tutorial-card h2 { font-size: 18px; margin-bottom: 9px; }
+  .tutorial-description { font-size: 13px; margin-bottom: 12px; }
+  .tutorial-example { font-size: 12px; margin-bottom: 12px; padding: 10px 12px; }
+  .tutorial-controls { margin-top: 15px; gap: 8px; }
+  .tutorial-button { min-height: 42px; padding: 8px 12px; }
+  .tutorial-progress { margin-bottom: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .tutorial-card, .tutorial-spotlight { transition: none; } }
