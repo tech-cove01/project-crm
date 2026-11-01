@@ -13,7 +13,7 @@
 </head>
 <body>
   <a class="skip" href="#main">跳到正文</a>
-  <header><nav aria-label="项目导航"><a href="./index.html"><strong>Project CRM</strong></a><div><a href="./index.html">项目介绍</a><a href="./demo/index.html#/app/ai/workbench">进入交互演示 ↗</a><a href="https://github.com/tech-cove01/project-crm/tree/main" target="_blank" rel="noopener noreferrer">GitHub 源码 ↗</a></div></nav></header>
+  <header><nav aria-label="项目导航"><a href="./index.html"><strong>Project CRM</strong></a><div><a href="./index.html">项目介绍</a><a href="./demo/index.html?tutorial=1#/app/ai/workbench">进入交互演示 ↗</a><a href="https://github.com/tech-cove01/project-crm/tree/main" target="_blank" rel="noopener noreferrer">GitHub 源码 ↗</a></div></nav></header>
   <main id="main">
     <div class="eyebrow">ENGINEERING / VERIFICATION</div>
     <h1>界面之外，实际验证了什么。</h1>
@@ -26,7 +26,7 @@
       <article class="card"><span class="tag">04 / 观测与回归</span><h2>动作、答案和运行轨迹分别检查。</h2><p>SQL 保存运行事实，Langfuse 异步接收模型与工具轨迹。本批六个根任务及专家链路的 <strong>145/145 个预期 span 已完整回读</strong>；一次排水器中断后恢复原队列，没有重新执行业务或模型。该计数表示轨迹完整性，不表示答案准确率。</p><a href="https://github.com/tech-cove01/project-crm/blob/bef60c338495f1bb761e74a3cedb215eb2a01f80/docs/evidence/CRM-021e-closeout.md" target="_blank" rel="noopener noreferrer">查看轨迹与回归记录 ↗</a></article>
     </section>
     <details><summary>源码版本与最后一次收口检查</summary><p>上述真实模型批次的源码基线为 <code>dbbc4ca</code>。其后收口修复至 <code>795165e</code>，对晚到复核、旧提案失效和最终状态进行了定向回归与真实 PostgreSQL 检查，没有重跑模型来覆盖历史结果。当前公开交接文档为 <code>bef60c3</code>。</p><a href="https://github.com/tech-cove01/project-crm/blob/bef60c338495f1bb761e74a3cedb215eb2a01f80/docs/evidence/CRM-021f-independent-review.md" target="_blank" rel="noopener noreferrer">查看最后一次独立核验 ↗</a></details>
-    <div class="footnote"><p>本项目当前用于本机演示和源码交流。以上是有限业务场景与具体分母的验证，不推导全部业务路径或生产稳定性。静态站点不连接数据库、模型、Mem0、WeKnora 或 Langfuse。</p><p>交互工作台中的批准、拒绝演示本地回复草稿状态；上方批准链路记录实际应用的商机阶段变更，两者不共用运行数据。</p><p><a href="./index.html">← 返回项目介绍</a> · <a href="./demo/index.html#/app/ai/workbench">体验 CRM 界面 →</a></p></div>
+    <div class="footnote"><p>本项目当前用于本机演示和源码交流。以上是有限业务场景与具体分母的验证，不推导全部业务路径或生产稳定性。静态站点不连接数据库、模型、Mem0、WeKnora 或 Langfuse。</p><p>交互工作台中的批准、拒绝演示本地回复草稿状态；上方批准链路记录实际应用的商机阶段变更，两者不共用运行数据。</p><p><a href="./index.html">← 返回项目介绍</a> · <a href="./demo/index.html?tutorial=1#/app/ai/workbench">体验 CRM 界面 →</a></p></div>
   </main>
 </body>
 </html>

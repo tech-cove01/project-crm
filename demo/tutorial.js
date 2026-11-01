@@ -167,6 +167,12 @@
   document.addEventListener('scroll',schedulePosition,true);
   window.CRM_TUTORIAL = { open:showWelcome, exit, getState:()=>({ open:!!mode, mode, step:mode==='step'?index+1:null, running:!!tutorialState?.busy }) };
   entrypoints();
+  const entryURL = new URL(window.location.href);
+  const requestedTutorial = entryURL.searchParams.get('tutorial') === '1';
+  if (requestedTutorial) {
+    entryURL.searchParams.delete('tutorial');
+    history.replaceState(history.state, '', entryURL.href);
+  }
   let seen = false; try { seen = !!sessionStorage.getItem(SEEN_KEY); } catch { /* Optional session preference. */ }
-  if (!seen && state.page === '/app/ai/workbench') queueMicrotask(()=>showWelcome());
+  if ((requestedTutorial || !seen) && state.page === '/app/ai/workbench') queueMicrotask(()=>showWelcome());
 })();
