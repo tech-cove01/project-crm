@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeMessage } from "@/lib/agent-runtime";
 import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
@@ -7,6 +7,8 @@ import { runPiAiSdkCall } from "@/lib/agent-runtime/pi/ai-sdk-compat";
 
 const mocks = vi.hoisted(() => ({
   model: vi.fn(),
+  currentAdmin: null as unknown,
+  closeBlocked: null as string | null,
   reversible: vi.fn(),
   event: vi.fn(async () => undefined),
   query: vi.fn(async (sql: string) => ({ rows: sql.includes("from org_memory_pointers") ? [{
@@ -32,7 +34,7 @@ vi.mock("@/lib/ai/agents/mission-direction-consumption", async (importOriginal) 
   loadMissionDirectionContextProbe: vi.fn(async () => undefined),
 }));
 vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({ query: mocks.query,
-  connect: async () => ({ query: mocks.query, release: vi.fn() }),
+  connect: async () => ({ query: closeQuery, release: vi.fn() }),
 }) }));
 vi.mock("@/lib/agent-engine/agent/request-deps", () => ({
   requestTurnDeps: () => ({ crmCfg: {}, llmCfg: {}, log: {}, runtime: {} }),
@@ -55,6 +57,36 @@ vi.mock("@/lib/agent-engine/edge/crm/mcp-tools", () => ({
 
 import { runResumedWorkbenchTurn } from "@/lib/ai/agents/run-resumed-workbench-turn";
 import { MissionDirectionFenceError } from "@/lib/ai/agents/mission-direction-fence";
+
+async function closeQuery(sql: string, params: unknown[] = []) {
+  type Builder = {
+    select: (...args: unknown[]) => Builder;
+    eq: (...args: unknown[]) => Builder;
+    update: (value: Record<string, unknown>) => Builder;
+    maybeSingle: () => Promise<{ data: { status: string } | null }>;
+    then: (resolve: (value: { data?: unknown[] }) => unknown) => Promise<unknown>;
+  };
+  const admin = mocks.currentAdmin as { from: (table: string) => Builder };
+  if (sql.startsWith("select status from public.ai_workbench_runs")) {
+    const { data } = await admin.from("ai_workbench_runs").select("status").eq("id", params[1]).maybeSingle();
+    return { rows: data ? [data] : [] };
+  }
+  if (sql.includes("fn_assert_ai_collaboration_write_allowed") && mocks.closeBlocked)
+    throw Object.assign(new Error(mocks.closeBlocked), { code: "P0001" });
+  if (sql.startsWith("select id,tool_name")) {
+    const { data } = await admin.from("ai_agent_action_proposals").select("id, tool_name", { count: "exact" })
+      .eq("organization_id", params[0]).eq("run_id", params[1]).eq("status", "pending");
+    return { rows: mocks.closeBlocked === "collaboration_new_run_required" ? [] : data ?? [] };
+  }
+  if (sql.startsWith("update public.ai_workbench_runs set status=$3")) {
+    await admin.from("ai_workbench_runs").update({ status: params[2], final_text: params[3],
+      result_document: params[4] === null ? null : JSON.parse(params[4] as string), error_code: params[5],
+      runtime_state: JSON.parse(params[6] as string) }).eq("organization_id", params[0]).eq("id", params[1]);
+    return { rows: [{ id: params[1] }] };
+  }
+  return mocks.query(sql);
+}
+beforeEach(() => { mocks.closeBlocked = null; });
 
 describe("resumed workbench turn", () => {
   it("delivers the current memory revision to real Pi after JSON restore and persists that same context", async () => {
@@ -115,7 +147,7 @@ describe("resumed workbench turn", () => {
         usage: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens }, costCents: 0 };
     });
     await runResumedWorkbenchTurn({
-      admin: admin as never, organizationId: "org-1", runId: "run-1", jobId: "job-1",
+      admin: (mocks.currentAdmin = admin) as never, organizationId: "org-1", runId: "run-1", jobId: "job-1",
       agentId: "agent-1", missionId: null, versionId: "version-1", runtimeState: { versionId: "version-1" },
       task: "核对报价", mode: "inspect",
       scope: { contactId: null, leadId: null, conversationId: null, pipelineId: null, channelId: null },
@@ -147,14 +179,18 @@ describe("resumed workbench turn", () => {
   });
 
   it.each([
-    { tool: "crm_move_lead_stage", blocked: false, status: "awaiting_confirmation",
+    { tool: "crm_move_lead_stage", blocked: false, closingCode: null, status: "awaiting_confirmation",
       text: "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。" },
-    { tool: "send_message", blocked: false, status: "awaiting_confirmation",
+    { tool: "send_message", blocked: false, closingCode: null, status: "awaiting_confirmation",
       text: "Agent 回复草稿已保存在 CRM，尚未发送。批准后将进入正式发送队列。" },
-    { tool: "send_message", blocked: true, status: "partial",
+    { tool: "send_message", blocked: true, closingCode: null, status: "partial",
       text: "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。" },
+    { tool: "crm_move_lead_stage", blocked: false, closingCode: "collaboration_review_required", status: "partial",
+      text: "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。" },
+    { tool: "crm_move_lead_stage", blocked: false, closingCode: "collaboration_new_run_required", status: "partial",
+      text: "当前任务的提案已失效，请新建任务重新取证并生成提案。" },
   ])("uses persisted $tool pending state when no new proposal is made (blocked=$blocked)", async ({
-    tool, blocked, status: expectedStatus, text,
+    tool, blocked, closingCode, status: expectedStatus, text,
   }) => {
     vi.clearAllMocks();
     let status = "running";
@@ -215,6 +251,7 @@ describe("resumed workbench turn", () => {
       return { result: { text: "任务完成", turnCount: 1, runtimeMessages: transcript },
         usage: { inputTokens: 1, outputTokens: 1 }, costCents: 0 };
     });
+    mocks.closeBlocked = closingCode;
     const normalQuery = mocks.query.getMockImplementation()!;
     mocks.query.mockImplementation(async (sql: string) => {
       if (blocked && sql.includes("fn_assert_ai_collaboration_write_allowed"))
@@ -223,7 +260,7 @@ describe("resumed workbench turn", () => {
     });
     try {
       await runResumedWorkbenchTurn({
-        admin: admin as never, organizationId: "org-1", runId: "run-1", jobId: "job-1",
+        admin: (mocks.currentAdmin = admin) as never, organizationId: "org-1", runId: "run-1", jobId: "job-1",
         agentId: "agent-1", missionId: null, versionId: "version-1", runtimeState: { versionId: "version-1" },
         task: "继续核对当前动作", mode: "act",
         scope: { contactId: null, leadId: null, conversationId: null, pipelineId: null, channelId: null },
@@ -238,7 +275,7 @@ describe("resumed workbench turn", () => {
     expect(insert).not.toHaveBeenCalled();
     expect(savedRun).toMatchObject({
       status: expectedStatus, final_text: text, result_document: null,
-      error_code: blocked ? "collaboration_review_required" : null,
+      error_code: closingCode ?? (blocked ? "collaboration_review_required" : null),
     });
     expect(status).toBe(expectedStatus);
     expect(selections).toContainEqual({
@@ -266,7 +303,7 @@ describe("resumed workbench turn", () => {
     mocks.model.mockRejectedValueOnce(new MissionDirectionFenceError("revision_changed"));
 
     await runResumedWorkbenchTurn({
-      admin: admin as never,
+      admin: (mocks.currentAdmin = admin) as never,
       organizationId: "org-1", runId: "run-1", jobId: "job-1",
       agentId: "agent-1", missionId: "mission-1", versionId: "version-1",
       runtimeState: { directionRevision: 1 }, task: "推进商机", mode: "act",
@@ -374,7 +411,7 @@ describe("resumed workbench turn", () => {
     });
 
     await runResumedWorkbenchTurn({
-      admin: admin as never,
+      admin: (mocks.currentAdmin = admin) as never,
       organizationId: "org-1",
       runId: "run-1",
       jobId: "job-1",

@@ -103,4 +103,14 @@ describe("durable workbench resume job", () => {
     ).rejects.toThrow("workbench_resume_run_id_missing");
     expect(mocks.from).not.toHaveBeenCalled();
   });
+
+  it("passes the closing transaction's queryable through to the lease check", async () => {
+    await runWorkbenchResumeJob(job, pool, "worker-a");
+    const beforeSideEffect = mocks.runResumed.mock.calls[0]![0].beforeSideEffect;
+    const query = vi.fn().mockResolvedValue({ rows: [{ current: true }] });
+    await beforeSideEffect({ query });
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("j.locked_by=$3"), [
+      "queue-job", "org-a", "worker-a", "2026-09-26 12:00:00.123456+00",
+    ]);
+  });
 });

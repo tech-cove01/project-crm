@@ -39,12 +39,12 @@ import { assertLocalWorkbenchBudgetAllowed } from "@/lib/ai/agents/local-workben
 import { recoverWorkbenchResult } from "@/lib/ai/agents/workbench-result-recovery";
 import {
   createWorkbenchResultChannel,
-  workbenchVisibleResult,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   WORKBENCH_RESULT_INSTRUCTION,
   WORKBENCH_PROPOSAL_TOOL_INSTRUCTION,
-  workbenchResultPartialReason,
 } from "@/lib/ai/agents/workbench-result-submission";
+
+import { closeWorkbenchRun } from "./workbench-close";
 
 /** Execute a start run from durable CRM state; retries resume the saved Pi messages. */
 export async function runWorkbenchStartJob(
@@ -64,7 +64,7 @@ export async function runWorkbenchStartJob(
   if (error) throw new Error("workbench_start_run_read_failed");
   if (!run || run.status === "cancelled") return;
   if (run.status !== "queued" && run.status !== "running") return;
-  const beforeSideEffect = () => assertWorkbenchJobLease(pool, job, workerId);
+  const beforeSideEffect = (queryable: Pick<Pool, "query"> = pool) => assertWorkbenchJobLease(queryable, job, workerId);
   await beforeSideEffect();
 
   const runtime = run.runtime_state as {
@@ -877,69 +877,31 @@ export async function runWorkbenchStartJob(
     }
     if (proposalRows.some((proposal) => proposal.tool === "send_message"))
       finalText = "Agent 回复草稿已保存在 CRM，尚未发送。批准后将进入正式发送队列。";
-    const pending = proposalRows.some((proposal) => proposal.status === "pending");
     const exhausted = result.impediments.some(
       (item) => item.code === "token_budget_exhausted" || item.code === "cost_budget_exhausted",
     );
-    const answerInvalid = result.impediments.some(
-      (item) => item.code === "unsafe_internal_draft" || item.code === "answer_likely_truncated",
-    );
     const emptyFinalAnswer = !finalText.trim();
-    const partialReason = collaborationBlocked ? "collaboration_review_required" : workbenchResultPartialReason({
-      finalText,
-      submission: submittedResult,
-      answerInvalidCode: answerInvalid
-        ? result.impediments.find((item) =>
-            ["unsafe_internal_draft", "answer_likely_truncated"].includes(item.code),
-          )?.code ?? "answer_invalid"
-        : null,
-      budgetExhausted: exhausted,
-      hasPendingApproval: pending,
+    const closed = await closeWorkbenchRun(pool, {
+      organizationId: job.organization_id, runId, finalText, submission: submittedResult,
+      answerInvalidCode: result.impediments.find((item) =>
+        ["unsafe_internal_draft", "answer_likely_truncated"].includes(item.code))?.code ?? null,
+      budgetExhausted: exhausted, beforeSideEffect, allowQueued: true,
+      runtimeState: {
+        ...runtime, proposals: lastSequence,
+        impediments: [
+          ...result.impediments.map((item) => item.code),
+          ...(emptyFinalAnswer && !exhausted ? ["empty_final_answer"] : []),
+        ],
+      },
     });
-    const status = collaborationBlocked ? "partial" : pending
-      ? "awaiting_confirmation"
-      : partialReason
-        ? "partial"
-        : "completed";
-    const visibleResult = workbenchVisibleResult({
-      finalText, submission: submittedResult, pending, collaborationBlocked,
-      pendingSendMessage: proposalRows.some((proposal) => proposal.status === "pending" && proposal.tool === "send_message"),
-    });
-    await beforeSideEffect();
-    const { error: closeError } = await admin
-      .from("ai_workbench_runs")
-      .update({
-        status,
-        final_text: visibleResult.finalText,
-        result_document: visibleResult.resultDocument,
-        runtime_state: {
-          ...runtime,
-          proposals: lastSequence,
-          impediments: [
-            ...result.impediments.map((item) => item.code),
-            ...(emptyFinalAnswer && !exhausted ? ["empty_final_answer"] : []),
-          ],
-        },
-        error_code: status === "partial" ? partialReason : null,
-        ...(pending ? {} : { completed_at: new Date().toISOString() }),
-      })
-      .eq("organization_id", job.organization_id)
-      .eq("id", runId)
-      .in("status", ["queued", "running"]);
-    if (closeError) throw new Error("workbench_run_update_failed");
-    if (!pending)
+    if (!closed || closed.continued) return;
+    if (closed.status !== "awaiting_confirmation")
       await appendWorkbenchEvent(admin, {
-        organizationId: job.organization_id,
-        runId,
-        type: status === "partial" ? "run_partial" : "run_completed",
+        organizationId: job.organization_id, runId,
+        type: closed.status === "partial" ? "run_partial" : "run_completed",
         payload: {
-          status,
-          hasAnswer: !emptyFinalAnswer,
-          ...(status === "partial"
-            ? {
-                reason: partialReason,
-              }
-            : {}),
+          status: closed.status, hasAnswer: !emptyFinalAnswer,
+          ...(closed.status === "partial" ? { reason: closed.partialReason } : {}),
           proposalCount: proposalRows.length,
         },
       });

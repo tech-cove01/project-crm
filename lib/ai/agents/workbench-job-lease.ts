@@ -4,7 +4,7 @@ import type { JobRow } from "@/lib/agent-engine/queue/queue";
 
 /** Fail closed before CRM writes when a long-running worker has lost its queue lease. */
 export async function assertWorkbenchJobLease(
-  pool: Pool,
+  pool: Pick<Pool, "query">,
   job: JobRow,
   workerId: string,
 ): Promise<void> {

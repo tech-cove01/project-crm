@@ -1,3 +1,5 @@
+import { closeWorkbenchRun } from "./workbench-close";
+import type { Pool } from "pg";
 import { workbenchProposalPreview } from "./workbench-proposal-preview";
 import { composeSystemPrompt, loadOrgMemory, orgMemoryProvenance, renderOrgMemory } from "@/lib/agent-engine/agent/org-memory";
 import { appendWorkbenchEvent } from "@/lib/ai/agents/workbench-events";
@@ -32,11 +34,9 @@ import { aggregateWorkbenchLlmUsage, type WorkbenchLlmCallUsage } from "@/lib/ai
 import { recoverWorkbenchResult } from "@/lib/ai/agents/workbench-result-recovery";
 import {
   createWorkbenchResultChannel,
-  workbenchVisibleResult,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   WORKBENCH_RESULT_INSTRUCTION,
   WORKBENCH_PROPOSAL_TOOL_INSTRUCTION,
-  workbenchResultPartialReason,
   workbenchFinalText,
 } from "@/lib/ai/agents/workbench-result-submission";
 
@@ -69,7 +69,7 @@ export async function runResumedWorkbenchTurn(input: {
     localUnpricedDemo?: boolean;
   };
   priorFinalText: string | null;
-  beforeSideEffect?: () => Promise<void>;
+  beforeSideEffect?: (queryable?: Pick<Pool, "query">) => Promise<void>;
 }): Promise<void> {
   const { admin, organizationId, runId } = input;
   const abortController = new AbortController();
@@ -520,95 +520,44 @@ export async function runResumedWorkbenchTurn(input: {
       fallbackText: result.finalText,
       candidateBodies: result.candidates.map((candidate) => candidate.body),
     });
-    const { data: pendingProposals, count: pendingCount, error: pendingReadError } = await admin
-      .from("ai_agent_action_proposals")
-      .select("id, tool_name", { count: "exact" })
-      .eq("organization_id", organizationId)
-      .eq("run_id", runId)
-      .eq("status", "pending");
-    if (pendingReadError) throw new Error("workbench_pending_proposals_read_failed");
     const exhausted = result.impediments.some(
       (item) => item.code === "token_budget_exhausted" || item.code === "cost_budget_exhausted",
     );
-    const answerInvalid = result.impediments.some(
-      (item) => item.code === "unsafe_internal_draft" || item.code === "answer_likely_truncated",
-    );
+    const answerInvalidCode = result.impediments.find((item) =>
+      ["unsafe_internal_draft", "answer_likely_truncated"].includes(item.code))?.code ?? null;
     const emptyFinalAnswer = !finalText.trim();
-    const partialReason = collaborationBlocked ? "collaboration_review_required" : workbenchResultPartialReason({
-      finalText,
-      submission: submittedResult,
-      answerInvalidCode: answerInvalid
-        ? result.impediments.find((item) =>
-            ["unsafe_internal_draft", "answer_likely_truncated"].includes(item.code),
-          )?.code ?? "answer_invalid"
-        : null,
-      budgetExhausted: exhausted,
-      hasPendingApproval: (pendingCount ?? 0) > 0,
+    const closed = await closeWorkbenchRun(getRequestPool(), {
+      organizationId, runId, finalText, submission: submittedResult,
+      answerInvalidCode, budgetExhausted: exhausted, beforeSideEffect: input.beforeSideEffect,
+      continueAfterAutomaticWrites: observations.length > 0 && !exhausted && !answerInvalidCode,
+      runtimeState: {
+        ...input.runtimeState, versionId: input.versionId, proposals: sequence,
+        impediments: [
+          ...result.impediments.map((item) => item.code),
+          ...(emptyFinalAnswer && !exhausted ? ["empty_final_answer"] : []),
+        ],
+      },
     });
-    const status = collaborationBlocked ? "partial" :
-      (pendingCount ?? 0) > 0
-        ? "awaiting_confirmation"
-        : partialReason
-          ? "partial"
-          : "completed";
-    if (!collaborationBlocked && observations.length > 0 && (pendingCount ?? 0) === 0 && !exhausted && !answerInvalid) {
+    if (!closed) return;
+    if (closed.continued) {
       const lastAuto = newProposals.at(-1);
       if (lastAuto)
         await appendWorkbenchEvent(admin, {
-          organizationId,
-          runId,
-          type: "run_resumed",
-          payload: { proposalId: lastAuto },
+          organizationId, runId, type: "run_resumed", payload: { proposalId: lastAuto },
         });
       await runResumedWorkbenchTurn({
-        ...input,
-        messages: continuationMessages,
+        ...input, messages: continuationMessages,
         priorFinalText: finalText || input.priorFinalText,
       });
       return;
     }
-    const visibleResult = workbenchVisibleResult({
-      finalText, submission: submittedResult, pending: (pendingCount ?? 0) > 0, collaborationBlocked,
-      pendingSendMessage: (pendingProposals ?? []).some((proposal) => proposal.tool_name === "send_message"),
-    });
-    await input.beforeSideEffect?.();
-    const { error: updateError } = await admin
-      .from("ai_workbench_runs")
-      .update({
-        status,
-        final_text: visibleResult.finalText,
-        result_document: visibleResult.resultDocument,
-        error_code: status === "partial" ? partialReason : null,
-        runtime_state: {
-          ...input.runtimeState,
-          versionId: input.versionId,
-          proposals: sequence,
-          impediments: [
-            ...result.impediments.map((item) => item.code),
-            ...(emptyFinalAnswer && !exhausted ? ["empty_final_answer"] : []),
-          ],
-        },
-        ...(status === "completed" || status === "partial"
-          ? { completed_at: new Date().toISOString() }
-          : {}),
-      })
-      .eq("organization_id", organizationId)
-      .eq("id", runId)
-      .eq("status", "running");
-    if (updateError) throw new Error("workbench_run_update_failed");
-    if (status !== "awaiting_confirmation")
+    if (closed.status !== "awaiting_confirmation")
       await appendWorkbenchEvent(admin, {
-        organizationId,
-        runId,
-        type: status === "partial" ? "run_partial" : "run_completed",
+        organizationId, runId,
+        type: closed.status === "partial" ? "run_partial" : "run_completed",
         payload: {
-          status,
-          hasAnswer: !emptyFinalAnswer,
-          ...(status === "partial"
-            ? {
-                reason: partialReason,
-              }
-            : {}),
+          status: closed.status, hasAnswer: !emptyFinalAnswer,
+          ...(closed.status === "partial" ? { reason: closed.partialReason } : {}),
           proposalCount: newProposals.length,
         },
       });

@@ -17,7 +17,7 @@ export async function runWorkbenchResumeJob(
   if (typeof runId !== "string") throw new Error("workbench_resume_run_id_missing");
 
   const admin = createAdminClient();
-  const beforeSideEffect = () => assertWorkbenchJobLease(pool, job, workerId);
+  const beforeSideEffect = (queryable: Pick<Pool, "query"> = pool) => assertWorkbenchJobLease(queryable, job, workerId);
   const { data: run, error: runError } = await admin
     .from("ai_workbench_runs")
     .select("id, agent_id, mission_id, task, mode, status, runtime_state, scope, budget, final_text")

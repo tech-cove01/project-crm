@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
   admin: vi.fn(),
   collaboration: vi.fn(),
   selectPlan: vi.fn(),
+  lease: vi.fn(),
   mcpTools: {} as Record<string, unknown>,
+  closeBlocked: null as string | null,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.admin }));
 vi.mock("@/lib/agent-engine/agent/pi-turn-execution", () => ({
@@ -24,7 +26,7 @@ vi.mock("@/lib/agent-engine/db/request-pool", () => ({
 vi.mock("@/lib/agent-engine/agent/request-deps", () => ({
   requestTurnDeps: () => ({ crmCfg: {}, llmCfg: {}, log: {}, runtime: {} }),
 }));
-vi.mock("@/lib/ai/agents/workbench-job-lease", () => ({ assertWorkbenchJobLease: vi.fn() }));
+vi.mock("@/lib/ai/agents/workbench-job-lease", () => ({ assertWorkbenchJobLease: mocks.lease }));
 vi.mock("@/lib/agent-engine/agent/agent-config", () => ({
   loadAgentVersionConfig: async () => ({
     systemPrompt: "CRM playbook",
@@ -59,7 +61,30 @@ const job = {
   attempts: 1,
   max_attempts: 3,
 } as unknown as JobRow;
-const pool = { query: mocks.query } as unknown as Pool;
+async function closeQuery(sql: string, params: unknown[] = []) {
+  const admin = mocks.admin();
+  if (sql.startsWith("select status from public.ai_workbench_runs")) {
+    const { data } = await admin.from("ai_workbench_runs").select("status").eq("id", params[1]).maybeSingle();
+    return { rows: data ? [data] : [] };
+  }
+  if (sql.includes("fn_assert_ai_collaboration_write_allowed") && mocks.closeBlocked)
+    throw Object.assign(new Error(mocks.closeBlocked), { code: "P0001" });
+  if (sql.startsWith("select id,tool_name")) {
+    const { data } = await admin.from("ai_agent_action_proposals").select("id, tool_name", { count: "exact" })
+      .eq("organization_id", params[0]).eq("run_id", params[1]).eq("status", "pending");
+    return { rows: mocks.closeBlocked === "collaboration_new_run_required" ? [] : data ?? [] };
+  }
+  if (sql.startsWith("update public.ai_workbench_runs set status=$3")) {
+    await admin.from("ai_workbench_runs").update({ status: params[2], final_text: params[3],
+      result_document: params[4] === null ? null : JSON.parse(params[4] as string), error_code: params[5],
+      runtime_state: JSON.parse(params[6] as string) }).eq("organization_id", params[0]).eq("id", params[1]);
+    return { rows: [{ id: params[1] }] };
+  }
+  return mocks.query(sql);
+}
+const pool = { query: mocks.query,
+  connect: async () => ({ query: closeQuery, release: vi.fn() }),
+} as unknown as Pool;
 const policyRow = {
   id: "version3",
   version_id: "version3",
@@ -75,6 +100,7 @@ beforeEach(() => {
   mocks.selectPlan.mockReturnValue(null);
   mocks.collaboration.mockResolvedValue(null);
   mocks.mcpTools = {};
+  mocks.closeBlocked = null;
   mocks.model.mockRejectedValue(new Error("stop_after_model_input"));
   mocks.query.mockImplementation(async (sql: string) => ({
     rows: sql.includes("from org_memory_pointers") ? [policyRow] : [],
@@ -110,7 +136,8 @@ beforeEach(() => {
 });
 
 describe("Workbench start pending proposal presentation", () => {
-  it("closes the actual staged proposal with server pending text and preserves the model transcript", async () => {
+  it.each([null, "collaboration_review_required", "collaboration_new_run_required"])(
+    "closes staged proposals against the current review state (%s)", async (blocked) => {
     const proposals: Array<Record<string, unknown>> = [];
     const runUpdates: Array<Record<string, unknown>> = [];
     let savedMessages: RuntimeMessage[] = [];
@@ -170,6 +197,7 @@ describe("Workbench start pending proposal presentation", () => {
         usage: { inputTokens: 1, outputTokens: 1 }, costCents: 0 };
     });
 
+    mocks.closeBlocked = blocked;
     await runWorkbenchStartJob(job, pool, "worker1");
 
     expect(mocks.model).toHaveBeenCalledOnce();
@@ -178,11 +206,18 @@ describe("Workbench start pending proposal presentation", () => {
       tool_name: "crm_send_whatsapp_message", tool_args: { body: "待批准通知" }, status: "pending",
     })]);
     expect(runUpdates.at(-1)).toMatchObject({
-      status: "awaiting_confirmation",
-      final_text: "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。",
-      result_document: null, error_code: null,
+      status: blocked ? "partial" : "awaiting_confirmation",
+      final_text: blocked === "collaboration_new_run_required" ? "当前任务的提案已失效，请新建任务重新取证并生成提案。"
+        : blocked ? "协作证据尚待复核，当前待审操作仍被业务层阻断。请先完成复核。"
+        : "当前待审操作提案尚未执行。请核对提案中的目标和参数后明确批准或拒绝。",
+      result_document: null, error_code: blocked,
     });
+    if (blocked)
+      expect(mocks.event).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        type: "run_partial", payload: expect.objectContaining({ status: "partial", reason: blocked }),
+      }));
     expect(savedMessages).toEqual(originalTranscript);
+    expect(mocks.lease.mock.calls.some(([queryable]) => queryable.query === closeQuery)).toBe(true);
     expect(transcript).toEqual(originalTranscript);
   });
 });
