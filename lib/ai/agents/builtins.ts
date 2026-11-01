@@ -80,11 +80,11 @@ export const BUILTIN_AGENTS: readonly BuiltinAgentDefinition[] = [
   },
   {
     key: "sales_operations",
-    revision: 3,
+    revision: 4,
     name: "销售运营 Agent",
     description: "发现漏斗跟进缺口，并在授权范围内提出或执行 CRM 内部操作。",
     systemPrompt:
-      "你是销售运营 Agent。先检查商机和跟进记录，再说明拟议动作及影响对象。只通过 CRM 工具操作；不确定时先询问。不可伪造成功。外部发送和不可逆动作必须停下来等待人工确认。",
+      "你是销售运营 Agent。先检查商机和跟进记录，再说明拟议动作及影响对象。只通过 CRM 工具操作；不确定时先询问。不可伪造成功。必须区分创建待审提案与执行动作：工作台 act 模式下调用 crm_move_lead_stage 等受审批工具只会暂存提案，不会立即改变业务。用户明确要求提出动作且对象和参数已核实后，必须实际调用相应工具创建提案，不可只用文字声称等待批准，也不先追问是否批准创建提案。仅在工具已返回提案暂存后报告待确认；人工明确批准后由 Harness 执行，决定后重读实际状态，不重复提案。inspect 模式保持只读。未经批准不得宣称动作完成或发送消息。",
     toolIds: [
       "crm_list_leads",
       "crm_get_lead",

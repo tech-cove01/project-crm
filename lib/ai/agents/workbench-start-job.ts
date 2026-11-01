@@ -42,6 +42,7 @@ import {
   resultDocument,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   WORKBENCH_RESULT_INSTRUCTION,
+  WORKBENCH_PROPOSAL_TOOL_INSTRUCTION,
   workbenchResultPartialReason,
 } from "@/lib/ai/agents/workbench-result-submission";
 
@@ -328,7 +329,12 @@ export async function runWorkbenchStartJob(
       } },
     );
     const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
-    const resultChannel = createWorkbenchResultChannel();
+    const resultChannel = createWorkbenchResultChannel({
+      hasPendingApproval: () => proposalInputs.some(({ tool }) => {
+        const effect = workbenchToolEffect(tool)?.effect;
+        return effect === "irreversible" || effect === "external";
+      }),
+    });
     let toolResultCount = 0;
     const effectByTool = new Map<string, NonNullable<ReturnType<typeof workbenchToolEffect>>>();
     const gatedTools: Record<string, unknown> = {};
@@ -342,6 +348,8 @@ export async function runWorkbenchStartJob(
       if (typeof original.execute !== "function") continue;
       gatedTools[name] = {
         ...(definition as object),
+        ...(effect.effect === "read" ? {} : { description:
+          `${(definition as { description?: string }).description ?? name}\n${WORKBENCH_PROPOSAL_TOOL_INSTRUCTION}` }),
         execute: async (args: unknown, options: unknown) => {
           if (effect.effect === "read") return original.execute!(args, options);
           if (collaborationBlocked)
@@ -880,6 +888,7 @@ export async function runWorkbenchStartJob(
           )?.code ?? "answer_invalid"
         : null,
       budgetExhausted: exhausted,
+      hasPendingApproval: pending,
     });
     const status = collaborationBlocked ? "partial" : pending
       ? "awaiting_confirmation"

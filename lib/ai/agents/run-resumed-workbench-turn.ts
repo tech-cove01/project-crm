@@ -35,6 +35,7 @@ import {
   resultDocument,
   SUBMIT_WORKBENCH_RESULT_TOOL,
   WORKBENCH_RESULT_INSTRUCTION,
+  WORKBENCH_PROPOSAL_TOOL_INSTRUCTION,
   workbenchResultPartialReason,
   workbenchFinalText,
 } from "@/lib/ai/agents/workbench-result-submission";
@@ -173,7 +174,19 @@ export async function runResumedWorkbenchTurn(input: {
       } },
     );
     const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
-    const resultChannel = createWorkbenchResultChannel();
+    const resultChannel = createWorkbenchResultChannel({
+      hasPendingApproval: async () => {
+        if (proposalInputs.some(({ tool }) => {
+          const effect = workbenchToolEffect(tool)?.effect;
+          return effect === "irreversible" || effect === "external";
+        })) return true;
+        const { count, error } = await admin.from("ai_agent_action_proposals")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId).eq("run_id", runId).eq("status", "pending");
+        if (error) throw new Error("workbench_pending_proposals_read_failed");
+        return (count ?? 0) > 0;
+      },
+    });
     let toolResultCount = 0;
     const effectByTool = new Map<string, NonNullable<ReturnType<typeof workbenchToolEffect>>>();
     const gatedTools: Record<string, unknown> = {};
@@ -185,6 +198,8 @@ export async function runResumedWorkbenchTurn(input: {
       if (typeof original.execute !== "function") continue;
       gatedTools[name] = {
         ...(definition as object),
+        ...(effect.effect === "read" ? {} : { description:
+          `${(definition as { description?: string }).description ?? name}\n${WORKBENCH_PROPOSAL_TOOL_INSTRUCTION}` }),
         execute: async (args: unknown, options: unknown) => {
           if (effect.effect === "read") return original.execute!(args, options);
           if (collaborationBlocked)
@@ -499,12 +514,13 @@ export async function runResumedWorkbenchTurn(input: {
       fallbackText: result.finalText,
       candidateBodies: result.candidates.map((candidate) => candidate.body),
     });
-    const { count: pendingCount } = await admin
+    const { count: pendingCount, error: pendingReadError } = await admin
       .from("ai_agent_action_proposals")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId)
       .eq("run_id", runId)
       .eq("status", "pending");
+    if (pendingReadError) throw new Error("workbench_pending_proposals_read_failed");
     const exhausted = result.impediments.some(
       (item) => item.code === "token_budget_exhausted" || item.code === "cost_budget_exhausted",
     );
@@ -521,6 +537,7 @@ export async function runResumedWorkbenchTurn(input: {
           )?.code ?? "answer_invalid"
         : null,
       budgetExhausted: exhausted,
+      hasPendingApproval: (pendingCount ?? 0) > 0,
     });
     const status = collaborationBlocked ? "partial" :
       (pendingCount ?? 0) > 0

@@ -80,6 +80,47 @@ describe("Workbench structured result channel", () => {
     expect(channel.submitted()).toBeNull();
   });
 
+  it("requires a real staged approval and permits correction after a refused submission", async () => {
+    let pending = false;
+    const channel = createWorkbenchResultChannel({ hasPendingApproval: () => pending });
+    const submit = channel.tools[SUBMIT_WORKBENCH_RESULT_TOOL]!;
+    const waiting = { ...candidate, missingInformation: [], wakeCondition: "human_approval" as const };
+    expect(await submit.execute!(waiting, {} as never)).toMatchObject({
+      accepted: false, reason: "approval_proposal_missing",
+    });
+    expect(channel.submitted()).toBeNull();
+    expect(workbenchResultPartialReason({ finalText: waiting.summary, submission: waiting,
+      budgetExhausted: false, hasPendingApproval: false })).toBe("approval_proposal_missing");
+    pending = true;
+    expect(await submit.execute!(waiting, {} as never)).toEqual({ accepted: true });
+    expect(workbenchResultPartialReason({ finalText: waiting.summary, submission: waiting,
+      budgetExhausted: false, hasPendingApproval: true })).toBeNull();
+  });
+
+  it("fails closed without an approval source while allowing an honest blocked result", async () => {
+    const channel = createWorkbenchResultChannel();
+    const submit = channel.tools[SUBMIT_WORKBENCH_RESULT_TOOL]!;
+    expect(await submit.execute!({ ...candidate, wakeCondition: "human_approval" }, {} as never))
+      .toMatchObject({ accepted: false, reason: "approval_proposal_missing" });
+    expect(await submit.execute!({ ...candidate, wakeCondition: "none" }, {} as never))
+      .toEqual({ accepted: true });
+  });
+
+  it("keeps only the first result when parallel submissions await the same approval lookup", async () => {
+    let release!: (value: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { release = resolve; });
+    const channel = createWorkbenchResultChannel({ hasPendingApproval: () => pending });
+    const submit = channel.tools[SUBMIT_WORKBENCH_RESULT_TOOL]!;
+    const waiting = { ...candidate, wakeCondition: "human_approval" as const };
+    const first = submit.execute!(waiting, {} as never);
+    const second = submit.execute!({ ...waiting, summary: "不能覆盖首份提交" }, {} as never);
+    release(true);
+    expect(await Promise.all([first, second])).toEqual([
+      { accepted: true }, { accepted: false, reason: "already_submitted" },
+    ]);
+    expect(channel.submitted()?.summary).toBe(waiting.summary);
+  });
+
   it("distinguishes a complete run from a missing structured result, evidence gap and budget stop", () => {
     expect(
       workbenchResultPartialReason({
