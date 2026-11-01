@@ -158,11 +158,13 @@ export interface AgentTurnInput {
   abortSignal?: AbortSignal;
   tools?: RuntimeTool[];
   maxTurns?: number;
-  /** Reserve the existing last turn for a bounded answer/submission phase. */
+  /** Reserve existing final turns for a bounded answer/submission phase. */
   finalTurn?: {
     /** Intersected with the tools still available; never grants a new tool. */
     allowedToolNames: readonly string[];
     instruction: string;
+    /** Defaults to one; two allows bounded submission-schema correction. */
+    reserveTurns?: 1 | 2;
   };
   toolExecution?: "parallel" | "sequential";
   transformContext?: (
@@ -187,6 +189,8 @@ export interface AgentTurnInput {
     turn: number;
     /** Cumulative usage since this run() call began, NOT a per-turn delta. */
     usage: RuntimeUsage;
+    /** Public results from this turn, for bounded schema correction only. */
+    toolResults?: Array<Extract<RuntimeMessage, { role: "tool" }>>;
   }) => boolean | Promise<boolean>;
   steering?: {
     poll(): Promise<RuntimeSteeringMessage[]>;

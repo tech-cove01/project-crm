@@ -188,6 +188,7 @@ export const WORKBENCH_RESULT_INSTRUCTION = [
   `最终必须调用 ${SUBMIT_WORKBENCH_RESULT_TOOL} 一次提交用户可见结果，不要将最终答案写成普通文本。`,
   "summary 只写已经有证据支持的事实；不能宣称待审提案、排队发送或业务目标已经完成。",
   "evidence 只填实际读取过的 CRM/知识/专家/运行事件的 UUID；没有证据则留空，不得编造引用。",
+  "每条 evidence.assertions 最多4项，仅复制成功观察的字段原值，无法逐值核对时省略 assertions。knowledge.sourceId 使用返回的知识 evidence/receipt UUID，不能用 provider/source UUID、页面UUID或memory UUID替代；specialist.sourceId 使用实际child Run UUID。",
   "若工具结果包含联系人 is_blocked/is_anonymized/cpf_available、商机 status/stage_id/value_cents/currency/expected_close_date 或会话 status/channel/unread_count，可在对应 evidence.assertions 填入实际看到的字段和值；不要推测缺失字段，也不要提交姓名、电话、消息正文或密钥。",
   "missingInformation 列出仍缺的事实；nextStep 写一个可验证的下一步；wakeCondition 只描述建议，实际唤醒由 CRM 决定。",
   "missingInformation 只包含阻止完成当前用户任务的材料；只读查询已得到所需事实时应为 []。用户明确禁止查询的知识、未来外联所需同意、演示数据不是真实客户等，不自动构成本次只读任务的缺口；未来动作的前置条件写在 nextStep，不升级本次范围。",

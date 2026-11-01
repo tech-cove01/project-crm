@@ -467,7 +467,8 @@ export async function runWorkbenchStartJob(
         maxSteps: remainingMaxSteps,
         finalTurn: {
           allowedToolNames: [SUBMIT_WORKBENCH_RESULT_TOOL],
-          instruction: "本轮只根据此前真实工具观察调用 submit_workbench_result 提交结果，不再读取或暂存 CRM 动作。真实失败、缺口和待审状态必须保留；没有实际提案不得声称等待批准，不用普通文本或虚构事实代替提交。",
+          reserveTurns: 2,
+          instruction: "最后的结果窗口只根据此前真实工具观察调用 submit_workbench_result，不再读取或暂存 CRM 动作。每条 evidence.assertions 最多4项；只使用实际观察UUID或协作上下文给出的typed引用，资料源UUID不是知识证据回执。schema拒绝时只修正格式一次；真实失败、缺口和待审状态必须保留，没有提案不得声称等待批准。",
         },
         abortSignal: abortController.signal,
         shouldStopAfterTurn: ({ cumulativeUsage, costCents }) =>

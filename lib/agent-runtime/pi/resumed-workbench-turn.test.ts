@@ -134,7 +134,7 @@ describe("resumed workbench turn", () => {
     expect(savedMessages.some((message) => message.role === "assistant" && message.content === "Earlier finding.")).toBe(true);
     expect(mocks.model).toHaveBeenCalledOnce();
     expect(mocks.model.mock.calls[0]?.[1]).toMatchObject({ maxSteps: 2,
-      finalTurn: { allowedToolNames: ["submit_workbench_result"] } });
+      finalTurn: { allowedToolNames: ["submit_workbench_result"], reserveTurns: 2 } });
     expect(status).toBe("completed");
     expect(savedRun).toMatchObject({
       status: "completed", final_text: "已按当前规则完成核对。",

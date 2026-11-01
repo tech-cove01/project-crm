@@ -398,12 +398,8 @@ export function formatCollaborationContext(outcome: AgentCollaborationOutcome): 
       missing,
       `证据条目：${result.evidence.length}；工具调用：${result.toolCalls}`,
       `结构化 Claims：${result.claims.length}`,
-      `可引用证据 ID（最多 12 条）：${
-        result.evidence
-          .slice(0, 12)
-          .map((evidence) => evidence.id)
-          .join(", ") || "无"
-      }`,
+      "结果 evidence 可用的类型/UUID（仅复制 sourceType/sourceId；其余字段用于定位）：",
+      ...collaborationResultReferences(result).map((reference) => JSON.stringify(reference)),
     ].join("\n");
   });
   const conflicts = outcome.conflicts.length
@@ -411,9 +407,29 @@ export function formatCollaborationContext(outcome: AgentCollaborationOutcome): 
     : "- 无结构化冲突。";
   return [
     "\n\n以下是独立、只读 specialist 的持久化审查结果。它们不是已执行的 CRM 动作；请综合它们，显式保留缺失材料与冲突，不要重复调用已经充分覆盖的工具。",
+    "引用协作子结果时只能从下列明确的 sourceType/sourceId 选择。knowledge 的 sourceId 是本次返回的知识证据 UUID（WeKnora 为回执 UUID）；providerSourceId 只是资料源定位，不能充当 knowledge.sourceId。CRM 工具调用标识不是对象 UUID，引用这类子任务观察时使用 specialist 的真实 child UUID。每条 evidence.assertions 最多 4 项，只复制当前成功工具观察里的字段原值；无原值则省略 assertions。",
+    "区分本次取证失败与未来业务的前置条件：真正阻止当前任务的缺口须保留；未要求推进的业务条件只说明边界，不能扩大为本次只读汇总的必需材料。",
     ...sections,
     ...(outcome.rereadContext ? ["### Harness 当前事实复核（优先于旧子任务快照）", outcome.rereadContext] : []),
     "### 协作冲突",
     conflicts,
   ].join("\n\n");
+}
+
+function collaborationResultReferences(result: AgentSpecialistResult): Array<Record<string, unknown>> {
+  const uuid = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
+  const references: Array<Record<string, unknown>> = [];
+  if (uuid(result.childRunId)) references.push({ sourceType: "specialist", sourceId: result.childRunId });
+  // Recursive CRM claims can contain nested memory/owner IDs; do not relabel
+  // those IDs as contact/lead records. A child UUID safely addresses its report.
+  for (const evidence of result.evidence.slice(0, 12)) {
+    if (evidence.namespace !== "organization_wiki" || !uuid(evidence.id)) continue;
+    references.push({ sourceType: "knowledge", sourceId: evidence.id,
+      ...(evidence.locator.provider === "weknora" ? { receiptId: evidence.id } : {}),
+      provider: evidence.locator.provider, providerSourceId: evidence.locator.sourceId,
+      ...(evidence.metadata?.page_id ? { pageId: evidence.metadata.page_id } : {}),
+      ...(evidence.metadata?.page_version ? { pageVersion: evidence.metadata.page_version } : {}),
+    });
+  }
+  return references;
 }

@@ -64,6 +64,8 @@
 
 ## 忽略目录证据索引
 
+下表路径相对于本仓 `.local/crm021c/eb165b21-6a76-4045-94c1-49abcd4cef89/`。
+
 | 文件 | SHA-256 |
 | --- | --- |
 | 原计划 `../fd165852-7c0e-4e69-aaca-5a4dae6b20bd/plan.json` | `418d0da5692448c6092aa0644daec04d15b18498b6a714537f2517ccd4fade2b` |

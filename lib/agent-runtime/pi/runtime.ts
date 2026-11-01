@@ -24,6 +24,7 @@ import type {
   RuntimeObservation,
 } from "../types";
 import { resolvePiModel } from "./model-adapter";
+import { isToolSchemaRejection } from "../schema-rejection";
 import type { ResolvedPiModel } from "./model-adapter";
 
 type PiAgentCoreModule = typeof PiAgentCoreModuleType;
@@ -284,7 +285,8 @@ export class PiAgentRuntime implements AgentRuntime {
     )) throw new Error("pi_context_probe_invalid");
     if (input.finalTurn && (
       !Number.isSafeInteger(input.maxTurns) || input.maxTurns! < 1 ||
-      !input.finalTurn.instruction.trim()
+      !input.finalTurn.instruction.trim() ||
+      (input.finalTurn.reserveTurns !== undefined && ![1, 2].includes(input.finalTurn.reserveTurns))
     )) throw new Error("pi_final_turn_invalid");
     const [{ Agent }, { Type }, resolved] = await Promise.all([
       loadPiAgentCore(),
@@ -406,7 +408,10 @@ export class PiAgentRuntime implements AgentRuntime {
     const finalReminder = input.finalTurn
       ? messageToPi({ role: "user", content: input.finalTurn.instruction }, input.model)
       : undefined;
-    const startsWithFinalTurn = input.finalTurn !== undefined && input.maxTurns === 1;
+    const finalWindowStart = input.finalTurn
+      ? input.maxTurns! - Math.min(input.maxTurns!, input.finalTurn.reserveTurns ?? 1)
+      : Infinity;
+    const startsWithFinalTurn = input.finalTurn !== undefined && finalWindowStart === 0;
     const history = input.messages?.map((message) => messageToPi(message, input.model));
     if (history?.[0]?.role === "system") {
       // Pi gives a replayed leading system message precedence over systemPrompt.
@@ -497,23 +502,31 @@ export class PiAgentRuntime implements AgentRuntime {
           ...(decision.terminate !== undefined ? { terminate: decision.terminate } : {}),
         };
       },
-      shouldStopAfterTurn: async ({ message }) => {
+      shouldStopAfterTurn: async ({ message, toolResults }) => {
         turns += 1;
         if (message.role === "assistant") {
           usage = addUsage(usage, usageOf(message.usage));
         }
         const converted = messageFromPi(message);
+        const publicToolResults = toolResults.flatMap((result) => {
+          const value = messageFromPi(result);
+          return value?.role === "tool" ? [value] : [];
+        });
         const requested =
           converted === null
             ? false
-            : await input.shouldStopAfterTurn?.({ message: converted, turn: turns, usage });
-        return requested === true || (input.maxTurns !== undefined && turns >= input.maxTurns);
+            : await input.shouldStopAfterTurn?.({ message: converted, turn: turns, usage,
+                toolResults: publicToolResults,
+              });
+        const correctionEnded = input.finalTurn?.reserveTurns === 2 && turns > finalWindowStart &&
+          (!publicToolResults.length || !publicToolResults.every((result) => isToolSchemaRejection(result, finalToolNames)));
+        return requested === true || correctionEnded || (input.maxTurns !== undefined && turns >= input.maxTurns);
       },
       // Pi 0.86.1 replaces both the provider-visible tools and executable tool
       // context here. Keep the existing turn cap and every CRM stop/permission
       // hook; a finalization request cannot reopen a tool removed earlier.
       prepareNextTurnWithContext: ({ context }) => {
-        if (!finalReminder || turns !== input.maxTurns! - 1) return undefined;
+        if (!finalReminder || turns !== finalWindowStart) return undefined;
         return {
           context: { ...context, tools: finalTools(context.tools ?? []) },
           messages: [finalReminder],

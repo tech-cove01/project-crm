@@ -4,10 +4,10 @@ import type { AgentRuntimeEvent, RuntimeMessage } from "@/lib/agent-runtime";
 import { OPPORTUNITY_REVIEW_PLAN } from "./collaboration";
 import { runWorkbenchCollaboration } from "./workbench-collaboration";
 
-const mocks = vi.hoisted(() => ({ execute: vi.fn(), cleanup: vi.fn() }));
+const mocks = vi.hoisted(() => ({ execute: vi.fn(), cleanup: vi.fn(), buildTools: vi.fn() }));
 vi.mock("@/lib/agent-engine/agent/pi-turn-execution", () => ({ executePiTurnModelCall: mocks.execute }));
 vi.mock("@/lib/agent-engine/edge/crm/mcp-tools", () => ({
-  buildMcpTurnTools: async () => ({ tools: {}, cleanup: mocks.cleanup }),
+  buildMcpTurnTools: (...args: unknown[]) => mocks.buildTools(...args),
 }));
 vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({}) }));
 vi.mock("./workbench-events", () => ({ appendWorkbenchEvent: async () => undefined }));
@@ -64,9 +64,39 @@ function observation(value: unknown): RuntimeMessage {
     content: JSON.stringify(value), details: value };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.buildTools.mockResolvedValue({ tools: {}, cleanup: mocks.cleanup });
+});
 
 describe("workbench specialist result boundary", () => {
+  it("keeps all organization policy while exposing only the selected customer's minimal tools", async () => {
+    const { input } = fixture([observation({ id: "contact" })], "已核对事实");
+    input.agentConfig.systemPrompt = "组织安全：禁止外联。父销售通用清单：先检查商机和跟进记录。";
+    input.agentConfig.toolIds = ["crm_get_contact", "crm_list_conversations", "crm_get_conversation_history"];
+    mocks.buildTools.mockResolvedValue({ tools: Object.fromEntries(input.agentConfig.toolIds.map(name =>
+      [name, { execute: async () => ({}) }])), cleanup: mocks.cleanup });
+    await runWorkbenchCollaboration(input);
+    const call = mocks.execute.mock.calls[0]?.[1];
+
+    expect(Object.keys(call.tools)).toEqual(["crm_get_contact"]);
+    expect(call.system).toContain(input.agentConfig.systemPrompt);
+    expect(call.system).toContain("通用销售工作清单不能扩大本次专职取证范围");
+    expect(call.system).toContain("未分配给本角色的事实");
+    expect(mocks.buildTools.mock.calls[0]?.[2].toolIds).toEqual(["crm_get_contact"]);
+  });
+
+  it("does not invent a contact target or widen tools when selected scope is absent", async () => {
+    const { input } = fixture([], "没有选中客户或会话，无法取证。");
+    input.root.scope.contactId = null;
+    input.plan.specialists = [OPPORTUNITY_REVIEW_PLAN.specialists[0]!];
+    const outcome = await runWorkbenchCollaboration(input);
+
+    expect(mocks.buildTools.mock.calls[0]?.[2].toolIds).toEqual([]);
+    expect(Object.keys(mocks.execute.mock.calls[0]?.[1].tools)).toEqual([]);
+    expect(outcome.results[0]).toMatchObject({ status: "partial", missingMaterial: ["tool_observations"] });
+  });
+
   it("reserves the original final turn and persists a genuine nonempty model summary", async () => {
     const { input, updates } = fixture([observation({ id: "contact", name: "合成客户" })], "已核对合成客户。");
     const outcome = await runWorkbenchCollaboration(input);

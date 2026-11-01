@@ -388,7 +388,17 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
 
   async execute(input: Parameters<AgentSpecialistExecutor["execute"]>[0]) {
     input.signal.throwIfAborted();
-    const allowed = new Set(input.task.specialist.allowedToolIds);
+    // Specialists gather the minimum selected evidence; the parent retains
+    // broader investigation tools. Never infer extra targets from task prose.
+    const scopedTools = input.task.specialist.key === "customer_evidence"
+      ? [
+          ...(input.task.scope.contactId ? ["crm_get_contact"] : []),
+          ...(input.task.scope.conversationId ? ["crm_get_conversation_history"] : []),
+        ]
+      : input.task.specialist.key === "opportunity_diagnosis"
+        ? input.task.scope.leadId ? ["crm_get_lead"] : []
+        : input.task.specialist.allowedToolIds;
+    const allowed = new Set(input.task.specialist.allowedToolIds.filter((id) => scopedTools.includes(id)));
     const childConfig: PublishedAgentConfig = {
       ...this.agentConfig,
       toolIds: this.agentConfig.toolIds.filter((toolId) => allowed.has(toolId)),
@@ -437,6 +447,8 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
             childConfig.systemPrompt,
             `你是${input.task.specialist.role}，是父 Agent 的只读 specialist。`,
             input.task.specialist.objective,
+            "父 Agent 的组织安全、权限与来源策略始终有效；通用销售工作清单不能扩大本次专职取证范围。父任务中的其他角色要求只是背景，不由你代做。",
+            "只完成当前角色目标。职责中列举的主题不是本次必须逐项读取的清单；未分配给本角色的事实、未选择的会话、未来推进所需材料不能自动当作本次缺口。",
             "只允许使用分配给你的只读工具。必须至少调用一个相关工具取得 observation 后再输出；每个相同范围的工具最多调用一次。",
             "如果工具返回空结果，应把空结果作为事实并说明边界；如果没有可用工具或关键字段，应明确列为缺失材料。",
             "最终报告不超过 800 个中文字符；优先保留对象 ID、时间、金额、阶段、引用来源、缺失材料与冲突。",

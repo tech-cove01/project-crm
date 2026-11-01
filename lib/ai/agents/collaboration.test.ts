@@ -9,6 +9,16 @@ import {
 import { builtinAgent } from "@/lib/ai/agents/builtins";
 
 describe("bounded opportunity-review collaboration", () => {
+  it("versions the minimal specialist tool surface while retaining parent investigation tools", () => {
+    expect(OPPORTUNITY_REVIEW_PLAN.revision).toBe(3);
+    expect(OPPORTUNITY_REVIEW_PLAN.specialists[0]?.allowedToolIds)
+      .toEqual(["crm_get_contact", "crm_get_conversation_history"]);
+    expect(OPPORTUNITY_REVIEW_PLAN.specialists[1]?.allowedToolIds).toEqual(["crm_get_lead"]);
+    expect(builtinAgent("sales_operations")?.toolIds).toEqual(expect.arrayContaining([
+      "crm_list_conversations", "crm_list_followups",
+    ]));
+  });
+
   it("keeps every specialist read-only and the parent as the only writer", () => {
     expect(validateCollaborationPlan(OPPORTUNITY_REVIEW_PLAN)).toEqual([]);
     expect(OPPORTUNITY_REVIEW_PLAN.writer).toBe("parent_only");

@@ -48,6 +48,6 @@ start 仍以实际保存的 proposalRows.status/tool 判断。resume 末尾原�
 
 六个相关文件限定 ESLint 均退出 0，限定 `git diff --check` 通过。首次 helper 文件过滤误匹配忽略目录的旧草稿副本，产生两条过期文案断言失败，正式目标文件本身通过；私有测试副本已仅改 `.draft` 后缀防自动发现，随后显式排除 `.local/**` 的正式 helper 15/15 通过。接线测试第一次沙箱 cache rename EPERM 未完成收集，随后同一两文件命令在授权环境下 10/10 通过。上述仪器问题不计作产品失败或新增成功样本。
 
-修改文件限于 `workbench-result-submission.ts`、`workbench-start-job.ts`、`run-resumed-workbench-turn.ts` 及各自上述直接回归所在三测试文件。全仓 typecheck 由根代理统一执行，本文不提前声称已通过。
+修改文件限于 `workbench-result-submission.ts`、`workbench-start-job.ts`、`run-resumed-workbench-turn.ts` 及各自上述直接回归所在三测试文件。根已统一执行合并全仓 typecheck，通过；独立代码审查无阻断。
 
 本项证明服务器待审显示与所列关闭路径正确，不证明模型不会在原 transcript 中说错话或所有答案语义正确。此次真实发现原文保留；无新增真实模型、业务请求或评分来替换旧结果。

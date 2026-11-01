@@ -109,7 +109,7 @@ export interface AgentCollaborationPort {
 
 export const OPPORTUNITY_REVIEW_PLAN: AgentCollaborationPlan = {
   key: "opportunity_review_v1",
-  revision: 2,
+  revision: 3,
   maxParallel: 3,
   maxTotalToolCalls: 18,
   maxTurnsPerSpecialist: 3,
@@ -121,16 +121,16 @@ export const OPPORTUNITY_REVIEW_PLAN: AgentCollaborationPlan = {
     {
       key: "customer_evidence",
       role: "客户事实分析员",
-      objective: "核对联系人、近期会话、异议和明确承诺，只报告可引用事实。",
-      allowedToolIds: ["crm_get_contact", "crm_list_conversations", "crm_get_conversation_history"],
+      objective: "核对所选联系人的已确认事实；仅在已选择会话时读取该会话。只报告当前角色的可引用事实。",
+      allowedToolIds: ["crm_get_contact", "crm_get_conversation_history"],
       knowledgeNamespaces: ["crm_records", "conversation_history"],
       effect: "read",
     },
     {
       key: "opportunity_diagnosis",
       role: "商机诊断员",
-      objective: "核对商机阶段、停滞时间、跟进和漏斗约束，给出风险诊断。",
-      allowedToolIds: ["crm_get_lead", "crm_list_followups"],
+      objective: "核对所选商机当前阶段、关联与已返回字段；不主动扩展跟进记录或业务推进任务。",
+      allowedToolIds: ["crm_get_lead"],
       knowledgeNamespaces: ["crm_records"],
       effect: "read",
     },
