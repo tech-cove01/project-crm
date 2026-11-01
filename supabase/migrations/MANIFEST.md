@@ -1,5 +1,8 @@
 # Migration Manifest — pi-native-crm
 
+| `20261101010000` | `0411_collaboration_review_gate` | 在既有 root Run 保存独立协作复核状态；未解冲突阻断该 Run/Mission 的写入与批准，数据库提案触发器保护 SQL/RPC 审批路径，复核不执行旧动作。 |
+| `20261101020000` | `0412_collaboration_lead_scope` | 准入扩至同组织同商机；实际写入与复核共享商机锁，提案触发器只查询以避免锁反序；已批准效果回执仍可记账，人工复核前旧 Run 不可重造提案，需新任务取证。 |
+
 | `20261027190000` | `0409_dashscope_model` | Register Qwen3.8 Flash as a tool-capable DashScope model; pricing is deliberately left unset pending verified provider terms. |
 
 | `20260926010000` | `0381_builtin_agents_e_model_binding` | Adds built-in/user ownership, stable per-organization built-in key, registry revision, organization-default versus pinned model binding, and tenant-scoped durable workbench runs, append-only ordered run events, human-action proposals with business compensation/undo states, and service-role-only Pi continuation snapshots. Existing agents remain user-owned and pinned; partial unique index makes initialization idempotent. Run/proposal data uses member-scoped RLS, while private messages stay service-only; event history is append-only for PostgREST roles. |

@@ -113,7 +113,14 @@ export function detectCollaborationConflicts(
   const excerpts = new Map<string, { excerpt: string; specialistKey: string }>();
   for (const result of results) {
     for (const evidence of result.evidence) {
-      const sourceKey = `${evidence.locator.provider}:${evidence.locator.sourceId}`;
+      // A WeKnora source is a whole KB. Its revision is one page observation
+      // manifest, so unrelated pages must never be compared as source versions.
+      const pageIdentity = evidence.locator.provider === "weknora"
+        ? typeof evidence.metadata?.page_id === "string" && typeof evidence.metadata?.knowledge_base_id === "string"
+          ? `${evidence.metadata.knowledge_base_id}:${evidence.metadata.page_id}`
+          : `legacy_receipt:${evidence.id}`
+        : "source_index";
+      const sourceKey = `${evidence.locator.provider}:${evidence.locator.sourceId}:${pageIdentity}`;
       const source = sources.get(sourceKey);
       // Reindexing creates new chunk IDs. Compare source revisions separately
       // so differing chunks cannot hide that specialists observed different indexes.
@@ -333,7 +340,7 @@ export class BoundedAgentCollaborationRuntime {
     const status =
       completed === 0
         ? "failed"
-        : failed > 0 || completed < ordered.length
+        : conflicts.length > 0 || failed > 0 || completed < ordered.length
           ? "partial"
           : "complete";
     const outcome: AgentCollaborationOutcome = {
@@ -393,6 +400,7 @@ export function formatCollaborationContext(outcome: AgentCollaborationOutcome): 
   return [
     "\n\n以下是独立、只读 specialist 的持久化审查结果。它们不是已执行的 CRM 动作；请综合它们，显式保留缺失材料与冲突，不要重复调用已经充分覆盖的工具。",
     ...sections,
+    ...(outcome.rereadContext ? ["### Harness 当前事实复核（优先于旧子任务快照）", outcome.rereadContext] : []),
     "### 协作冲突",
     conflicts,
   ].join("\n\n");

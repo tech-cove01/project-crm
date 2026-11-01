@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MissionSendControl } from "./MissionSendControl";
+import { CollaborationReviewPanel, type ReviewSummary } from "./CollaborationReviewPanel";
 import {
   Sheet,
   SheetContent,
@@ -52,6 +53,7 @@ type Proposal = {
   can_undo?: boolean;
 };
 type Detail = Run & {
+  collaboration_review?: ReviewSummary | null;
   result_document?: {
     revision: number;
     trust: "model_submitted";
@@ -229,6 +231,7 @@ export function AgentCrmWorkbench({
   const [agentId, setAgentId] = useState(agents[0]?.id ?? "");
   const [task, setTask] = useState("");
   const [mode, setMode] = useState<"inspect" | "act">(initialLead ? "act" : "inspect");
+  const [collaborationMode, setCollaborationMode] = useState<"auto" | "disabled">("auto");
   const [delegateMission, setDelegateMission] = useState(Boolean(initialLead));
   const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
   const [observableLeadStatus, setObservableLeadStatus] = useState<"" | "open" | "won" | "lost">(
@@ -395,6 +398,7 @@ export function AgentCrmWorkbench({
           agentId: selected.id,
           task,
           mode,
+          collaboration: collaborationMode,
           ...(Object.keys(scope).length ? { scope } : {}),
           ...(missionEnabled
             ? {
@@ -628,6 +632,21 @@ export function AgentCrmWorkbench({
     } finally {
       setBusy(false);
     }
+  };
+
+  const rereadCollaboration = async (reason: string) => {
+    if (!detail?.collaboration_review || busy) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/v1/ai/workbench/runs/${detail.id}/collaboration-review`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revision: detail.collaboration_review.revision, decision: "reread", reason }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? "无法完成协作复核，动作保持阻断。");
+      setDetail(await fetchDetail(detail.id));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "复核失败，动作保持阻断。"); }
+    finally { setBusy(false); }
   };
 
   const pending = useMemo(
@@ -995,6 +1014,13 @@ export function AgentCrmWorkbench({
             )}
             {panel === "settings" ? (
               <fieldset disabled={cannotStart} className="space-y-4 disabled:opacity-60">
+                <label className="block text-sm">专家协作
+                  <select aria-label="专家协作" value={collaborationMode} onChange={event => setCollaborationMode(event.target.value as "auto" | "disabled")} className="mt-1 block w-full rounded border bg-background px-3 py-2">
+                    <option value="auto">自动选择有界商机审查</option>
+                    <option value="disabled">本任务不启动专家协作</option>
+                  </select>
+                  <span className="mt-1 block text-xs text-muted-foreground">CRM 主管或销售运营 Agent 选中商机且需要调查时才启动三个只读角色；实际计划以运行事件为准。业务任务中的角色依次执行。</span>
+                </label>
                 {selected && (
                   <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
                     <p>{selected.description}</p>
@@ -1348,9 +1374,12 @@ export function AgentCrmWorkbench({
                         {detail.events.length} 个事件 · {detail.proposals.length} 个操作提案
                       </p>
                     </div>
+                    {detail.collaboration_review && <CollaborationReviewPanel review={detail.collaboration_review} runStatus={detail.status} busy={busy} onReread={rereadCollaboration} />}
+                    {detail.error_code === "collaboration_review_required" && !detail.collaboration_review && <p role="status" className="rounded border p-3 text-sm">此商机存在待复核证据，或本任务早于人工复核。请先处理待复核运行，再创建新任务重新取证；旧任务不会执行动作。</p>}
                     {detail.specialists.length > 0 && (
                       <section className="rounded-lg border p-3 text-xs">
                         <p className="font-medium">Specialist 子运行</p>
+                        <p className="mt-1 text-muted-foreground">实际计划：{String(detail.events.find(event => event.event_type === "collaboration_started")?.payload.planKey ?? "未记录")} · 最大并发：{String(detail.events.find(event => event.event_type === "collaboration_started")?.payload.maxParallel ?? "未记录")}</p>
                         <div className="mt-2 space-y-2">
                           {detail.specialists.map((specialist) => (
                             <div

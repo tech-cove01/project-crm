@@ -13,6 +13,7 @@ import {
   withMissionDirectionWriteFence,
 } from "@/lib/ai/agents/mission-direction-fence";
 import { workbenchToolEffect } from "@/lib/ai/agents/tool-effects";
+import { CollaborationReviewRequiredError, hasPendingCollaborationReview, withCollaborationActionFence } from "./workbench-collaboration-review";
 import {
   ASK_INTERNAL_COLLEAGUE_TOOL, LIST_INTERNAL_COLLEAGUES_TOOL,
   createMissionQuestionTools,
@@ -160,6 +161,7 @@ export async function runResumedWorkbenchTurn(input: {
       payload: { ...orgMemoryProvenance(orgMemory), memoryResolution: "current_published" },
     });
     agentConfig.pipelineIds = input.scope.pipelineId ? [input.scope.pipelineId] : [];
+    const collaborationBlocked = await hasPendingCollaborationReview(getRequestPool(), organizationId, runId);
     const mcp = await buildMcpTurnTools(
       deps.crmCfg,
       { organizationId, jobId: input.jobId },
@@ -185,6 +187,8 @@ export async function runResumedWorkbenchTurn(input: {
         ...(definition as object),
         execute: async (args: unknown, options: unknown) => {
           if (effect.effect === "read") return original.execute!(args, options);
+          if (collaborationBlocked)
+            return { content: "协作证据尚待复核；动作已阻断，没有执行或暂存写入。", isError: true };
           if (input.mode === "inspect")
             return { content: "Blocked by inspect-only policy; no CRM state was changed.", isError: true };
           proposalInputs.push({ tool: name, arguments: args });
@@ -362,7 +366,7 @@ export async function runResumedWorkbenchTurn(input: {
     const newProposals: string[] = [];
     const observations: Array<{ tool: string; status: "executed"; result: unknown }> = [];
     try {
-      for (const proposal of result.proposals) {
+      for (const proposal of collaborationBlocked ? [] : result.proposals) {
         await input.beforeSideEffect?.();
         sequence += 1;
         const { data: saved, error } = await admin
@@ -398,7 +402,8 @@ export async function runResumedWorkbenchTurn(input: {
           input.mode === "act" && proposal.tool === "crm_update_lead" && mcp
             ? await (async () => {
                 await input.beforeSideEffect?.();
-                return withMissionDirectionWriteFence(getRequestPool(), {
+                return withCollaborationActionFence(getRequestPool(), organizationId, runId, async () => {
+                  const applied = await withMissionDirectionWriteFence(getRequestPool(), {
                   organizationId,
                   missionId: input.missionId,
                   runId,
@@ -406,22 +411,19 @@ export async function runResumedWorkbenchTurn(input: {
                 }, () => executeReversibleLeadUpdate({
                   args: proposal.arguments,
                   tools: mcp.tools as never,
-                }));
+                  }));
+                  if (applied) {
+                    const { error: receiptError } = await admin.from("ai_agent_action_proposals").update({
+                      status: "executed", compensation_args: applied.compensationArgs as never,
+                      preview: applied.preview as never, result_summary: { outcome: "executed", effect: "reversible_write" },
+                    }).eq("organization_id", organizationId).eq("id", saved.id).eq("status", "pending");
+                    if (receiptError) throw new Error("action_proposal_update_failed_after_write");
+                  }
+                  return applied;
+                });
               })()
             : null;
         if (reversible) {
-          const { error: updateError } = await admin
-            .from("ai_agent_action_proposals")
-            .update({
-              status: "executed",
-              compensation_args: reversible.compensationArgs as never,
-              preview: reversible.preview as never,
-              result_summary: { outcome: "executed", effect: "reversible_write" },
-            })
-            .eq("organization_id", organizationId)
-            .eq("id", saved.id)
-            .eq("status", "pending");
-          if (updateError) throw new Error("action_proposal_update_failed_after_write");
           observations.push({ tool: proposal.tool, status: "executed", result: reversible.result });
           await appendWorkbenchEvent(admin, {
             organizationId,
@@ -510,7 +512,7 @@ export async function runResumedWorkbenchTurn(input: {
       (item) => item.code === "unsafe_internal_draft" || item.code === "answer_likely_truncated",
     );
     const emptyFinalAnswer = !finalText.trim();
-    const partialReason = workbenchResultPartialReason({
+    const partialReason = collaborationBlocked ? "collaboration_review_required" : workbenchResultPartialReason({
       finalText,
       submission: submittedResult,
       answerInvalidCode: answerInvalid
@@ -520,13 +522,13 @@ export async function runResumedWorkbenchTurn(input: {
         : null,
       budgetExhausted: exhausted,
     });
-    const status =
+    const status = collaborationBlocked ? "partial" :
       (pendingCount ?? 0) > 0
         ? "awaiting_confirmation"
         : partialReason
           ? "partial"
           : "completed";
-    if (observations.length > 0 && (pendingCount ?? 0) === 0 && !exhausted && !answerInvalid) {
+    if (!collaborationBlocked && observations.length > 0 && (pendingCount ?? 0) === 0 && !exhausted && !answerInvalid) {
       const lastAuto = newProposals.at(-1);
       if (lastAuto)
         await appendWorkbenchEvent(admin, {
@@ -617,8 +619,9 @@ export async function runResumedWorkbenchTurn(input: {
       }
       await input.beforeSideEffect?.();
       const budgetExceeded = error instanceof MissionBudgetExceededError;
-      const status = budgetExceeded ? "partial" : "failed";
-      const code = budgetExceeded ? error.message : "resume_failed";
+      const reviewBlocked = error instanceof CollaborationReviewRequiredError;
+      const status = budgetExceeded || reviewBlocked ? "partial" : "failed";
+      const code = reviewBlocked ? "collaboration_review_required" : budgetExceeded ? error.message : "resume_failed";
       await admin
         .from("ai_workbench_runs")
         .update({
@@ -633,9 +636,9 @@ export async function runResumedWorkbenchTurn(input: {
       await appendWorkbenchEvent(admin, {
         organizationId,
         runId,
-        type: budgetExceeded ? "run_partial" : "run_failed",
+        type: budgetExceeded || reviewBlocked ? "run_partial" : "run_failed",
         payload: {
-          ...(budgetExceeded
+          ...(budgetExceeded || reviewBlocked
             ? { status: "partial", reason: code }
             : { code, errorType: error instanceof Error ? error.name : "runtime_error" }),
         },

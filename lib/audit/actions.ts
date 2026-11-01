@@ -200,6 +200,7 @@ export const AUDIT_ACTIONS = [
   "ai_workbench.action_approved",
   "ai_workbench.action_rejected",
   "ai_workbench.action_undone",
+  "ai_workbench.collaboration_reviewed",
   "ai_mission.complete",
   "ai_mission.wait_for_customer",
   "ai_mission.wait_for_internal",

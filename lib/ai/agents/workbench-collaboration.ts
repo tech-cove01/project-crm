@@ -27,6 +27,7 @@ import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { extractProductFinalAnswer } from "@/lib/ai/agents/final-answer";
 import { extractToolClaims } from "@/lib/ai/agents/evidence-claims";
 import { specialistObservationEnvelope } from "@/lib/ai/agents/workbench-state";
+import { finishInitialCollaborationReview } from "./workbench-collaboration-review";
 
 type Admin = ReturnType<typeof createAdminClient>;
 type TurnDeps = ReturnType<typeof requestTurnDeps>;
@@ -579,5 +580,7 @@ export async function runWorkbenchCollaboration(input: {
     new SupabaseCollaborationStore(input.admin, input.root),
     new PiWorkbenchSpecialistExecutor(input.admin, input.deps, input.root, input.agentConfig),
   );
-  return runtime.runReadOnlySpecialists(input.plan, tasks, input.signal);
+  const outcome = await runtime.runReadOnlySpecialists(input.plan, tasks, input.signal);
+  return finishInitialCollaborationReview(getRequestPool(), input.root.organizationId,
+    input.root.parentRunId, input.root.scope, outcome, input.root.agentId);
 }

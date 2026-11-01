@@ -64,7 +64,7 @@ function valueType(value: Scalar | Scalar[]): AgentEvidenceClaim["valueType"] {
   return "boolean";
 }
 
-function hash(value: unknown): string {
+export function claimValueHash(value: unknown): string {
   return createHash("sha256").update(canonical(value)).digest("hex");
 }
 
@@ -148,7 +148,7 @@ export function extractToolClaims(input: {
     if (!subjectId) continue;
     const revision = revisionOf(record);
     for (const { field, value: fieldValue } of scalarFields(record)) {
-      const valueHash = hash(fieldValue);
+      const valueHash = claimValueHash(fieldValue);
       const key = `${resource}:${subjectId}:${field}:${valueHash}:${revision ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);

@@ -18,7 +18,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (!authz.ok) return authz.response;
   const admin = createAdminClient();
   const { data: run, error } = await admin.from("ai_workbench_runs")
-    .select("id, organization_id, agent_id, mission_id, actor_user_id, task, mode, scope, status, runtime_state, final_text, result_document, error_code, error_summary, budget, started_at, completed_at, created_at, updated_at")
+    .select("id, organization_id, agent_id, mission_id, actor_user_id, task, mode, scope, status, runtime_state, collaboration_review, final_text, result_document, error_code, error_summary, budget, started_at, completed_at, created_at, updated_at")
     .eq("organization_id", authz.org.orgId).eq("id", id).maybeSingle();
   if (error) return fail("internal_error", "无法读取工作台运行。", 500, { requestId });
   if (!run) return fail("not_found", "run 不存在。", 404, { requestId });

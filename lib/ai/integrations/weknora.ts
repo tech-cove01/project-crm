@@ -235,6 +235,9 @@ export async function searchCompanyWiki(
             uri: `/api/v1/ai/integrations/wiki/evidence/${receipt.id}`,
           },
           metadata: {
+            knowledge_base_id: kb,
+            page_id: page.id,
+            slug: page.slug,
             page_version: page.version,
             content_hash: manifest.content_hash,
             source_manifest: docs,

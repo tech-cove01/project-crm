@@ -294,6 +294,7 @@ describe("bounded Agent collaboration runtime", () => {
         expect.objectContaining({ code: "stale_state", field: "lead:lead-1" }),
       ]),
     );
+    expect(outcome.status).toBe("partial");
   });
 });
 
@@ -319,5 +320,16 @@ describe("Wiki fragment conflict identity", () => {
     const { detectCollaborationConflicts } = await import("./collaboration-runtime");
     expect(detectCollaborationConflicts(results(evidence("chunk-new", "New price", "v2"))))
       .toEqual([expect.objectContaining({ code: "stale_state" })]);
+  });
+  it("compares WeKnora manifests only within the same KB/page identity", async () => {
+    const { detectCollaborationConflicts } = await import("./collaboration-runtime");
+    const pages = results(evidence("receipt-b", "Approval", "manifest-b"));
+    for (const [index, result] of pages.entries()) {
+      result.evidence[0]!.locator.provider = "weknora";
+      result.evidence[0]!.metadata = { knowledge_base_id: "kb", page_id: `page-${index}` };
+    }
+    expect(detectCollaborationConflicts(pages)).toEqual([]);
+    pages[1]!.evidence[0]!.metadata!.page_id = "page-0";
+    expect(detectCollaborationConflicts(pages)).toEqual([expect.objectContaining({ code: "stale_state" })]);
   });
 });

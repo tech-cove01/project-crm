@@ -29,6 +29,7 @@ import {
 } from "@/lib/ai/internal-collaboration/feishu-question";
 import { finalizeWorkbenchSendDecision } from "@/lib/ai/agents/workbench-send-decision-recovery";
 import { rejectWorkbenchProposal } from "@/lib/ai/agents/workbench-reject-decision";
+import { CollaborationReviewRequiredError, hasPendingCollaborationReview, withCollaborationActionFence } from "@/lib/ai/agents/workbench-collaboration-review";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -89,6 +90,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("state_conflict", "这个动作已经处理过。", 409, { requestId });
   if (parsed.data.decision === "approve" && run.mode !== "act")
     return fail("inspect_read_only", "只读检查运行不能批准或执行 CRM 写入。", 409, { requestId });
+  if (parsed.data.decision === "approve") {
+    try {
+      if (await hasPendingCollaborationReview(getRequestPool(), authz.org.orgId, id))
+        return fail("collaboration_review_required", "协作证据尚待复核；没有执行或批准动作。", 409, { requestId });
+    } catch {
+      return fail("collaboration_review_unavailable", "无法核对协作复核状态；动作保持未执行。", 503, { requestId });
+    }
+  }
   if (parsed.data.decision === "approve" && !workbenchToolEffect(proposal.tool_name))
     return fail("tool_effect_unclassified", "此工具没有安全效果分类，操作保持未执行。", 409, {
       requestId,
@@ -374,11 +383,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     }
 
     try {
-      const { output, reversible } = await executeApprovedWorkbenchTool({
+      const { output, reversible } = await withCollaborationActionFence(getRequestPool(), authz.org.orgId, id, () => executeApprovedWorkbenchTool({
         toolName: proposal.tool_name,
         args: validatedArgs.ok ? validatedArgs.args : proposal.tool_args,
         tools: mcp.tools as never,
-      });
+      }));
       const outcome = await finishWorkbenchApprovedAction(getRequestPool(), {
         organizationId: authz.org.orgId, runId: id, proposalId,
         toolName: proposal.tool_name,
@@ -395,12 +404,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
         run_status: outcome === "queued" ? "running" : outcome },
       { requestId });
     } catch (error) {
-      if (error instanceof NonCompensableWorkbenchWriteError || error instanceof WorkbenchToolRejectedError) {
+      if (error instanceof NonCompensableWorkbenchWriteError || error instanceof WorkbenchToolRejectedError || error instanceof CollaborationReviewRequiredError) {
         try {
           const outcome = await finishWorkbenchApprovedAction(getRequestPool(), {
             organizationId: authz.org.orgId, runId: id, proposalId,
             toolName: proposal.tool_name,
-            result: { kind: "safe_failure", code: error instanceof WorkbenchToolRejectedError
+            result: { kind: "safe_failure", code: error instanceof CollaborationReviewRequiredError ? "collaboration_review_required" : error instanceof WorkbenchToolRejectedError
               ? "crm_tool_rejected" : "non_compensable_reversible_write" },
           });
           if (outcome)

@@ -31,6 +31,7 @@ import { assertWorkbenchJobLease } from "@/lib/ai/agents/workbench-job-lease";
 import { collaborationPlanForMission, selectCollaborationPlan } from "@/lib/ai/agents/collaboration";
 import { formatCollaborationContext } from "@/lib/ai/agents/collaboration-runtime";
 import { runWorkbenchCollaboration } from "@/lib/ai/agents/workbench-collaboration";
+import { CollaborationReviewRequiredError, hasPendingCollaborationReview, withCollaborationActionFence } from "./workbench-collaboration-review";
 import { extractProductFinalAnswer } from "@/lib/ai/agents/final-answer";
 import { MissionBudgetExceededError } from "@/lib/ai/agents/mission-budget";
 import { aggregateWorkbenchLlmUsage, type WorkbenchLlmCallUsage } from "@/lib/ai/agents/workbench-usage";
@@ -315,6 +316,7 @@ export async function runWorkbenchStartJob(
           signal: abortController.signal,
         })
       : null;
+    const collaborationBlocked = await hasPendingCollaborationReview(pool, job.organization_id, runId);
     workbenchMcp = await buildMcpTurnTools(
       deps.crmCfg,
       { organizationId: job.organization_id, jobId: runId },
@@ -342,6 +344,8 @@ export async function runWorkbenchStartJob(
         ...(definition as object),
         execute: async (args: unknown, options: unknown) => {
           if (effect.effect === "read") return original.execute!(args, options);
+          if (collaborationBlocked)
+            return { content: "协作证据尚待复核；该运行的动作已由业务层阻断，没有执行或暂存写入。", isError: true };
           if (run.mode === "inspect") {
             return { content: "Blocked by inspect-only policy; no CRM state was changed.", isError: true };
           }
@@ -601,7 +605,7 @@ export async function runWorkbenchStartJob(
             arguments: { body: candidate.body.trim() },
           }))
         : [];
-    const proposals = [...result.proposals, ...sendProposals];
+    const proposals = collaborationBlocked ? [] : [...result.proposals, ...sendProposals];
     const baseConfig =
       run.mode === "act"
         ? await loadAgentVersionConfig(
@@ -726,7 +730,8 @@ export async function runWorkbenchStartJob(
               payload: { proposalId: saved.id, tool: proposal.tool },
             });
             await beforeSideEffect();
-            reversible = await withMissionDirectionWriteFence(pool, {
+            reversible = await withCollaborationActionFence(pool, job.organization_id, runId, async () => {
+              const applied = await withMissionDirectionWriteFence(pool, {
               organizationId: job.organization_id,
               missionId: run.mission_id,
               runId,
@@ -734,21 +739,18 @@ export async function runWorkbenchStartJob(
             }, () => executeReversibleLeadUpdate({
               args: proposal.arguments,
               tools: mcp.tools as never,
-            }));
+              }));
+              if (applied) {
+                const { error: receiptError } = await admin.from("ai_agent_action_proposals").update({
+                  status: "executed", compensation_args: applied.compensationArgs as never,
+                  preview: applied.preview as never, result_summary: { outcome: "executed", effect: "reversible_write" },
+                }).eq("organization_id", job.organization_id).eq("id", saved.id).eq("status", "pending");
+                if (receiptError) throw new Error("action_proposal_update_failed_after_write");
+              }
+              return applied;
+            });
           }
           if (reversible) {
-            const { error: updateError } = await admin
-              .from("ai_agent_action_proposals")
-              .update({
-                status: "executed",
-                compensation_args: reversible.compensationArgs as never,
-                preview: reversible.preview as never,
-                result_summary: { outcome: "executed", effect: "reversible_write" },
-              })
-              .eq("organization_id", job.organization_id)
-              .eq("id", saved.id)
-              .eq("status", "pending");
-            if (updateError) throw new Error("action_proposal_update_failed_after_write");
             proposalRows[proposalRows.length - 1]!.status = "executed";
             observations.push({
               tool: proposal.tool,
@@ -869,7 +871,7 @@ export async function runWorkbenchStartJob(
       (item) => item.code === "unsafe_internal_draft" || item.code === "answer_likely_truncated",
     );
     const emptyFinalAnswer = !finalText.trim();
-    const partialReason = workbenchResultPartialReason({
+    const partialReason = collaborationBlocked ? "collaboration_review_required" : workbenchResultPartialReason({
       finalText,
       submission: submittedResult,
       answerInvalidCode: answerInvalid
@@ -879,7 +881,7 @@ export async function runWorkbenchStartJob(
         : null,
       budgetExhausted: exhausted,
     });
-    const status = pending
+    const status = collaborationBlocked ? "partial" : pending
       ? "awaiting_confirmation"
       : partialReason
         ? "partial"
@@ -941,6 +943,15 @@ export async function runWorkbenchStartJob(
       .eq("id", runId)
       .maybeSingle();
     if (latest?.status === "cancelled") return;
+    if (error instanceof CollaborationReviewRequiredError) {
+      await beforeSideEffect();
+      const { error: stopError } = await admin.from("ai_workbench_runs")
+        .update({ status: "partial", error_code: "collaboration_review_required", completed_at: new Date().toISOString() })
+        .eq("organization_id", job.organization_id).eq("id", runId).in("status", ["queued", "running"]);
+      if (stopError) throw new Error("collaboration_review_stop_failed");
+      await appendWorkbenchEvent(admin, { organizationId: job.organization_id, runId, type: "run_partial", payload: { status: "partial", reason: "collaboration_review_required" } });
+      return;
+    }
     if (error instanceof MissionDirectionFenceError && run.mission_id) {
       if (latest?.status !== "queued" && latest?.status !== "running") return;
       await beforeSideEffect();

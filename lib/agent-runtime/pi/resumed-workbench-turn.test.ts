@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
     id: "memory-version-4", version_id: "memory-version-4", organization_id: "org-1", version_number: 4,
     content: "Current published policy for resumed runs", created_at: "2026-10-01T00:00:00Z",
     published_at: "2026-10-01T00:00:00Z",
-  }] : [] })),
+  }] : sql.includes("select collaboration_review") ? [{ collaboration_review: null }] : [] })),
   stopForDirection: vi.fn(async (
     _pool: unknown,
     _input: { organizationId: string; missionId: string; runId: string },
@@ -31,7 +31,9 @@ vi.mock("@/lib/ai/agents/mission-direction-consumption", async (importOriginal) 
   ...await importOriginal(),
   loadMissionDirectionContextProbe: vi.fn(async () => undefined),
 }));
-vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({ query: mocks.query }) }));
+vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({ query: mocks.query,
+  connect: async () => ({ query: mocks.query, release: vi.fn() }),
+}) }));
 vi.mock("@/lib/agent-engine/agent/request-deps", () => ({
   requestTurnDeps: () => ({ crmCfg: {}, llmCfg: {}, log: {}, runtime: {} }),
 }));

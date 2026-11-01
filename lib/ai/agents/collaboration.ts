@@ -88,6 +88,8 @@ export interface AgentCollaborationOutcome {
   status: "complete" | "partial" | "failed";
   results: AgentSpecialistResult[];
   conflicts: AgentCollaborationConflict[];
+  /** Trusted bounded reread context; original child results remain immutable. */
+  rereadContext?: string;
   usage: {
     toolCalls: number;
     inputTokens: number;

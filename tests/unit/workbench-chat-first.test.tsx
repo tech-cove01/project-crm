@@ -161,8 +161,8 @@ describe("chat-first workbench with real API contracts, entirely offline fixture
     expect(screen.getByText("真实接口结果：第一件事")).toBeInTheDocument();
     expect(screen.getByText("真实接口结果：第二件事")).toBeInTheDocument();
     expect(submissions).toEqual([
-      { agentId: "a1", task: "第一件事", mode: "inspect" },
-      { agentId: "a1", task: "第二件事", mode: "inspect" },
+      { agentId: "a1", task: "第一件事", mode: "inspect", collaboration: "auto" },
+      { agentId: "a1", task: "第二件事", mode: "inspect", collaboration: "auto" },
     ]);
     await user.click(screen.getByRole("button", { name: "新对话" }));
     expect(screen.queryByText("真实接口结果：第一件事")).not.toBeInTheDocument();

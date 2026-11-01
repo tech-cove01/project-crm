@@ -30,6 +30,7 @@ export async function claimWorkbenchApprovedAction(pool: Pool, input: {
   toolName: string; actorUserId: string; reason?: string;
 }): Promise<boolean> {
   return transaction(pool, async (client) => {
+    await client.query("select public.fn_assert_ai_collaboration_write_allowed($1,$2)", [input.organizationId, input.runId]);
     const { rows: runs } = await client.query<{ status: string; mission_id: string | null }>(
       `select status,mission_id from public.ai_workbench_runs
        where organization_id=$1 and id=$2 and run_kind='root' for update`,
@@ -83,6 +84,7 @@ export async function claimWorkbenchApprovedAction(pool: Pool, input: {
 export async function assertWorkbenchApprovedActionCurrent(pool: Pool, input: {
   organizationId: string; runId: string; proposalId: string;
 }): Promise<void> {
+  await pool.query("select public.fn_assert_ai_collaboration_write_allowed($1,$2)", [input.organizationId, input.runId]);
   const { rows } = await pool.query<{ current: boolean }>(
     `select exists (
        select 1 from public.ai_workbench_runs r

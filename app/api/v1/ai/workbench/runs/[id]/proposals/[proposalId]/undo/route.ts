@@ -10,6 +10,7 @@ import { loadAgentVersionConfig } from "@/lib/agent-engine/agent/agent-config";
 import { buildMcpTurnTools } from "@/lib/agent-engine/edge/crm/mcp-tools";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasPendingCollaborationReview, withCollaborationActionFence } from "@/lib/ai/agents/workbench-collaboration-review";
 import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +33,12 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     admin.from("ai_agent_action_proposals").select("id, tool_name, status, compensation_args").eq("organization_id", authz.org.orgId).eq("run_id", id).eq("id", proposalId).maybeSingle(),
   ]);
   if (!run || !proposal) return fail("not_found", "运行或操作不存在。", 404, { requestId });
+  try {
+    if (await hasPendingCollaborationReview(getRequestPool(), authz.org.orgId, id))
+      return fail("collaboration_review_required", "协作证据尚待复核；没有执行撤销写入。", 409, { requestId });
+  } catch { return fail("review_unavailable", "无法核对复核状态；没有执行撤销写入。", 503, { requestId }); }
   if (proposal.tool_name !== "crm_update_lead" || proposal.status !== "executed" || !proposal.compensation_args)
     return fail("undo_unavailable", "该操作没有可用的业务撤销动作。", 409, { requestId });
-
   let scope: Awaited<ReturnType<typeof resolveWorkbenchScope>>;
   try { scope = await resolveWorkbenchScope(admin, authz.org.orgId, run.scope as never); }
   catch { return fail("scope_not_found", "CRM 对象关联已变化；没有认领或执行撤销。", 409, { requestId }); }
@@ -59,7 +63,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     const tool = mcp?.tools.crm_update_lead;
     if (!tool?.execute) throw new Error("undo_tool_unavailable");
     await appendWorkbenchEvent(admin, { organizationId: authz.org.orgId, runId: id, type: "tool_started", payload: { proposalId, tool: "crm_update_lead" } });
-    const result = await tool.execute(proposal.compensation_args as Record<string, unknown>, { toolCallId: randomUUID(), messages: [], context: {} });
+    const result = await withCollaborationActionFence(getRequestPool(), authz.org.orgId, id, () => tool.execute!(proposal.compensation_args as Record<string, unknown>, { toolCallId: randomUUID(), messages: [], context: {} }));
     if (result && typeof result === "object" &&
         ("error" in result || "permitido" in result && result.permitido === false ||
           "isError" in result && result.isError === true || "ok" in result && result.ok === false))
