@@ -19,7 +19,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (!args.length || (args.length === 1 && args[0] === "--help")) {
     console.info(
-      "只读回查：node --import tsx scripts/readback-langfuse.ts <organization UUID> <Run UUID> [Run UUID ...]。报告仅写入 .local/langfuse-readbacks，不触发导出或模型。",
+      "只读回查：node --import tsx scripts/readback-langfuse.ts <organization UUID> <根 Run UUID> [根 Run UUID ...]。自动合并同组织直属专家；报告仅写入 .local/langfuse-readbacks，不触发导出或模型。",
     );
     return;
   }
@@ -73,10 +73,16 @@ async function main() {
     await client.query("BEGIN READ ONLY");
     for (const runId of runIds) {
       const owned = await client.query(
-        "select id from ai_workbench_runs where organization_id=$1 and id=$2",
+        "select id from ai_workbench_runs where organization_id=$1 and id=$2 and run_kind='root'",
         [organizationId, runId],
       );
       if (!owned.rows.length) throw new Error("langfuse_readback_owned_run_required");
+      // Specialists share the root trace, while each child owns its export events.
+      const { rows: includedRuns } = await client.query<{ id: string }>(
+        `select id from ai_workbench_runs where organization_id=$1
+         and (id=$2 or (parent_run_id=$2 and run_kind='specialist')) order by id`,
+        [organizationId, runId],
+      );
       const { rows } = await client.query<{
         id: string;
         status: string;
@@ -87,13 +93,14 @@ async function main() {
         `select id,status,coalesce(consumed_by @> array['ai_integration.langfuse_v1']::text[],false) consumed,
          case when payload->>'kind'='spans' then payload->'spans' else null end spans,
          case when payload->>'kind'='scores' then jsonb_array_length(payload->'scores') else 0 end score_count
-         from event_log where organization_id=$1 and entity_id=$2 and event_type='ai_integration.langfuse_export'
+         from event_log where organization_id=$1 and entity_id=any($2::uuid[]) and event_type='ai_integration.langfuse_export'
          order by created_at,id`,
-        [organizationId, runId],
+        [organizationId, includedRuns.map((run) => run.id)],
       );
       const expected = rows.flatMap((row) => row.spans ?? []);
       const projection = {
         runId,
+        includedRunIds: includedRuns.map((run) => run.id),
         outbox: rows.map(({ id, status, consumed, score_count }) => ({
           id,
           status,
