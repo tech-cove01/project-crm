@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f8fc">
-  <meta name="description" content="面向销售团队的客户管理与协作系统，组织客户、沟通记录、销售机会和跟进任务，让 Agent 帮助整理信息、核对依据并受控推进动作。">
+  <meta name="description" content="面向销售团队的 AI Native CRM：从业务场景了解受控 Agent 执行、客户记忆与可信知识、专家协作和观测评测，查看实现、源码与运行验收。">
   <title>AI Native CRM — 客户管理与销售协作</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css?v=overview-20261102">
+  <link rel="stylesheet" href="./styles.css?v=highlights-20261102">
   <script src="./script.js?v=overview-20261102" defer></script>
 </head>
 <body data-page="overview">
@@ -17,7 +17,7 @@
       <a class="brand" href="./index.html" aria-label="AI Native CRM 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>CRM<span class="brand-suffix"> / AI NATIVE</span></span></a>
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span></span><span></span><span class="sr-only">打开导航菜单</span></button>
       <nav class="primary-nav" id="primary-nav" aria-label="主导航">
-        <a href="#context">背景与场景</a><a href="#difficulties">业务难点</a><a href="#agent-help">Agent 的帮助</a>
+        <a href="#context">业务背景</a><a href="#highlights">项目亮点</a><a href="#implementation">技术与验证</a>
         <a class="button button-small button-dark" href="./details.html">项目详解 <span aria-hidden="true">↗</span></a>
       </nav>
     </div>
@@ -25,29 +25,55 @@
   <main id="main">
     <section class="overview-hero container" id="context" aria-labelledby="overview-title">
       <p class="eyebrow">AI-native CRM · 客户管理与销售协作</p>
-      <h1 id="overview-title">从客户咨询，<br>到销售跟进与团队协作。</h1>
-      <p class="overview-lead">这是一套面向销售团队的客户管理与协作系统，集中管理客户档案、沟通记录、产品资料、商机和跟进任务。商机就是正在洽谈的采购或合作机会；销售需要知道客户要什么、谈到哪一步、下一次由谁联系。</p>
-      <p class="overview-scene"><strong>典型场景</strong>以跨境销售为例，客户会反复咨询产品、报价和开始日期。销售要结合之前的沟通与企业资料，判断怎样回复，并安排后续联系与内部协作。</p>
-      <div class="overview-actions"><a class="button button-dark" href="#agent-help">看看 Agent 能帮什么 <span aria-hidden="true">↓</span></a><a class="text-link" href="./details.html#workflow">查看完整业务案例 <span aria-hidden="true">↗</span></a></div>
+      <h1 id="overview-title">从客户咨询，<br>到有依据的销售跟进。</h1>
+      <p class="overview-lead">面向销售团队的客户管理与协作系统，集中管理客户档案、沟通记录、产品资料、商机和跟进任务。商机就是正在洽谈的采购或合作机会；Agent 帮销售整理背景、核对资料、分析下一步，并在业务授权下执行具体动作。</p>
+      <p class="overview-scene"><strong>典型场景</strong>跨境客户反复询问产品、报价和开始日期。销售要知道之前谈到哪一步、哪些条件已确认，以及下一次由谁联系。</p>
+      <div class="overview-actions"><a class="button button-dark" href="#highlights">查看四项项目亮点 <span aria-hidden="true">↓</span></a><a class="text-link" href="./demo/index.html?tutorial=1#/app/ai/workbench">体验静态演示 <span aria-hidden="true">↗</span></a></div>
     </section>
     <section class="overview-problems container" id="difficulties" aria-labelledby="difficulties-title">
-      <h2 id="difficulties-title">这项工作，难在信息、进展和判断。</h2>
-      <div class="overview-three-grid">
-        <article><h3>信息分散，要反复查</h3><p>客户需求在聊天里，历史约定在记录里，产品条款在资料里。每次回复之前，都要重新拼出完整背景。</p></article>
-        <article><h3>同时跟进，容易遗漏</h3><p>多笔商机各有进度、待确认问题和负责人。换人交接或隔一段时间再联系，容易忘记上次谈到哪里。</p></article>
-        <article><h3>有了建议，还要核实</h3><p>客户期望不等于公司承诺，旧资料也可能失效。一段分析或回复，不能证明业务动作已经正确完成。</p></article>
+      <h2 id="difficulties-title">销售跟进的难点，Agent 怎样协助。</h2>
+      <div class="overview-comparison" id="agent-help">
+        <div class="overview-comparison-head" aria-hidden="true"><span>业务难点</span><span>Agent 的帮助</span></div>
+        <article><div><h3>信息分散，每次都要重新查</h3><p>客户需求、历史沟通和企业资料分散，回复前要重新拼出背景。</p></div><div><h3>整理客户，核对依据</h3><p>读取当前客户与商机，结合已确认事实和获授权资料，形成带来源的建议。</p></div></article>
+        <article><div><h3>多笔商机，进展容易遗漏</h3><p>每笔机会的阶段、待确认条件和负责人不同，隔天跟进或换人交接容易断档。</p></div><div><h3>分析进展，列出下一步</h3><p>综合客户事实、商机状态和产品政策，列出跟进建议与需要继续确认的问题。</p></div></article>
+        <article><div><h3>有了建议，还要判断能否执行</h3><p>客户期望不等于公司承诺，模型说“完成”也不能代替业务结果。</p></div><div><h3>关键动作由人决定，执行后核对</h3><p>需要确认的阶段变更先形成提案，批准后执行，再用回执与实际状态核对结果。</p></div></article>
       </div>
+      <a class="text-link overview-case-link" href="./details.html#workflow">以赵强的年度服务合同，串起一次完整跟进 <span aria-hidden="true">↗</span></a>
     </section>
-    <section class="overview-agent-wrap" id="agent-help" aria-labelledby="agent-help-title"><div class="container">
-      <h2 id="agent-help-title">Agent 围绕这些业务，帮销售做三件事。</h2>
-      <p class="overview-agent-intro">CRM 保存客户与业务状态，Agent 在允许的范围内调查、分析，再把建议接回具体工作。</p>
-      <div class="overview-three-grid">
-        <article><span class="overview-help-number">01</span><h3>把客户和商机弄清楚</h3><p>读取所选客户、会话和当前商机，整理已确认事实、进展和待补问题，帮助销售准备下一次联系。</p></article>
-        <article><span class="overview-help-number">02</span><h3>核对资料，形成建议</h3><p>查获授权的产品与政策依据；需要综合判断时分工分析，给出带来源的建议，保留仍未确认的内容。</p></article>
-        <article><span class="overview-help-number">03</span><h3>让下一步动作受控落地</h3><p>需要确认的阶段变更先形成具体提案，由人批准后执行、保存回执，再核对商机实际状态。</p></article>
+    <section class="overview-highlights" id="highlights" aria-labelledby="highlights-title"><div class="container">
+      <div class="overview-section-heading"><p class="eyebrow">项目亮点 / 从业务需求到工程设计</p><h2 id="highlights-title">四条主线，让 Agent 接入真实业务流程。</h2><p>围绕执行边界、事实依据、协作判断和结果核对，落实可追踪的销售工作流。</p></div>
+      <div class="overview-highlight-grid">
+        <article class="overview-highlight-card">
+          <span class="overview-highlight-index">01 / 执行</span><h3>销售 Agent 受控执行</h3>
+          <p class="overview-highlight-value">把分析建议推进为可核对的商机动作，关键决定保留人工控制，等待审批后任务可以继续。</p>
+          <p class="overview-highlight-design"><strong>关键设计</strong>Pi 负责模型与工具循环，CRM 校验权限和目标，Worker 消费 SQL 持久队列。需要审批的动作绑定具体参数，执行后记录回执并重读结果。</p>
+          <div class="overview-highlight-links"><a href="./details.html#controlled-execution">了解执行与恢复 <span aria-hidden="true">↗</span></a><a href="./verification.html#execution">查看验收 <span aria-hidden="true">↗</span></a></div>
+        </article>
+        <article class="overview-highlight-card">
+          <span class="overview-highlight-index">02 / 依据</span><h3>客户记忆与可信知识</h3>
+          <p class="overview-highlight-value">沿用客户已经确认的需求，结合企业资料准备回复，让客户期望和公司承诺各有依据。</p>
+          <p class="overview-highlight-design"><strong>关键设计</strong>SQL 保存客户事实，Mem0 辅助检索与排序；WeKnora 检索后回读获授权原文。旧投影、资料改版或撤回需重新核验，外部记忆不可用时回退 SQL。</p>
+          <div class="overview-highlight-links"><a href="./details.html#trusted-context">了解事实与来源 <span aria-hidden="true">↗</span></a><a href="./verification.html#context">查看验收 <span aria-hidden="true">↗</span></a></div>
+        </article>
+        <article class="overview-highlight-card">
+          <span class="overview-highlight-index">03 / 判断</span><h3>专家协作与商机分析</h3>
+          <p class="overview-highlight-value">从客户、商机和产品政策三个角度准备销售建议，把信息缺口与依据分歧一起交给销售判断。</p>
+          <p class="overview-highlight-design"><strong>关键设计</strong>客户事实、商机诊断和政策顾问三类只读专家分工取证，父 Agent 汇总。未解冲突进入持久复核，业务层阻断相关商机动作。</p>
+          <div class="overview-highlight-links"><a href="./details.html#expert-collaboration">了解分工与冲突处理 <span aria-hidden="true">↗</span></a><a href="./verification.html#collaboration">查看验收 <span aria-hidden="true">↗</span></a></div>
+        </article>
+        <article class="overview-highlight-card">
+          <span class="overview-highlight-index">04 / 质量</span><h3>Agent 观测与评测回归</h3>
+          <p class="overview-highlight-value">分别核对任务有没有结束、动作是否落实、回答是否有依据，让问题能定位，修复有回归样本。</p>
+          <p class="overview-highlight-design"><strong>关键设计</strong>SQL 保存运行事实，Langfuse 异步接收脱敏轨迹。规则核对字段与引用，按需 Judge 辅助语义复核；实际误述、错引与误召回保留为回归样本。</p>
+          <div class="overview-highlight-links"><a href="./details.html#observation-evaluation">了解观测与评测 <span aria-hidden="true">↗</span></a><a href="./verification.html#evaluation">查看验收 <span aria-hidden="true">↗</span></a></div>
+        </article>
       </div>
-      <div class="overview-help-links"><a class="text-link" href="./details.html#workflow">用赵强的年度合同，看一次完整跟进 <span aria-hidden="true">↗</span></a><a class="text-link" href="./demo/index.html#/app/ai/workbench">浏览静态交互界面 <span aria-hidden="true">↗</span></a></div>
     </div></section>
+    <section class="overview-implementation container" id="implementation" aria-labelledby="implementation-title">
+      <div class="overview-section-heading"><h2 id="implementation-title">继续看实现，也能回查运行依据。</h2></div>
+      <dl class="overview-stack"><div><dt>应用与接口</dt><dd>Next.js · React · TypeScript</dd></div><div><dt>执行与业务数据</dt><dd>Node.js Worker · Pi · PostgreSQL / Supabase</dd></div><div><dt>记忆、知识与观测</dt><dd>Mem0 · WeKnora · Langfuse</dd></div></dl>
+      <div class="overview-evidence"><p>完整 CRM 已在本机合成业务场景中运行真实模型，公开记录保留通过项与已知限制。本站交互使用固定示例，便于体验界面与流程。</p><div class="overview-evidence-links"><a class="text-link" href="./details.html#architecture">架构与设计取舍 <span aria-hidden="true">↗</span></a><a class="text-link" href="./verification.html">运行与验收记录 <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/tech-cove01/project-crm" target="_blank" rel="noopener noreferrer">GitHub 源码 <span aria-hidden="true">↗</span></a></div></div>
+    </section>
   </main>
   <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><div><a href="./details.html">项目详解</a><a href="./verification.html">运行与验收</a><a href="https://github.com/tech-cove01/project-crm" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div></footer>
 </body>
