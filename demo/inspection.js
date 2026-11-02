@@ -2,9 +2,8 @@
 (function () {
   'use strict';
   const ref = '795165e3e8706f6b3ffe1f5e62390d699de144bf';
-  const source = path => 'https://github.com/tech-cove01/project-crm/blob/' + ref + '/' + path;
   const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const link = (path, label) => `<a href="${source(path)}" target="_blank" rel="noopener noreferrer">${h(label)}</a>`;
+  const link = (path, label) => `<span class="inspection-metadata">${h(label.replace(/^查看/, ''))}</span>`;
   const tabs = [['evidence','知识证据'],['memory','版本记忆'],['eval','Eval 理由'],['mission','客户发送'],['setup','代码与配置']];
   const ui = {tab:'evidence', source:'current', customer:'available', revision:3, eval:'review', reason:'', sourceOpen:false, sourceFocus:false};
   const badge = (text, warn = false) => `<span class="badge ${warn?'warn':''}">${h(text)}</span>`;

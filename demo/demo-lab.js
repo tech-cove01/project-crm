@@ -9,7 +9,7 @@
   const labels = { idle:'待开始', running:'可执行下一步', paused:'已暂停', waiting_approval:'等待人工批准', blocked:'知识缺口阻塞', retryable_failure:'临时故障 · 可重试', completed:'运行已结束' };
   let opened = false, tab = 'wiki', replay = null, returnFocus = null, resetConfirm = false;
   const button = (action, label, primary = false, disabled = false) => `<button type="button" class="btn ${primary?'primary':''}" data-lab="${action}" ${disabled?'disabled':''}>${label}</button>`;
-  const sourceLink = (url, label) => `<a href="${html(url)}" target="_blank" rel="noopener noreferrer">${html(label)} ↗</a>`;
+  const sourceLink = (url, label) => `<span class="lab-muted" style="overflow-wrap:anywhere">${html(label)}</span>`;
   const json = value => `<pre>${html(JSON.stringify(value,null,2))}</pre>`;
   const pill = (text, status = '') => `<span class="lab-pill ${status}">${html(text)}</span>`;
   function open(opener) {
@@ -52,7 +52,7 @@
     const list = replay===null?s.events:s.events.slice(0,replay);
     return `<div class="lab-panel-title"><h3>本次执行 Trace</h3>${pill('LOCAL · 非 LLM')}</div><p class="lab-muted">本机实际调用、参数、结果和耗时。时间戳为运行时采集；数据来自虚构 fixture。展开可审阅，不含内部推理。</p><div class="lab-metrics"><div><strong>${s.events.length}</strong><small>本地事件</small></div><div><strong>0</strong><small>模型调用</small></div><div><strong>$0</strong><small>模型 / 服务费用</small></div></div><p class="lab-muted">Tokens: 不适用 · model: null · 不推算基础设施或浏览器成本</p><div class="lab-actions">${button('replay','从头回放',false,!s.events.length)}${replay!==null?button('replay-next','下一条 '+replay+'/'+s.events.length,false,replay>=s.events.length)+button('replay-end','退出回放'):''}${button('export','导出本地 Trace',false,!s.events.length)}</div>${replay!==null?'<p class="lab-notice">只读回放已记录事件，不重新执行、不改任务状态。</p>':''}${list.map(e=>`<details class="lab-trace-item" data-lab-event="${html(e.id)}"><summary><span class="lab-event-number">${e.sequence}</span><span><strong>${html(e.tool)}</strong><small>${html(e.timestamp)} · ${e.durationMs} ms</small></span>${e.output.ok===false?pill('可见失败','warn'):pill('已记录')}</summary><p>${html(e.explanation)}</p><h4>输入</h4>${json(e.input)}<h4>输出</h4>${json(e.output)}<small>${html(e.kind)} · provider/model: null · tokens: N/A · cost: USD 0</small></details>`).join('')}${!list.length?'<p class="lab-muted">开始后这里显示真实的本地执行记录。</p>':''}`;
   }
-  function sourcesPanel() { return `<h3>原实现与本实验的边界</h3><p class="lab-muted">源代码阅读基线 ${F.sourceRef.slice(0,12)}。本实验是独立的浏览器实现；没有部署真实 Supabase/worker 栈。</p>${F.capabilities.map(c=>`<article class="lab-doc"><h4>${html(c.name)}</h4><p>${html(c.boundary)}</p>${sourceLink(c.url,c.path)}</article>`).join('')}<div class="lab-alert"><strong>不开外部连接</strong><p>无模型密钥、模型 API、WhatsApp、飞书、数据库或外发消息。只有你主动点击源码链接才会打开 GitHub。</p></div>`; }
+  function sourcesPanel() { return `<h3>原实现与本实验的边界</h3><p class="lab-muted">源代码阅读基线 ${F.sourceRef.slice(0,12)}。本实验是独立的浏览器实现；没有部署真实 Supabase/worker 栈。</p>${F.capabilities.map(c=>`<article class="lab-doc"><h4>${html(c.name)}</h4><p>${html(c.boundary)}</p>${sourceLink(c.url,c.path)}</article>`).join('')}<div class="lab-alert"><strong>不开外部连接</strong><p>无模型密钥、模型 API、WhatsApp、飞书、数据库或外发消息。</p></div>`; }
   function draw() {
     if (!opened) return;
     const previous = document.getElementById('runtime-lab'), focused = document.activeElement?.id, focusedAction = document.activeElement?.dataset?.lab;

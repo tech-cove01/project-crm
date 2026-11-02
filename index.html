@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f8fc">
-  <meta name="description" content="面向销售团队的 AI Native CRM：从业务场景了解受控 Agent 执行、客户记忆与可信知识、专家协作和观测评测，查看实现、源码与运行验收。">
+  <meta name="description" content="面向销售团队的 AI Native CRM：从业务场景了解受控 Agent 执行、客户记忆与可信知识、专家协作和观测评测，了解业务流程与关键技术设计。">
   <title>AI Native CRM — 客户管理与销售协作</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
   <link rel="stylesheet" href="./styles.css?v=highlights-20261102">
@@ -17,7 +17,7 @@
       <a class="brand" href="./index.html" aria-label="AI Native CRM 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>CRM<span class="brand-suffix"> / AI NATIVE</span></span></a>
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span></span><span></span><span class="sr-only">打开导航菜单</span></button>
       <nav class="primary-nav" id="primary-nav" aria-label="主导航">
-        <a href="#context">业务背景</a><a href="#highlights">项目亮点</a><a href="#implementation">技术与验证</a>
+        <a href="#context">业务背景</a><a href="#highlights">项目亮点</a><a href="#implementation">技术实现</a>
         <a class="button button-small button-dark" href="./details.html">项目详解 <span aria-hidden="true">↗</span></a>
       </nav>
     </div>
@@ -47,34 +47,34 @@
           <span class="overview-highlight-index">01 / 执行</span><h3>销售 Agent 受控执行</h3>
           <p class="overview-highlight-value">把分析建议推进为可核对的商机动作，关键决定保留人工控制，等待审批后任务可以继续。</p>
           <p class="overview-highlight-design"><strong>关键设计</strong>Pi 负责模型与工具循环，CRM 校验权限和目标，Worker 消费 SQL 持久队列。需要审批的动作绑定具体参数，执行后记录回执并重读结果。</p>
-          <div class="overview-highlight-links"><a href="./details.html#controlled-execution">了解执行与恢复 <span aria-hidden="true">↗</span></a><a href="./verification.html#execution">查看验收 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a href="./details.html#controlled-execution">了解执行与恢复 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
           <span class="overview-highlight-index">02 / 依据</span><h3>客户记忆与可信知识</h3>
           <p class="overview-highlight-value">沿用客户已经确认的需求，结合企业资料准备回复，让客户期望和公司承诺各有依据。</p>
           <p class="overview-highlight-design"><strong>关键设计</strong>SQL 保存客户事实，Mem0 辅助检索与排序；WeKnora 检索后回读获授权原文。旧投影、资料改版或撤回需重新核验，外部记忆不可用时回退 SQL。</p>
-          <div class="overview-highlight-links"><a href="./details.html#trusted-context">了解事实与来源 <span aria-hidden="true">↗</span></a><a href="./verification.html#context">查看验收 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a href="./details.html#trusted-context">了解事实与来源 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
           <span class="overview-highlight-index">03 / 判断</span><h3>专家协作与商机分析</h3>
           <p class="overview-highlight-value">从客户、商机和产品政策三个角度准备销售建议，把信息缺口与依据分歧一起交给销售判断。</p>
           <p class="overview-highlight-design"><strong>关键设计</strong>客户事实、商机诊断和政策顾问三类只读专家分工取证，父 Agent 汇总。未解冲突进入持久复核，业务层阻断相关商机动作。</p>
-          <div class="overview-highlight-links"><a href="./details.html#expert-collaboration">了解分工与冲突处理 <span aria-hidden="true">↗</span></a><a href="./verification.html#collaboration">查看验收 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a href="./details.html#expert-collaboration">了解分工与冲突处理 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
           <span class="overview-highlight-index">04 / 质量</span><h3>Agent 观测与评测回归</h3>
           <p class="overview-highlight-value">分别核对任务有没有结束、动作是否落实、回答是否有依据，让问题能定位，修复有回归样本。</p>
           <p class="overview-highlight-design"><strong>关键设计</strong>SQL 保存运行事实，Langfuse 异步接收脱敏轨迹。规则核对字段与引用，按需 Judge 辅助语义复核；实际误述、错引与误召回保留为回归样本。</p>
-          <div class="overview-highlight-links"><a href="./details.html#observation-evaluation">了解观测与评测 <span aria-hidden="true">↗</span></a><a href="./verification.html#evaluation">查看验收 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a href="./details.html#observation-evaluation">了解观测与评测 <span aria-hidden="true">↗</span></a></div>
         </article>
       </div>
     </div></section>
     <section class="overview-implementation container" id="implementation" aria-labelledby="implementation-title">
-      <div class="overview-section-heading"><h2 id="implementation-title">继续看实现，也能回查运行依据。</h2></div>
+      <div class="overview-section-heading"><h2 id="implementation-title">支撑销售工作流的技术实现。</h2></div>
       <dl class="overview-stack"><div><dt>应用与接口</dt><dd>Next.js · React · TypeScript</dd></div><div><dt>执行与业务数据</dt><dd>Node.js Worker · Pi · PostgreSQL / Supabase</dd></div><div><dt>记忆、知识与观测</dt><dd>Mem0 · WeKnora · Langfuse</dd></div></dl>
-      <div class="overview-evidence"><p>完整 CRM 已在本机合成业务场景中运行真实模型，公开记录保留通过项与已知限制。本站交互使用固定示例，便于体验界面与流程。</p><div class="overview-evidence-links"><a class="text-link" href="./details.html#architecture">架构与设计取舍 <span aria-hidden="true">↗</span></a><a class="text-link" href="./verification.html">运行与验收记录 <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/tech-cove01/project-crm" target="_blank" rel="noopener noreferrer">GitHub 源码 <span aria-hidden="true">↗</span></a></div></div>
+      <div class="overview-evidence"><p>前端承载工作台与审批交互，后端处理权限、持久任务和业务数据，Agent 围绕客户与商机调用工具。在线演示使用固定示例，完整 Agent 流程由本机 CRM 承载。</p><div class="overview-evidence-links"><a class="text-link" href="./details.html#architecture">架构与设计取舍 <span aria-hidden="true">↗</span></a><a class="text-link" href="./details.html#stack">完整技术栈 <span aria-hidden="true">↗</span></a></div></div>
     </section>
   </main>
-  <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><div><a href="./details.html">项目详解</a><a href="./verification.html">运行与验收</a><a href="https://github.com/tech-cove01/project-crm" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div></footer>
+  <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><div><a href="./details.html">项目详解</a><a href="./demo/index.html#/app/ai/workbench">交互演示</a></div></footer>
 </body>
 </html>
