@@ -1,6 +1,14 @@
 (() => {
   'use strict';
 
+  const previousSections = new Set(['#workflow', '#stack', '#capabilities', '#architecture']);
+  if (document.body.dataset.page === 'overview' && previousSections.has(location.hash)) {
+    const details = new URL('./details.html', location.href);
+    details.hash = location.hash;
+    location.replace(details.href);
+    return;
+  }
+
   const menu = document.querySelector('.menu-toggle');
   const navigation = document.getElementById('primary-nav');
   if (!menu || !navigation) return;

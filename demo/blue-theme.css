@@ -37,3 +37,20 @@
 .agent-prompt { font-size: 16px; }
 .agent-trace .event p, .assistant-label > span { font-size: 14px; }
 .project-sidebar-links { font-size: 14px; line-height: 1.6; }
+
+/* Put the project explanation first when opening an empty conversation. */
+.tutorial-story-link { margin: 14px 0 18px; }
+.tutorial-story-link > a { display: inline-block; min-height: 44px; padding: 9px 0; color: #1d4ed8; font-size: 15px; font-weight: 650; text-decoration: underline; text-underline-offset: 4px; }
+.tutorial-story-link > a:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
+.agent-welcome.agent-welcome-with-story { justify-content: flex-start; }
+.project-story-entry { order: -1; width: 100%; min-width: 0; padding: 22px 24px; border: 1px solid #bad0f7; border-radius: 14px; background: #edf4ff; text-align: left; }
+.project-story-entry .project-story-eyebrow { margin: 0 0 8px; color: #365c96; font-size: 14px; font-weight: 650; }
+.agent-welcome .project-story-entry h2 { margin: 0; color: #172b4d; font-size: 21px; line-height: 1.5; letter-spacing: -.02em; }
+.project-story-entry .project-story-flow { margin: 10px 0 17px; color: #496181; font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
+.project-story-entry .project-story-link { display: inline-flex; gap: 18px; max-width: 100%; min-height: 44px; padding: 9px 15px; font-size: 16px; line-height: 1.5; white-space: normal; text-decoration: none; }
+.project-story-entry .project-story-link:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
+@media (max-width: 650px) {
+  .project-story-entry { padding: 18px; border-radius: 12px; }
+  .agent-welcome .project-story-entry h2 { font-size: 19px; }
+  .project-story-entry .project-story-flow { margin-block: 9px 14px; }
+}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8fc">
+  <meta name="description" content="AI Native CRM，将客户记忆、企业知识、商机协作与受控 Agent 执行连接在同一工作台。了解业务流程、系统架构与技术取舍，直接体验浏览器交互。">
+  <title>AI Native CRM · 业务与实现详解</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="stylesheet" href="./styles.css?v=overview-20261102">
+  <script src="./script.js?v=overview-20261102" defer></script>
+</head>
+<body data-page="details">
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="site-header">
+    <div class="nav-wrap container">
+      <a class="brand" href="./index.html" aria-label="AI Native CRM 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>CRM<span class="brand-suffix"> / AI NATIVE</span></span></a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span></span><span></span><span class="sr-only">打开导航菜单</span></button>
+      <nav class="primary-nav" id="primary-nav" aria-label="主导航">
+        <a href="#workflow">业务讲解</a><a href="#stack">技术栈</a><a href="#capabilities">核心能力</a><a href="#architecture">系统架构</a>
+        <a class="nav-source" href="https://github.com/tech-cove01/project-crm" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+        <a class="button button-small button-dark" href="./index.html">项目首页 <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="detail-intro container" aria-labelledby="detail-title">
+      <a class="text-link" href="./index.html">← 返回项目首页</a>
+      <p class="eyebrow">业务流程 · 实现机制 · 方案取舍</p>
+      <h1 id="detail-title">CRM 业务与实现详解</h1>
+      <p>从一次销售跟进，理解 Agent 怎样取证、业务系统怎样授权，以及建议如何变成可核对的动作。</p>
+    </section>
+
+    <section class="section container" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-heading"><div><p class="eyebrow">01 / A SALES FOLLOW-UP</p><h2 id="workflow-title">从一句客户咨询，<br>到一次可核对的业务动作。</h2></div><p class="section-intro">沿着赵强的年度服务合同，读懂完整 CRM 怎样调查、分析、等待人工决定，再核对执行结果。</p></div>
+      <div class="detail-scenario"><strong>业务教学场景 · 赵强的年度服务合同</strong><blockquote>“请再发一份年度合同，并确认预计什么时候开始。”</blockquote><p>双方已沟通过服务范围，报价与交期仍未确认。销售希望系统先调查和分析；如果后续需要调整阶段，先形成具体提案交由人工决定。</p></div>
+      <div class="story-context">
+        <article><h3>谁在用，遇到什么问题？</h3><p>销售团队和负责人准备跟进客户时，需要同时查看沟通记录、当前商机与产品条款。赵强问什么时候开始，但这笔商机的报价和交期仍未确认；只看一句咨询，销售无法直接作出承诺。</p></article>
+        <article><h3>为什么需要 Agent？</h3><p>每次咨询的问题和资料组合不同，Agent 适合理解目标、选择允许的工具、组织多来源建议。权限校验、字段更新和批准执行由确定性的业务代码负责，固定查询也可以直接交给普通接口。</p></article>
+      </div>
+      <ol class="story-steps" aria-label="完整 CRM 的六步业务流程">
+        <li class="story-step"><span class="story-number" aria-hidden="true">01</span><div class="story-step-body"><h3>先确定：谁在跟进哪位客户、哪笔商机。</h3><p>销售选择赵强和这笔年度合同，提出复盘需求。系统先检查登录身份、组织、角色与对象关联，再保存一次任务记录（Run）。同一个客户可以有多笔商机，模型给出一个对象 ID 并不会自动获得操作权限。</p><div class="story-output"><strong>交付什么</strong><p>范围明确、可以查询状态的任务，以及本次需要核对的业务问题。</p></div></div></li>
+        <li class="story-step"><span class="story-number" aria-hidden="true">02</span><div class="story-step-body"><h3>把任务交给后台，让模型围绕工具调查。</h3><p>任务进入持久队列，独立 Worker 负责领取和执行。销售刷新页面后仍能查询保存的进度，长任务也可以等待人工决定。</p><p>Pi 承接“调用模型 → 请求工具 → 接收结果 → 继续分析”的循环。CRM 业务层决定工具能读什么、能改什么；Worker 管后台执行，队列保存待处理工作，三者各有职责。</p><div class="story-output"><strong>交付什么</strong><p>可观察的调查过程与持久执行状态，后续审批和续跑有据可接。</p></div></div></li>
+        <li class="story-step"><span class="story-number" aria-hidden="true">03</span><div class="story-step-body"><h3>把客户想要什么，与公司能承诺什么分开查。</h3><p>先核对已确认的客户事实。SQL 保存当前正文，Mem0 辅助查找相关记忆、调整检索顺序；命中后仍回读 SQL，Mem0 不可用时已有确认事实也不会消失。</p><p>服务范围和产品限制需要企业依据。WeKnora 帮助检索获授权资料，CRM 回读原文并核对来源版本。客户询问开始时间，不能据此推断公司已经承诺某个交期；资料没有覆盖的合同条款也要保留待核对。</p><div class="story-output"><strong>交付什么</strong><p>当前客户事实、可回查的产品依据，以及报价、交期等未确认项。</p></div></div></li>
+        <li class="story-step"><span class="story-number" aria-hidden="true">04</span><div class="story-step-body"><h3>分别取证，再形成一份商机判断。</h3><p>需要综合分析时，既定的三个只读专家分别核对客户事实、诊断商机、检查产品与政策，由父 Agent 汇总。专家提供证据和判断，不能各自修改商机；证据冲突、缺失或局部失败时保留复核状态。</p><p>对赵强这笔合同，可以先明确：年度服务范围已经沟通过，报价与开始日期仍待客户确认。下一次跟进应围绕这些问题补充依据，不能把客户没有确认的内容写成已达成。</p><div class="story-output"><strong>交付什么</strong><p>带依据的下一步建议，清楚区分已知事实、分析判断与未确认项。</p></div></div></li>
+        <li class="story-step"><span class="story-number" aria-hidden="true">05</span><div class="story-step-body"><h3>如果要调整商机阶段，先让人决定具体动作。</h3><p>如果后续取证支持一项需要确认的阶段调整，CRM 先生成提案，绑定这笔商机、目标阶段和动作参数。提案待批准时，商机阶段尚未因此改变；有权限的人核对后明确批准或拒绝。</p><p>批准只针对这项具体动作。拒绝后该提案不执行；部分可逆字段更新可以受控自动处理，不要求所有写入都走同一种人工审批。</p><div class="story-output"><strong>交付什么</strong><p>目标与参数明确的阶段提案，以及可追溯的批准或拒绝决定。</p></div></div></li>
+        <li class="story-step"><span class="story-number" aria-hidden="true">06</span><div class="story-step-body"><h3>执行后重新读取，再核对是否真正做好。</h3><p>获批动作由业务执行层核验并执行，保存回执，再安排续跑，重新读取商机实际状态，核对它是否与批准目标一致。执行结果未知时先暂停核对，不能直接重复操作。</p><p>最后分开检查：任务是否结束、动作是否落在正确对象上、回答是否得到事实和引用支持。SQL 保存运行事实，Langfuse 帮助观察模型与工具过程；规则检查和按需语义复核分别判断质量。轨迹齐全不等于答案正确，阶段变化也不等于客户已经签约。</p><div class="story-output"><strong>交付什么</strong><p>实际商机状态、执行回执和回答相互对应的结果，以及后续仍需销售跟进的问题。</p></div></div></li>
+      </ol>
+      <div class="story-takeaway"><strong>销售最终拿到的，是有依据的建议、明确的人工决定和可核对的动作结果。</strong><p>模型结束、任务完成与客户成交，各自有不同的判断依据。</p></div>
+      <p class="story-scope">这里用赵强串起业务教学场景，解释完整 CRM 的实现。现有真实模型与服务验收来自本机合成资料，专家分析与阶段批准分别有记录，不表示同一个 Run 自动完成整条销售流程。</p>
+      <div class="story-links"><a class="text-link" href="./verification.html">查看真实运行与验收依据 <span aria-hidden="true">↗</span></a><a class="text-link" href="./demo/index.html#/app/ai/workbench">浏览静态交互界面 <span aria-hidden="true">↗</span></a><span>交互页面使用固定示例，不实时调用完整后端。</span></div>
+    </section>
+
+    <section class="section container" id="stack" aria-labelledby="stack-title"><div class="section-heading"><div><p class="eyebrow">02 / TECHNOLOGY STACK</p><h2 id="stack-title">技术栈，一眼看全。</h2></div><p class="section-intro">完整 CRM 的界面、后端、Agent 与数据层如何配合。当前站点提供无需账号的静态交互体验。</p></div><div class="stack-grid">
+      <article class="stack-card"><span class="stack-category">界面与交互</span><h3>Next.js 16 / React 19</h3><p>TypeScript · Tailwind CSS 4 · Radix UI</p><div class="stack-detail">TanStack Query 管理接口状态，React Hook Form / Zod 处理表单，React Flow 与 Recharts 承载流程和图表。</div></article>
+      <article class="stack-card"><span class="stack-category">后端与任务</span><h3>Node.js / Agent Worker</h3><p>Next.js API · PostgreSQL 持久队列 · SSE</p><div class="stack-detail">Web/API 承接请求与授权，Worker 处理长任务，过程事件持久化后向工作台推送。</div></article>
+      <article class="stack-card"><span class="stack-category">数据与身份</span><h3>PostgreSQL / Supabase</h3><p>Auth · Storage · Realtime · RLS</p><div class="stack-detail">数据库访问策略与服务端组织、角色检查配合；Redis 用于可选缓存和运行辅助。</div></article>
+      <article class="stack-card"><span class="stack-category">Agent 与模型</span><h3>Pi Agent Core / Pi AI</h3><p>Pi 0.86.1 · Model Gateway · MCP</p><div class="stack-detail">接入百炼 Qwen，围绕 CRM 工具进行模型循环、预算控制、权限检查与审批恢复。</div></article>
+      <article class="stack-card"><span class="stack-category">记忆与知识</span><h3>Mem0 / WeKnora</h3><p>确认事实 · pgvector · text-embedding-v4</p><div class="stack-detail">客户记忆与企业知识分开管理，候选检索、SQL 事实回读与来源校验共同支持回答。</div></article>
+      <article class="stack-card"><span class="stack-category">工程与复盘</span><h3>Langfuse / Docker Compose</h3><p>pnpm · Vitest · Playwright · ESLint</p><div class="stack-detail">异步投递观测，保存规则评测与按需语义复核结果；容器与数据库迁移支持本地运行。</div></article>
+    </div></section>
+
+    <section class="capability-section section" id="capabilities" aria-labelledby="capabilities-title"><div class="container">
+      <div class="section-heading"><div><p class="eyebrow">03 / CORE CAPABILITIES</p><h2 id="capabilities-title">项目的四条核心能力。</h2></div><p class="section-intro">模型提供理解与推理，业务系统负责事实、权限和动作。四条主线共同支撑从分析建议到销售协作的过程。</p></div>
+      <div class="capability-grid">
+        <article class="capability-card"><div class="card-topline"><span class="capability-index">A / EXECUTION</span><span class="card-glyph" aria-hidden="true">↗</span></div><h3>销售 Agent 受控执行</h3><p>把模型与工具循环、CRM 业务授权和持久 Worker 分层。任务可以等待审批后继续，执行结果未知时先暂停核对。</p><div class="execution-diagram" aria-label="模型建议经过业务校验，形成提案后由人工批准"><span>Pi 模型循环</span><i aria-hidden="true">→</i><span>业务校验</span><i aria-hidden="true">→</i><span class="diagram-highlight">人工批准</span></div><ul class="card-points"><li><strong>权限与目标校验</strong>：MCP 契约约束参数、组织与业务对象</li><li><strong>持久任务与恢复</strong>：队列承接长任务，保存事件与状态</li><li><strong>分清三种状态</strong>：模型结束、动作待确认与业务完成</li></ul></article>
+        <article class="capability-card"><div class="card-topline"><span class="capability-index">B / CONTEXT</span><span class="card-glyph" aria-hidden="true">◎</span></div><h3>客户记忆与可信知识</h3><p>客户确认事实与企业产品依据分别管理。记忆检索帮助找信息，SQL 和授权原文决定最终能使用什么。</p><div class="source-pair"><div><span class="source-type">客户这边</span><strong>偏好 · 事实 · 约束</strong><span>SQL 权威正文 / Mem0 辅助检索</span></div><div><span class="source-type">企业这边</span><strong>产品 · 政策 · FAQ</strong><span>原生 RAG / WeKnora 来源回读</span></div></div><ul class="card-points"><li><strong>事实重新核对</strong>：命中后校验归属，重读当前正文</li><li><strong>不可用时回退</strong>：外部记忆服务失败，仍能读取本地事实</li><li><strong>资料更新后复核</strong>：改版或撤回后，旧依据重新核验</li></ul></article>
+        <article class="capability-card"><div class="card-topline"><span class="capability-index">C / COLLABORATION</span><span class="card-glyph" aria-hidden="true">✳</span></div><h3>专家协作与商机分析</h3><p>不同专家带着明确职责读取信息，父 Agent 统一汇总。先处理依据中的冲突，再承接需要执行的业务动作。</p><div class="specialists-diagram"><span>客户事实</span><span>商机诊断</span><span>政策顾问</span><div><i aria-hidden="true">↘</i><span>父 Agent 汇总建议</span><i aria-hidden="true">↙</i></div></div><ul class="card-points"><li><strong>专家只读取证</strong>：客户事实、商机诊断与政策顾问分工</li><li><strong>依据先对齐</strong>：分清事实分歧、资料变化与互补信息</li><li><strong>缺口明确保留</strong>：局部失败不包装成成功，冲突交由人工复核</li></ul></article>
+        <article class="capability-card"><div class="card-topline"><span class="capability-index">D / OBSERVABILITY</span><span class="card-glyph" aria-hidden="true">⌁</span></div><h3>Agent 观测与评测回归</h3><p>任务跑完不代表动作正确，动作正确也不等于回答可靠。运行事实、规则检查和语义复核分别保留。</p><div class="eval-strip"><div><span class="eval-dot"></span><strong>任务完成</strong><small>运行状态</small></div><div><span class="eval-dot"></span><strong>动作正确</strong><small>工具与回执</small></div><div><span class="eval-dot"></span><strong>回答可靠</strong><small>引用与语义</small></div></div><ul class="card-points"><li><strong>运行事实可查</strong>：SQL 保存记录，Langfuse 异步接收观测</li><li><strong>分层检查质量</strong>：规则核对字段与引用，Judge 按需复核</li><li><strong>失败进入回归</strong>：实际误述、错引与误召回保留为样本</li></ul></article>
+      </div>
+    </div></section>
+
+    <section class="section container" id="architecture" aria-labelledby="architecture-title">
+      <div class="section-heading"><div><p class="eyebrow">04 / SYSTEM ARCHITECTURE</p><h2 id="architecture-title">交互轻快，任务持久。<br>业务事实有自己的归处。</h2></div><p class="section-intro">Next.js 提供前后端入口，独立 Worker 承载 Agent 长任务。数据库保存业务与运行事实，外部服务通过适配器参与协作。</p></div>
+      <div class="architecture-board">
+        <div class="architecture-label"><span><span class="status-dot"></span> AI NATIVE CRM</span><span>Web · API · Worker · Integrations</span></div>
+        <div class="architecture-flow">
+          <div class="arch-node arch-ui"><span class="arch-number">01 / INTERFACE</span><h3>CRM 工作台</h3><p>客户档案 · 商机看板<br>Agent 对话 · 审批交互</p><div class="arch-tags"><span>React 19</span><span>Next.js 16</span></div></div>
+          <div class="arch-connector" aria-hidden="true"><span>请求 / 事件</span><i>→</i></div>
+          <div class="arch-node arch-api"><span class="arch-number">02 / BUSINESS</span><h3>API 与业务授权</h3><p>登录身份 · 组织范围<br>工具契约 · 提案与回执</p><div class="arch-tags"><span>Node.js</span><span>Zod</span></div></div>
+          <div class="arch-connector" aria-hidden="true"><span>持久任务</span><i>→</i></div>
+          <div class="arch-node arch-worker"><span class="arch-number">03 / EXECUTION</span><h3>Agent Worker</h3><p>Pi Runtime · 模型网关<br>CRM / MCP 工具 · 专家协作</p><div class="arch-tags"><span>Pi AI</span><span>Qwen</span></div></div>
+        </div>
+        <div class="arch-foundation"><span class="database-icon" aria-hidden="true">▱</span><div><h3>PostgreSQL / Supabase</h3><p>客户与商机事实 · 组织权限 · 持久队列 · 审批回执 · 运行事件</p></div><span class="foundation-tag">核心事实与状态</span></div>
+        <div class="arch-integrations"><div class="integration-heading"><span class="arch-number">ADAPTERS</span><strong>可选集成</strong></div><div><strong>Mem0</strong><span>记忆投影与检索排序</span></div><div><strong>WeKnora / pgvector</strong><span>企业 Wiki 与原生 RAG</span></div><div><strong>Langfuse</strong><span>异步观测与评分投递</span></div></div>
+      </div>
+      <p class="architecture-note">模型通过网关调用外部服务；持久任务与集成投递分开消费，观测重试不重复执行业务动作。</p>
+    </section>
+
+    <section class="decisions-section section"><div class="container"><div class="section-heading"><div><p class="eyebrow">05 / DESIGN CHOICES</p><h2>为什么这样设计？</h2></div><p class="section-intro">把销售场景里的约束转化为明确的工程选择。</p></div><div class="decisions-grid">
+      <article><span class="decision-number">01</span><h3>长任务离开请求生命周期</h3><p>商机分析可能调用多个工具，也可能等待人批准。独立 Worker 与持久队列保存过程，让页面交互与后台执行各自推进。</p><span class="decision-result">请求返回之后，任务仍有状态可查。</span></article>
+      <article><span class="decision-number">02</span><h3>事实与检索结果各司其职</h3><p>检索擅长从大量信息中发现候选；业务需要当前、授权、可解释的依据。SQL 保存确认事实，外部记忆辅助排序，知识引用回读原文。</p><span class="decision-result">找到信息之后，还要确认它能否使用。</span></article>
+      <article><span class="decision-number">03</span><h3>建议与执行分别负责</h3><p>专家各自取证，父 Agent 汇总建议；权限与审批由业务层执行。需要确认的动作绑定明确目标，未知结果保留核对入口。</p><span class="decision-result">有分析能力，也有可解释的决定过程。</span></article>
+    </div></div></section>
+
+
+
+    <section class="experience-section" id="experience" aria-labelledby="experience-title"><div class="container experience-inner"><div><p class="eyebrow">EXPLORE THE WORKSPACE</p><h2 id="experience-title">也可以浏览<br>静态交互界面。</h2><p>查看工作台、客户档案和审批交互样例；需要操作引导时，可选择现有演示教程。</p><p class="experience-boundary">浏览器静态交互版，无需账号；任务过程与操作反馈用于展示，不实时调用模型或写入后台。</p></div><div class="experience-actions"><a class="button button-dark" href="./demo/index.html#/app/ai/workbench">打开静态交互界面 <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/tech-cove01/project-crm" target="_blank" rel="noopener noreferrer">查看项目源码 <span aria-hidden="true">↗</span></a></div></div></section>
+  </main>
+  <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><span class="footer-caption">客户经营与销售协作系统</span><div><a href="./verification.html">运行与验收记录</a><a href="https://github.com/tech-cove01/project-crm/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License <span aria-hidden="true">↗</span></a><a href="#main">回到顶部 ↑</a></div></footer>
+</body>
+</html>
