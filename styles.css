@@ -190,9 +190,11 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
 .overview-scene { max-width: 940px; margin-top: 19px; padding-left: 17px; border-left: 2px solid #cbdcf6; color: var(--muted); font-size: 17px; line-height: 1.85; }
 .overview-scene strong { color: #365a91; font-weight: 650; margin-right: 10px; }
 .overview-actions { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; max-width: 940px; margin-top: 26px; }
-.overview-actions .button { justify-content: space-between; gap: 10px; min-height: 56px; padding: 13px 17px; font-size: 16px; }
-.overview-actions .button-outline { color: #1d4ed8; background: #f5f8ff; border-color: #b6ccef; }
-.overview-actions .button-outline:hover { background: #e8f0ff; border-color: #729be1; }
+.overview-actions > a { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 13px 12px; font-size: 16px; font-weight: 650; }
+.overview-demo-action { color: #fff; background: #173e80; border-color: #173e80; }
+.overview-demo-action:hover { background: #102f65; }
+.overview-action-link { color: #1d4ed8; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 6px; border-radius: 8px; }
+.overview-action-link:hover { color: #153b88; background: #f1f5fc; text-decoration-thickness: 2px; }
 .overview-problems { padding-block: 16px 44px; }
 .overview-problems h2 { font-size: 28px; margin-bottom: 24px; }
 .overview-comparison { border-top: 1px solid var(--line); }
@@ -213,8 +215,8 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
 .overview-highlight-index { color: #365a91; font-size: 14px; font-weight: 650; }
 .overview-highlight-card h3 { margin-block: 12px 14px; font-size: 25px; }
 .overview-highlight-value { font-size: 18px; line-height: 1.8; }
-.overview-highlight-design { margin-block: 18px 20px; font-size: 16px; line-height: 1.8; color: var(--muted); }
-.overview-highlight-design strong { color: #365a91; font-weight: 650; margin-right: 8px; }
+.overview-highlight-points { display: grid; gap: 11px; margin-block: 20px; font-size: 16px; line-height: 1.8; color: var(--muted); }
+.overview-highlight-points strong { color: #365a91; font-weight: 650; margin-right: 8px; }
 .overview-highlight-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 18px; margin-top: auto; padding-top: 12px; border-top: 1px solid #e4ebf5; }
 .overview-highlight-links a { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; font-size: 15px; color: #1d4ed8; font-weight: 600; }
 .overview-highlight-links a:hover { text-decoration: underline; text-underline-offset: 5px; }
@@ -246,8 +248,8 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
   .overview-lead { font-size: 17px; }
   .overview-scene { margin-top: 17px; padding-left: 14px; font-size: 16px; }
   .overview-actions { gap: 10px; margin-top: 23px; }
-  .overview-actions .button { justify-content: center; min-height: 54px; padding: 12px 8px; font-size: 15px; }
-  .overview-actions .button > span[aria-hidden="true"] { display: none; }
+  .overview-actions > a { min-height: 54px; padding: 12px 8px; font-size: 15px; }
+  .overview-actions > a > span[aria-hidden="true"] { display: none; }
   .overview-problems { padding-block: 9px 32px; }
   .overview-problems h2, .overview-section-heading h2, .overview-implementation h2 { font-size: 25px; }
   .overview-comparison-head { display: none; }

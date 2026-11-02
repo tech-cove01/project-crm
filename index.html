@@ -7,7 +7,7 @@
   <meta name="description" content="面向销售团队的 AI Native CRM：从业务场景了解受控 Agent 执行、客户记忆与可信知识、专家协作和观测评测，了解业务流程与关键技术设计。">
   <title>AI Native CRM — 客户管理与销售协作</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css?v=hero-actions-20261102">
+  <link rel="stylesheet" href="./styles.css?v=technical-highlights-20261103">
   <script src="./script.js?v=overview-20261102" defer></script>
 </head>
 <body data-page="overview">
@@ -18,7 +18,7 @@
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span></span><span></span><span class="sr-only">打开导航菜单</span></button>
       <nav class="primary-nav" id="primary-nav" aria-label="主导航">
         <a href="#context">业务背景</a><a href="#highlights">项目亮点</a><a href="./details.html#architecture">系统架构</a><a href="./details.html#stack">完整技术栈</a>
-        <a class="button button-small button-dark" href="./details.html">项目详解 <span aria-hidden="true">↗</span></a>
+        <a class="text-link" href="./details.html">项目详解 <span aria-hidden="true">↗</span></a>
       </nav>
     </div>
   </header>
@@ -28,10 +28,10 @@
       <h1 id="overview-title">从客户咨询，<br>到有依据的销售跟进。</h1>
       <p class="overview-lead">面向销售团队的客户管理与协作系统，集中管理客户档案、沟通记录、产品资料、商机和跟进任务。商机就是正在洽谈的采购或合作机会；Agent 帮销售整理背景、核对资料、分析下一步，并在业务授权下执行具体动作。</p>
       <nav class="overview-actions" aria-label="项目主要入口">
-        <a class="button button-dark" href="#highlights" aria-label="查看四项项目亮点">四项项目亮点 <span aria-hidden="true">↓</span></a>
-        <a class="button button-outline" href="./demo/index.html?tutorial=1#/app/ai/workbench">体验静态演示 <span aria-hidden="true">↗</span></a>
-        <a class="button button-outline" href="./details.html#architecture">架构与设计取舍 <span aria-hidden="true">↗</span></a>
-        <a class="button button-outline" href="./details.html#stack">完整技术栈 <span aria-hidden="true">↗</span></a>
+        <a class="button overview-demo-action" href="./demo/index.html?tutorial=1#/app/ai/workbench">体验静态演示 <span aria-hidden="true">↗</span></a>
+        <a class="overview-action-link" href="#highlights" aria-label="查看四项项目亮点">四项项目亮点 <span aria-hidden="true">↓</span></a>
+        <a class="overview-action-link" href="./details.html#architecture">架构与设计取舍 <span aria-hidden="true">↗</span></a>
+        <a class="overview-action-link" href="./details.html#stack">完整技术栈 <span aria-hidden="true">↗</span></a>
       </nav>
       <p class="overview-scene"><strong>典型场景</strong>跨境客户反复询问产品、报价和开始日期。销售要知道之前谈到哪一步、哪些条件已确认，以及下一次由谁联系。</p>
     </section>
@@ -46,30 +46,46 @@
       <a class="text-link overview-case-link" href="./details.html#workflow">以赵强的年度服务合同，串起一次完整跟进 <span aria-hidden="true">↗</span></a>
     </section>
     <section class="overview-highlights" id="highlights" aria-labelledby="highlights-title"><div class="container">
-      <div class="overview-section-heading"><p class="eyebrow">项目亮点 / 从业务需求到工程设计</p><h2 id="highlights-title">四条主线，让 Agent 接入真实业务流程。</h2><p>围绕执行边界、事实依据、协作判断和结果核对，落实可追踪的销售工作流。</p></div>
+      <div class="overview-section-heading"><p class="eyebrow">项目亮点 / 从业务需求到工程设计</p><h2 id="highlights-title">执行内核、记忆、多 Agent 与评测。</h2><p>围绕销售跟进，把模型循环、可信上下文、专家分工与质量反馈接成完整工作流。</p></div>
       <div class="overview-highlight-grid">
         <article class="overview-highlight-card">
-          <span class="overview-highlight-index">01 / 执行</span><h3>销售 Agent 受控执行</h3>
-          <p class="overview-highlight-value">把分析建议推进为可核对的商机动作，关键决定保留人工控制，等待审批后任务可以继续。</p>
-          <p class="overview-highlight-design"><strong>关键设计</strong>Pi 负责模型与工具循环，CRM 校验权限和目标，Worker 消费 SQL 持久队列。需要审批的动作绑定具体参数，执行后记录回执并重读结果。</p>
-          <div class="overview-highlight-links"><a href="./details.html#controlled-execution">了解执行与恢复 <span aria-hidden="true">↗</span></a></div>
+          <span class="overview-highlight-index">01 / PI AGENT CORE</span><h3>Pi 内核与受控执行</h3>
+          <p class="overview-highlight-value">以 Pi Agent Core 驱动模型与工具循环，让销售 Agent 连续查事实、调用工具，并在人工批准后继续执行。</p>
+          <ul class="overview-highlight-points">
+            <li><strong>内核适配</strong>将 CRM 工具契约接入 Pi，统一处理模型/工具事件与运行消息。</li>
+            <li><strong>职责分层</strong>业务 Harness 负责权限与动作边界，独立 Worker 通过 SQL 队列和租约承接长任务。</li>
+            <li><strong>审批续跑</strong>提案绑定对象与参数，获批后执行、保存回执并重读结果；结果未知时暂停核对。</li>
+          </ul>
+          <div class="overview-highlight-links"><a href="./details.html#controlled-execution">了解 Pi 内核与执行分层 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
-          <span class="overview-highlight-index">02 / 依据</span><h3>客户记忆与可信知识</h3>
-          <p class="overview-highlight-value">沿用客户已经确认的需求，结合企业资料准备回复，让客户期望和公司承诺各有依据。</p>
-          <p class="overview-highlight-design"><strong>关键设计</strong>SQL 保存客户事实，Mem0 辅助检索与排序；WeKnora 检索后回读获授权原文。旧投影、资料改版或撤回需重新核验，外部记忆不可用时回退 SQL。</p>
+          <span class="overview-highlight-index">02 / MEMORY &amp; KNOWLEDGE</span><h3>客户记忆与可信知识</h3>
+          <p class="overview-highlight-value">为连续跟进保留客户已确认的需求，把客户记忆与企业知识分开管理，建议能够回到当前事实与来源。</p>
+          <ul class="overview-highlight-points">
+            <li><strong>事实权威</strong>SQL 保存确认事实，Mem0 只作投影和排序；检索命中后按组织、客户范围重读正文。</li>
+            <li><strong>可降级读取</strong>旧投影不能覆盖当前事实，Mem0 不可用时仍可读取 SQL 记忆。</li>
+            <li><strong>知识版本</strong>WeKnora 读取授权原文，引用绑定来源版本；改版或撤回后重新核验。</li>
+          </ul>
           <div class="overview-highlight-links"><a href="./details.html#trusted-context">了解事实与来源 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
-          <span class="overview-highlight-index">03 / 判断</span><h3>专家协作与商机分析</h3>
-          <p class="overview-highlight-value">从客户、商机和产品政策三个角度准备销售建议，把信息缺口与依据分歧一起交给销售判断。</p>
-          <p class="overview-highlight-design"><strong>关键设计</strong>客户事实、商机诊断和政策顾问三类只读专家分工取证，父 Agent 汇总。未解冲突进入持久复核，业务层阻断相关商机动作。</p>
-          <div class="overview-highlight-links"><a href="./details.html#expert-collaboration">了解分工与冲突处理 <span aria-hidden="true">↗</span></a></div>
+          <span class="overview-highlight-index">03 / MULTI-AGENT</span><h3>多 Agent 协作与商机分析</h3>
+          <p class="overview-highlight-value">采用父 Agent 与只读专家的协作结构，将客户事实、商机诊断、政策依据拆成独立任务，再汇总跟进建议。</p>
+          <ul class="overview-highlight-points">
+            <li><strong>独立子运行</strong>专家各自运行 Pi 循环，持久化子任务，并分别限制工具、知识范围和预算。</li>
+            <li><strong>证据汇总</strong>结合字段值和来源版本区分事实分歧、资料改版与互补信息，保留缺证、超时和局部失败。</li>
+            <li><strong>写入收口</strong>专家只读取证，父流程承接受控动作；未解冲突进入人工复核，阻断相关商机动作。</li>
+          </ul>
+          <div class="overview-highlight-links"><a href="./details.html#expert-collaboration">了解父子任务与协作边界 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
-          <span class="overview-highlight-index">04 / 质量</span><h3>Agent 观测与评测回归</h3>
-          <p class="overview-highlight-value">分别核对任务有没有结束、动作是否落实、回答是否有依据，让问题能定位，修复有回归样本。</p>
-          <p class="overview-highlight-design"><strong>关键设计</strong>SQL 保存运行事实，Langfuse 异步接收脱敏轨迹。规则核对字段与引用，按需 Judge 辅助语义复核；实际误述、错引与误召回保留为回归样本。</p>
+          <span class="overview-highlight-index">04 / EVALUATION &amp; OBSERVABILITY</span><h3>Agent 观测与评测回归</h3>
+          <p class="overview-highlight-value">把运行事实、动作结果和回答质量分层检查，让 Agent 的问题能够定位，修复之后有样本可回归。</p>
+          <ul class="overview-highlight-points">
+            <li><strong>分层评测</strong>规则核对字段与引用，按需 Judge 复核语义；合并时保留更严格的结论。</li>
+            <li><strong>观测解耦</strong>SQL 保存运行事实，脱敏轨迹异步投递 Langfuse，投递重试不重复执行业务。</li>
+            <li><strong>失败回归</strong>保留实际误述、错引和无答案误召回，支持检索、上下文与回答策略的后续复查。</li>
+          </ul>
           <div class="overview-highlight-links"><a href="./details.html#observation-evaluation">了解观测与评测 <span aria-hidden="true">↗</span></a></div>
         </article>
       </div>
