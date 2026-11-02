@@ -189,11 +189,17 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
 .overview-lead { max-width: 940px; font-size: 19px; line-height: 1.9; color: var(--muted); }
 .overview-scene { max-width: 940px; margin-top: 19px; padding-left: 17px; border-left: 2px solid #cbdcf6; color: var(--muted); font-size: 17px; line-height: 1.85; }
 .overview-scene strong { color: #365a91; font-weight: 650; margin-right: 10px; }
-.overview-actions { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; max-width: 940px; margin-top: 26px; }
-.overview-actions > a { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 13px 12px; font-size: 16px; font-weight: 650; }
+.overview-actions { display: grid; gap: 8px; max-width: 560px; margin-top: 26px; }
+.overview-primary-actions, .overview-secondary-actions { display: grid; gap: 12px; }
+.overview-primary-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.overview-secondary-actions { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.overview-actions a { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 6px; font-size: 16px; font-weight: 650; line-height: 1.6; text-align: center; }
+.overview-primary-actions > a { min-height: 56px; padding: 13px 12px; }
+.overview-workflow-action { color: #1d4ed8; background: #fff; border-color: #90ade0; }
+.overview-workflow-action:hover { background: #f1f5fc; border-color: #1d4ed8; }
 .overview-demo-action { color: #fff; background: #173e80; border-color: #173e80; }
 .overview-demo-action:hover { background: #102f65; }
-.overview-action-link { color: #1d4ed8; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 6px; border-radius: 8px; }
+.overview-action-link { color: #1d4ed8; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 6px; border-radius: 8px; word-break: keep-all; text-wrap: balance; }
 .overview-action-link:hover { color: #153b88; background: #f1f5fc; text-decoration-thickness: 2px; }
 .overview-problems { padding-block: 16px 44px; }
 .overview-problems h2 { font-size: 28px; margin-bottom: 24px; }
@@ -237,7 +243,6 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
 .detail-scenario blockquote { margin: 14px 0; font-size: 22px; font-weight: 600; line-height: 1.8; }
 .detail-scenario p { font-size: 17px; line-height: 1.85; color: var(--muted); }
 @media (max-width: 900px) {
-  .overview-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .overview-comparison-head, .overview-comparison article { gap: 26px; }
   .overview-highlight-card { padding: 24px; }
   .overview-stack { grid-template-columns: 1fr; gap: 17px; }
@@ -247,9 +252,11 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
   .overview-hero h1 { font-size: clamp(30px,8.4vw,36px); line-height: 1.4; margin-block: 16px 19px; }
   .overview-lead { font-size: 17px; }
   .overview-scene { margin-top: 17px; padding-left: 14px; font-size: 16px; }
-  .overview-actions { gap: 10px; margin-top: 23px; }
-  .overview-actions > a { min-height: 54px; padding: 12px 8px; font-size: 15px; }
-  .overview-actions > a > span[aria-hidden="true"] { display: none; }
+  .overview-actions { margin-top: 23px; }
+  .overview-primary-actions { gap: 10px; }
+  .overview-secondary-actions { gap: 6px; }
+  .overview-actions a { font-size: 15px; padding-inline: 3px; }
+  .overview-primary-actions > a { min-height: 54px; padding: 12px 8px; }
   .overview-problems { padding-block: 9px 32px; }
   .overview-problems h2, .overview-section-heading h2, .overview-implementation h2 { font-size: 25px; }
   .overview-comparison-head { display: none; }
