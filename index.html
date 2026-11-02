@@ -7,7 +7,7 @@
   <meta name="description" content="AI Native CRM，将客户记忆、企业知识、商机协作与受控 Agent 执行连接在同一工作台。了解业务流程、系统架构与技术取舍，直接体验浏览器交互。">
   <title>AI Native CRM — 有依据的销售协作</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=case-20261102">
   <script src="./script.js" defer></script>
 </head>
 <body>
@@ -62,13 +62,26 @@
 
     <section class="section container" id="workflow" aria-labelledby="workflow-title">
       <div class="section-heading"><div><p class="eyebrow">02 / THE WORKFLOW</p><h2 id="workflow-title">围绕真实销售工作，<br>把信息与动作接起来。</h2></div><p class="section-intro">销售需要同时理解客户、产品和当前进展。工作台把这些上下文放在同一处，让“建议下一步”有依据，让“执行下一步”有边界。</p></div>
+      <article class="workflow-case" aria-labelledby="workflow-case-title">
+        <div class="case-customer">
+          <div class="case-heading"><p class="eyebrow">赵强 · 年度服务合同</p><span class="journey-label">虚构客户场景</span></div>
+          <h3 id="workflow-case-title">客户想再确认合同，销售先核对依据。</h3>
+          <blockquote class="case-question">“请再发一份年度合同，并确认预计什么时候开始。”</blockquote>
+          <p class="case-context">这笔商机停在「方案沟通」，已有 8 天没有新活动。销售准备下一次跟进时，需要把客户的诉求、资料中的依据和仍未确认的内容整理清楚。</p>
+        </div>
+        <div class="case-brief">
+          <dl class="case-facts"><div><dt>当前进展</dt><dd>已沟通年度服务范围</dd></div><div><dt>仍待确认</dt><dd>报价与交期</dd></div></dl>
+          <div class="case-assignment"><p class="eyebrow">销售交给 Agent 的任务</p><p>核对赵强的年度服务合同，整理下一步跟进并准备回复草稿，暂不发送。</p></div>
+        </div>
+      </article>
       <div class="workflow-grid">
-        <article class="workflow-step"><span class="step-number">01</span><h3>认识客户</h3><p>从客户档案与沟通记录读取背景，核对已确认的偏好、约束和事实。</p><span class="step-label">客户上下文</span></article>
-        <article class="workflow-step"><span class="step-number">02</span><h3>查找依据</h3><p>检索授权产品资料与 FAQ，回读来源，分清客户意愿和企业可承诺的内容。</p><span class="step-label">可信知识</span></article>
-        <article class="workflow-step"><span class="step-number">03</span><h3>分析商机</h3><p>客户事实、商机诊断与政策顾问分工取证，由父 Agent 汇总建议与缺口。</p><span class="step-label">专家协作</span></article>
-        <article class="workflow-step"><span class="step-number">04</span><h3>确认动作</h3><p>需要确认的阶段变更生成具体提案，展示目标与动作，交由有权限的人批准。</p><span class="step-label">人工决定</span></article>
-        <article class="workflow-step"><span class="step-number">05</span><h3>跟进结果</h3><p>保存执行回执、重读业务状态并续跑任务，让建议和实际结果对应起来。</p><span class="step-label">业务闭环</span></article>
+        <article class="workflow-step"><span class="step-number">01</span><h3>认识客户</h3><p>核对赵强的客户档案、合同商机与沟通记录，先明确本次要解决什么问题。</p><div class="step-output"><strong>本步产物</strong><p>当前商机背景，以及报价、交期两个待确认问题。</p></div><span class="step-label">客户上下文</span></article>
+        <article class="workflow-step"><span class="step-number">02</span><h3>查找依据</h3><p>检查产品说明与 FAQ。范围、报价以人工确认为准，交付日期需按需求讨论。</p><div class="step-output"><strong>本步产物</strong><p>资料支持的范围与限制；合同专属条款保留待核对。</p></div><span class="step-label">可信知识</span></article>
+        <article class="workflow-step"><span class="step-number">03</span><h3>分析商机</h3><p>综合客户背景、商机状态和产品依据，整理下一步建议，保留尚未确认的内容。</p><div class="step-output"><strong>本步产物</strong><p>跟进建议、待确认项与一份未发送的回复草稿。</p></div><span class="step-label">分析与建议</span></article>
+        <article class="workflow-step"><span class="step-number">04</span><h3>确认动作</h3><p>销售负责人查看具体草稿，选择批准或拒绝；本例的人工决定围绕这份草稿展开。</p><div class="step-output"><strong>本步产物</strong><p>草稿决定：批准后模拟入队，拒绝则不进入后续发送。</p></div><span class="step-label">人工决定</span></article>
+        <article class="workflow-step"><span class="step-number">05</span><h3>跟进结果</h3><p>核对本地跟进任务与决定记录，继续跟进客户尚未确认的报价与交期。</p><div class="step-output"><strong>本步产物</strong><p>可撤销的明日跟进任务、草稿决定与未发送状态。</p></div><span class="step-label">结果核对</span></article>
       </div>
+      <div class="workflow-tutorial"><div><h3>跟着赵强，走一遍这次跟进。</h3><p>继续体验同一笔商机的七步教程，查看背景、资料、草稿和决定记录。</p><p class="tutorial-boundary">教程使用浏览器固定示例；批准仅记录本地模拟入队，不发送消息或改变商机阶段。</p></div><a class="button button-dark" href="./demo/index.html?tutorial=1#/app/ai/workbench">开始这笔商机的演示 <span aria-hidden="true">↗</span></a></div>
       <div class="workflow-bottom"><span class="line-dot" aria-hidden="true"></span><p>客户、商机、知识引用和执行记录共享组织作用域；从交互入口到工具调用，权限始终跟随业务对象。</p></div>
     </section>
 

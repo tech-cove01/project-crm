@@ -83,13 +83,34 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .stack-card h3 { font-size: 21px; line-height: 1.5; margin-top: 10px; overflow-wrap: anywhere; }
 .stack-card > p { font-size: 15px; margin-top: 12px; color: #365a91; line-height: 1.8; }
 .stack-detail { font-size: 16px; line-height: 1.85; color: var(--muted); border-top: 1px solid #e8eef8; margin-top: 17px; padding-top: 15px; }
+.workflow-case { display: grid; grid-template-columns: 1.35fr 1fr; margin-bottom: 22px; border: 1px solid #cedcf0; border-radius: var(--radius); background: #fff; overflow: hidden; }
+.case-customer { padding: 28px; min-width: 0; }
+.case-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.case-customer h3 { margin-top: 18px; font-size: 22px; }
+.case-question { margin: 16px 0; padding-left: 18px; border-left: 3px solid var(--blue); font-size: 21px; font-weight: 600; line-height: 1.8; }
+.case-context { color: var(--muted); font-size: 16px; line-height: 1.9; }
+.case-brief { display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 28px; min-width: 0; border-left: 1px solid var(--line); background: #f0f5ff; }
+.case-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin: 0; }
+.case-facts dt { color: var(--muted); font-size: 14px; }
+.case-facts dd { margin: 6px 0 0; font-size: 16px; font-weight: 650; }
+.case-assignment { border-top: 1px solid #d2e0f5; padding-top: 18px; }
+.case-assignment > p:last-child { margin-top: 9px; font-size: 17px; line-height: 1.85; }
 .workflow-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; }
 .workflow-step { padding: 24px 20px; min-width: 0; }
 .workflow-step + .workflow-step { border-left: 1px solid var(--line); }
 .step-number { color: #496d9f; font-size: 14px; font-weight: 650; }
 .workflow-step h3 { margin: 18px 0 12px; font-size: 21px; }
 .workflow-step > p { font-size: 16px; line-height: 1.9; color: var(--muted); }
+.step-output { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e3ebf7; }
+.step-output strong { display: block; color: #365a91; font-size: 14px; font-weight: 650; }
+.step-output p { margin-top: 7px; font-size: 16px; line-height: 1.85; }
 .step-label { display: inline-block; margin-top: 20px; background: #eff4fc; color: #365a91; padding: 2px 7px; border-radius: 4px; font-size: 14px; }
+.workflow-tutorial { display: flex; align-items: center; justify-content: space-between; gap: 26px; margin-top: 22px; padding: 24px 28px; border: 1px solid #d4e2f7; border-radius: var(--radius); background: #edf4ff; }
+.workflow-tutorial > div { min-width: 0; }
+.workflow-tutorial h3 { font-size: 22px; }
+.workflow-tutorial p { margin-top: 8px; color: var(--muted); font-size: 16px; }
+.workflow-tutorial p.tutorial-boundary { font-size: 14px; }
+.workflow-tutorial .button { flex-shrink: 0; }
 .workflow-bottom { display: flex; align-items: baseline; gap: 10px; margin-top: 19px; color: var(--muted); font-size: 14px; }
 .capability-section { background: #edf3fb; border-block: 1px solid var(--line); }
 .capability-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; }
@@ -187,6 +208,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .arch-integrations > div:not(:first-child) { padding-left: 13px; }
 }
 @media (max-width: 900px) {
+  .workflow-case { grid-template-columns: 1fr; }
+  .case-brief { border-left: 0; border-top: 1px solid var(--line); }
+  .workflow-tutorial { align-items: flex-start; flex-direction: column; }
   .hero { grid-template-columns: minmax(0,1fr); gap: 32px; padding-block: 42px; }
   .hero-copy { max-width: 700px; }
   .preview-wrap { width: 100%; max-width: 700px; }
@@ -213,6 +237,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   .site-footer > div { width: 100%; margin-left: 0; }
 }
 @media (max-width: 650px) {
+  .case-customer, .case-brief { padding: 23px; }
+  .case-customer h3, .workflow-tutorial h3 { font-size: 21px; }
+  .case-question { font-size: 20px; padding-left: 14px; }
+  .case-assignment > p:last-child { font-size: 16px; }
+  .workflow-tutorial { padding: 23px; gap: 20px; }
+  .workflow-tutorial p.tutorial-boundary { font-size: 15px; }
   html { scroll-padding-top: 88px; }
   .container { width: calc(100% - 40px); }
   .nav-wrap { min-height: 68px; gap: 15px; }

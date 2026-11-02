@@ -4,13 +4,13 @@
   const SEEN_KEY = 'project-crm.demo-tutorial.seen.v1';
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const lessons = [
-    { title: '从一笔商机开始', text: '工作台围绕当前商机读取信息。先明确要推进哪笔业务，再让 Agent 查证和分析。', example: '本次示例：赵强的年度服务合同，报价与交期仍待客户确认。', targets: ['.agent-contextbar', '#agent-task'], prepare() { navigate('/app/ai/workbench', true); } },
+    { title: '从一笔商机开始', text: '继续跟进赵强的年度服务合同。先核对客户问题和当前商机，再准备下一步建议与回复草稿；报价与交期仍待客户确认。', example: '赵强：“请再发一份年度合同，并确认预计什么时候开始。”', targets: ['.agent-contextbar', '#agent-task'], prepare() { navigate('/app/ai/workbench', true); } },
     { title: '先看商机卡在哪里', text: '看板把阶段、金额和下一次跟进放在一起。打开商机档案，可以看到相关客户、记录和业务任务。', example: '这笔商机已停滞 8 天。需要先确认服务范围与交期，再决定下一步。', targets: ['.drawer h2', '.drawer-body', '[data-lead-drag="l4"]'], prepare() { navigate('/app/pipelines/demo', true); state.drawer = { kind: 'lead', id: 'l4' }; render(); } },
     { title: '记住客户确认过的事实', text: '客户偏好、约束和约定放在客户档案里。确认事实由 SQL 保存，Mem0 辅助检索；检索命中后仍要重读当前事实。', example: '“客户希望某日上线”是客户诉求，并不等于公司已经承诺该日期。', targets: ['[data-service-contact="c4"]', '.drawer-body'], prepare() { navigate('/app/contacts', true); state.drawer = { kind: 'contact', id: 'c4' }; render(); } },
     { title: '产品承诺要有企业依据', text: '产品说明、FAQ 和公司政策属于企业知识。分析应核对允许使用的资料，资料改版或撤回后重新确认依据。', example: '客户记忆解释“客户想要什么”；企业资料说明“公司能提供什么”。', targets: ['[data-knowledge="k1"]', '.tablebox', '.settings-stack'], prepare() { navigate('/app/ai/knowledge/sources', true); } },
     { title: '运行一次分析示例', text: '现在把客户和商机带回工作台。运行固定示例，观察读取上下文、策略判断、创建可撤销的本地跟进，以及准备回复草稿。', example: '点击下方“运行演示分析”。这里复用现有浏览器演示，不请求真实模型。', targets: ['#agent-task', '#agent-conversation', '.agent-conversation'], prepare() { navigate('/app/ai/workbench', true); state.agent = 1; state.mode = 'act'; render(); } },
     { title: '由你决定是否批准', text: 'Agent 已准备好回复草稿。看看草稿，再选择批准或拒绝。这个决定只改变本地演示状态，不会向客户发送消息。', example: '内部可撤销操作与面向客户的动作有不同边界；模型说“完成”不能替代你的业务决定。', targets: ['.agent-sidepanel [data-action="approve"]', '.agent-panel-body'], prepare() { navigate('/app/ai/workbench', true); openAgentPanel('details'); } },
-    { title: '最后，核对实际发生了什么', text: '运行记录保留读取、判断和人工决定。任务结束、动作结果与业务完成需要分开看，不能只看一段生成的回答。', example: '教程到此结束。完成后恢复进入前的页面和数据，你可以继续自由探索。', targets: ['.agent-trace', '.agent-panel-body'], prepare() { navigate('/app/ai/workbench', true); openAgentPanel('details'); } }
+    { title: '最后，核对实际发生了什么', text: '核对明日跟进任务、草稿决定与未发送状态。报价与交期仍待客户确认，运行结束和模拟入队都不能证明合同已获客户接受。', example: '教程到此结束。完成后恢复进入前的页面和数据，你可以继续自由探索。', targets: ['.agent-trace', '.agent-panel-body'], prepare() { navigate('/app/ai/workbench', true); openAgentPanel('details'); } }
   ];
   let mode = null, index = 0, snapshot = null, tutorialState = null, returnFocus = null, oldOverflow = '', oldInert = false, frame = null;
   const button = (action, text, primary = false, disabled = false) => `<button type="button" class="tutorial-button${primary ? ' primary' : ''}" data-tutorial-action="${action}"${disabled ? ' disabled' : ''}>${text}</button>`;
@@ -78,7 +78,7 @@
     const oldScroll = card.scrollTop;
     element.dataset.layout = mode;
     if (mode === 'welcome') {
-      card.innerHTML = `<div class="tutorial-topline"><span class="tutorial-kicker">演示教程 · 约 2 分钟</span><button type="button" class="tutorial-exit" data-tutorial-action="skip" aria-label="关闭演示教程邀请">关闭 ×</button></div><h2 id="tutorial-title">跟着一笔商机，体验 CRM</h2><p class="tutorial-description">从客户背景和产品资料开始，看 Agent 如何分析、准备草稿，再由你作出决定。</p><div class="tutorial-points"><span>7 个步骤</span><span>随时退出</span><span>不影响自由探索数据</span></div>${state.busy ? '<p class="tutorial-example" role="status">当前演示任务正在运行，结束或取消后就可以开始教程。</p>' : '<p class="tutorial-example">你也可以直接跳过，稍后从工作台或侧栏的“演示教程”重新打开。</p>'}<div class="tutorial-controls">${button('skip','暂不体验')} ${button('start','开始演示教程',true,state.busy)}</div><p class="tutorial-footnote">使用浏览器固定示例，无需账号，不调用真实模型或发送消息。</p>`;
+      card.innerHTML = `<div class="tutorial-topline"><span class="tutorial-kicker">演示教程 · 约 2 分钟</span><button type="button" class="tutorial-exit" data-tutorial-action="skip" aria-label="关闭演示教程邀请">关闭 ×</button></div><h2 id="tutorial-title">跟着一笔商机，体验 CRM</h2><p class="tutorial-description">沿着赵强的年度服务合同，核对客户问题与资料，准备跟进草稿，再由你作出决定。</p><div class="tutorial-points"><span>7 个步骤</span><span>随时退出</span><span>不影响自由探索数据</span></div>${state.busy ? '<p class="tutorial-example" role="status">当前演示任务正在运行，结束或取消后就可以开始教程。</p>' : '<p class="tutorial-example">你也可以直接跳过，稍后从工作台或侧栏的“演示教程”重新打开。</p>'}<div class="tutorial-controls">${button('skip','暂不体验')} ${button('start','开始演示教程',true,state.busy)}</div><p class="tutorial-footnote">使用浏览器固定示例，无需账号，不调用真实模型或发送消息。</p>`;
     } else {
       const lesson = lessons[index], analysis = index === 4, decision = index === 5;
       const ready = completedAnalysis(), proposal = state.detail?.proposal;
