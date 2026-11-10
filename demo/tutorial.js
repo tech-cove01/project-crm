@@ -16,10 +16,12 @@
   const button = (action, text, primary = false, disabled = false) => `<button type="button" class="tutorial-button${primary ? ' primary' : ''}" data-tutorial-action="${action}"${disabled ? ' disabled' : ''}>${text}</button>`;
   function markSeen() { try { sessionStorage.setItem(SEEN_KEY, '1'); } catch { /* The tour remains usable without storage. */ } }
   function entrypoints() {
+    const scenarioGuide = Boolean(window.CRM_SHOWCASE?.getState().scenario);
     const header = document.querySelector('.agent-header-actions');
-    if (header && !header.querySelector('[data-demo-tutorial]')) header.insertAdjacentHTML('afterbegin', '<button type="button" class="btn tutorial-entry" data-demo-tutorial>演示教程</button>');
+    if (header && !header.querySelector('[data-demo-tutorial]') && !(scenarioGuide && header.querySelector('[data-scenario-guide]'))) header.insertAdjacentHTML('afterbegin', '<button type="button" class="btn tutorial-entry" data-demo-tutorial>旧版完整教程</button>');
     const side = document.querySelector('.project-sidebar-links');
-    if (side && !side.querySelector('[data-demo-tutorial]')) side.insertAdjacentHTML('beforeend', '<button type="button" class="tutorial-entry" data-demo-tutorial>演示教程</button>');
+    if (side && !side.querySelector('[data-demo-tutorial]') && !(scenarioGuide && side.querySelector('[data-scenario-guide]'))) side.insertAdjacentHTML('beforeend', '<button type="button" class="tutorial-entry" data-demo-tutorial>旧版完整教程</button>');
+    if (window.CRM_SHOWCASE?.getState().scenario) document.querySelectorAll('[data-demo-tutorial]').forEach(el => { el.textContent = '跟我操作'; });
   }
   function layer() {
     let element = document.getElementById('demo-tutorial');
@@ -40,7 +42,8 @@
   }
   function showWelcome(opener) {
     if (mode) return;
-    if (window.CRM_SHOWCASE?.getState().scenario && !window.CRM_SHOWCASE.close()) return;
+    if (window.CRM_SHOWCASE?.getState().scenario) { window.CRM_SCENARIO_GUIDE?.open(null, opener); return; }
+    if (window.CRM_SCENARIO_GUIDE?.getState().open) window.CRM_SCENARIO_GUIDE.exit();
     returnFocus = opener || document.activeElement; mode = 'welcome'; lock(); updateCard(); focusAction('start');
   }
   function start() {
@@ -176,5 +179,5 @@
   }
   let seen = false; try { seen = !!sessionStorage.getItem(SEEN_KEY); } catch { /* Optional session preference. */ }
   const requestedScenario = ['execution','knowledge','collaboration','evaluation'].includes(entryURL.searchParams.get('scenario'));
-  if (!requestedScenario && (requestedTutorial || !seen) && state.page === '/app/ai/workbench') queueMicrotask(()=>showWelcome());
+  if (!requestedScenario && requestedTutorial && state.page === '/app/ai/workbench') queueMicrotask(()=>showWelcome());
 })();

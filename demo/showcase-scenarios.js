@@ -17,11 +17,12 @@
     url.hash = '/app/ai/workbench';
     return url;
   }
-  function protectedFlow() {
+  function protectedFlow(kind, id) {
     if (state.busy || window.CRM_TUTORIAL?.getState().open) {
       toast('请先结束当前任务或退出教程，再切换四场景演示。');
       return true;
     }
+    if (window.CRM_SCENARIO_GUIDE?.beforeChange(kind, id) === false) return true;
     return false;
   }
   function isolateExploration() {
@@ -31,16 +32,17 @@
     state = structuredClone(state);
   }
   function open(id, updateHistory = true) {
-    if (!valid(id) || protectedFlow()) return false;
+    if (!valid(id) || protectedFlow('open', id)) return false;
     isolateExploration();
     selected = id; currentState();
     if (updateHistory) history.pushState(history.state, '', urlFor(id));
     navigate('/app/ai/workbench', true);
     document.querySelector('#showcase-title')?.focus({ preventScroll: true });
+    window.dispatchEvent(new CustomEvent('crm:showcase-change', { detail: { type: 'open', scenario: selected } }));
     return true;
   }
   function close() {
-    if (protectedFlow()) return false;
+    if (protectedFlow('close')) return false;
     const saved = exploration;
     selected = null;
     exploration = null;
@@ -49,12 +51,14 @@
     render();
     if (saved) window.scrollTo(saved.scrollX, saved.scrollY);
     (saved?.focusId ? document.getElementById(saved.focusId) : document.querySelector('[data-showcase-open]'))?.focus({ preventScroll: true });
+    window.dispatchEvent(new CustomEvent('crm:showcase-change', { detail: { type: 'close' } }));
     return true;
   }
   function reset() {
-    if (!selected || protectedFlow()) return false;
+    if (!selected || protectedFlow('reset', selected)) return false;
     states[selected] = panels[selected].create(); render();
     document.querySelector('[data-showcase-reset]')?.focus({ preventScroll: true });
+    window.dispatchEvent(new CustomEvent('crm:showcase-change', { detail: { type: 'reset', scenario: selected, action: 'reset' } }));
     return true;
   }
   function shell() {
@@ -62,7 +66,7 @@
     return `<section id="showcase-scenario" class="showcase-workspace" data-showcase-scenario="${selected}" aria-labelledby="showcase-title">
       <div class="showcase-topline"><a href="../details.html#${({ execution: 'controlled-execution', knowledge: 'trusted-context', collaboration: 'expert-collaboration', evaluation: 'observation-evaluation' })[selected]}">阅读该场景的业务讲解</a><button type="button" class="showcase-button" data-showcase-close>返回自由探索</button></div>
       <nav class="showcase-tabs" aria-label="四条亮点演示">${order.filter(valid).map((id, i) => `<button type="button" class="showcase-tab${selected === id ? ' active' : ''}" data-showcase-open="${id}" aria-current="${selected === id ? 'page' : 'false'}"><span>${i + 1}</span>${shortNames[id]}</button>`).join('')}</nav>
-      <header class="showcase-heading"><div><p class="showcase-eyebrow">商机跟进 · 可操作的固定示例</p><h1 id="showcase-title" tabindex="-1">${h(panel.title)}</h1><p>${h(panel.intro)}</p></div><button type="button" class="showcase-button" data-showcase-reset>重置本场景</button></header>
+      <header class="showcase-heading"><div><p class="showcase-eyebrow">商机跟进 · 可操作的固定示例</p><h1 id="showcase-title" tabindex="-1">${h(panel.title)}</h1><p>${h(panel.intro)}</p></div><div class="showcase-actions"><button type="button" class="showcase-button primary" data-scenario-guide>跟我操作</button><button type="button" class="showcase-button" data-showcase-reset>重置本场景</button></div></header>
       <p class="showcase-boundary">浏览器本地模拟 · 不调用 Pi、模型、Mem0、WeKnora 或后端 · 操作仅影响本场景，刷新回到起点</p>
       <div class="showcase-panel">${panel.render(currentState())}</div>
       <footer class="showcase-footer">可以切换对照分支并重复操作；“重置本场景”恢复本场景起点。模拟结果与公开真实记录分别标明。</footer>
@@ -98,6 +102,7 @@
     const nextScroller = document.querySelector('#showcase-scenario'); if (nextScroller) nextScroller.scrollTop = top;
     const focus = [...document.querySelectorAll('#showcase-scenario [data-showcase-action]')].find(item => item.dataset.showcaseAction === name && !item.disabled);
     (focus || document.querySelector('#showcase-title'))?.focus({ preventScroll: true });
+    window.dispatchEvent(new CustomEvent('crm:showcase-change', { detail: { type: 'action', scenario: selected, action: name } }));
   });
   document.addEventListener('click', event => {
     if (selected && event.target.closest('.topbar [data-action="reset"]')) {
@@ -106,9 +111,10 @@
   }, true);
   function syncURL() {
     const id = new URL(location.href).searchParams.get('scenario');
-    if (protectedFlow()) {
+    if (protectedFlow('history', id)) {
       const url = new URL(location.href);
       if (selected) url.searchParams.set('scenario', selected); else url.searchParams.delete('scenario');
+      if (selected) url.hash = '/app/ai/workbench';
       history.replaceState(history.state, '', url);
       return;
     }
@@ -117,8 +123,9 @@
     selected = valid(id) ? id : null;
     if (selected) currentState();
     render();
+    window.dispatchEvent(new CustomEvent('crm:showcase-change', { detail: { type: 'history', scenario: selected } }));
   }
   window.addEventListener('popstate', syncURL);
-  window.CRM_SHOWCASE = { open, reset, close, getState: () => ({ scenario: selected, state: currentState() ? structuredClone(currentState()) : null }) };
+  window.CRM_SHOWCASE = { open, reset, close, isPristine: () => selected ? JSON.stringify(currentState()) === JSON.stringify(panels[selected].create()) : true, getState: () => ({ scenario: selected, state: currentState() ? structuredClone(currentState()) : null }) };
   if (selected) open(selected, false); else render();
 })();

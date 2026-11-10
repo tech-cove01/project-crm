@@ -1,0 +1,65 @@
+/* Page instructions observe the fixed scenarios; they never perform business actions. */
+(function () {
+  'use strict';
+  const lessons = window.CRM_GUIDE_LESSONS ||= {};
+  const action = name => `[data-showcase-action="${name}"]`;
+  const explanation = '这只是浏览器里的示例状态，不会修改真实客户数据。';
+  lessons.execution = {
+    title: '一起走完一次批准，再看看拒绝会怎样',
+    intro: '每次只做一件事。先分析这笔商机，亲自决定是否批准，再核对结果；随后你可以明确重置，体验拒绝分支。刷新会回到场景起点。',
+    takeaway: '分析、批准、执行和核对是四件事。拒绝也能正常结束，任务完成不代表合同已经谈成。',
+    principle: '../details.html#controlled-execution', nextScene: 'knowledge',
+    resumeAt: ({ state: s }) => ({ idle: 0, waiting_approval: 1, approved: 2, executed: 3, verified: 4, rejected: 7, rejection_verified: 8 })[s.phase] ?? 0,
+    steps: [
+      { id: 'analyze', title: '先让系统整理依据，提出建议',
+        text: '点高亮的“分析并生成阶段提案”。先看看打算改成什么，系统现在不会直接改阶段。',
+        target: action('execution-analyze'), action: 'execution-analyze',
+        predicate: ({ state: s }) => Boolean(s.proposal) && s.phase === 'waiting_approval',
+        resultTarget: '.showcase-proposal',
+        resultText: '阶段提案已经出现：已联系 → 方案沟通。当前阶段仍是已联系，回执还是0条。分析完成，不代表动作已执行。' },
+      { id: 'approve', title: '这一次，由你亲自批准',
+        text: '读过提案后，点“批准阶段变更”。这只是准许后续执行，还不会立即改阶段。稍后会再带你体验拒绝。',
+        target: action('execution-approve'), action: 'execution-approve',
+        predicate: ({ state: s }) => s.phase === 'approved' && s.proposal?.decision === 'approved',
+        resultTarget: '[data-execution-status]',
+        resultText: '已记录你的批准，当前阶段仍未变。下一步才由你触发示例中的执行过程。',
+        failureText: '当前没有待批准提案，或你已选择另一分支。保持当前状态可以自由体验；也可明确选择从头重走，教程不会替你批准。' },
+      { id: 'execute', title: '让已批准的变更执行一次',
+        text: '点“执行已批准变更”，模拟后台接住刚才的决定。只有已批准的提案能走到这里。',
+        target: action('execution-execute'), action: 'execution-execute',
+        predicate: ({ state: s }) => s.phase === 'executed' && s.receipts.length === 1,
+        resultTarget: '[data-execution-receipts]',
+        resultText: '现在阶段变成方案沟通，并生成唯一一条执行回执。还需要再读一次当前商机，核对决定和结果是否一致。' },
+      { id: 'read-approved', title: '再读一次，核对实际结果',
+        text: '点“重读商机状态”。以再次读取的阶段和回执为准，而不是只看一句“已完成”。',
+        target: action('execution-reread'), action: 'execution-reread',
+        predicate: ({ state: s }) => s.phase === 'verified' && s.readback?.consistent === true && s.receipts.length === 1,
+        resultTarget: '[data-execution-status]',
+        resultText: '批准路径核对一致：阶段是方案沟通，回执1条。合同是否被客户接受仍未确认。接下来，你可以亲自重置这个示例，看看拒绝会怎样。' },
+      { id: 'choose-rejection', title: '明确重置，再体验拒绝分支',
+        text: '点高亮的“重置本场景”，会清空本场景刚才的模拟结果并回到已联系。只有你点下这个按钮才重置；也可直接关闭引导保留结果。',
+        target: '[data-showcase-reset]', action: 'reset',
+        predicate: ({ state: s }) => s.phase === 'idle' && s.proposal === null && s.receipts.length === 0,
+        resultTarget: '[data-execution-stage]',
+        resultText: `示例已由你重置：阶段回到已联系，回执0条。${explanation}再分析一次，这次选择拒绝。` },
+      { id: 'analyze-rejection', title: '为拒绝分支重新准备提案',
+        text: '点“分析并生成阶段提案”。生成提案仍然不会改变商机阶段。',
+        target: action('execution-analyze'), action: 'execution-analyze',
+        predicate: ({ state: s }) => s.phase === 'waiting_approval' && Boolean(s.proposal),
+        resultTarget: '.showcase-proposal',
+        resultText: '同一类阶段提案再次等待决定，当前阶段未变。下一步请亲自拒绝它。' },
+      { id: 'reject', title: '这一次，亲自拒绝变更',
+        text: '点“拒绝阶段变更”。拒绝是正常决定，不是程序故障；它应阻止阶段变更。',
+        target: action('execution-reject'), action: 'execution-reject',
+        predicate: ({ state: s }) => s.phase === 'rejected' && s.proposal?.decision === 'rejected',
+        resultTarget: '[data-execution-status]',
+        resultText: '这是预期保护：拒绝已记录，执行按钮不可用，商机阶段仍为已联系。接着重读，核实没有执行效果。' },
+      { id: 'read-rejected', title: '核实拒绝确实没有改动阶段',
+        text: '点“重读商机状态”，看当前阶段和回执数量。',
+        target: action('execution-reread'), action: 'execution-reread',
+        predicate: ({ state: s }) => s.phase === 'rejection_verified' && s.readback?.consistent === true && s.receipts.length === 0,
+        resultTarget: '[data-execution-status]',
+        resultText: '这是预期保护：拒绝后核对一致，阶段仍为已联系，执行回执0条。你已亲自走过批准和拒绝，两种结果都有据可查。' }
+    ]
+  };
+})();

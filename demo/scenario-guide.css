@@ -1,0 +1,31 @@
+/* The layer never intercepts the real scene controls. Only its card takes pointer input. */
+.scenario-guide-layer { position:fixed; inset:0; z-index:160; pointer-events:none; color:#16385f; }
+.scenario-guide-card { position:fixed; pointer-events:auto; overflow:auto; overscroll-behavior:contain; padding:18px; border:1px solid #adc8e9; border-radius:14px; background:#fff; box-shadow:0 12px 38px #173a6333; font-size:15px; line-height:1.7; }
+.scenario-guide-card * { box-sizing:border-box; }
+.scenario-guide-topline { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; color:#466b94; font-size:13px; font-weight:600; }
+.scenario-guide-close { flex-shrink:0; border:0; border-radius:5px; background:transparent; color:#476481; padding:5px; min-height:32px; font-size:13px; }
+.scenario-guide-card h2 { margin:0 0 9px; color:#133d6f; font-size:20px; line-height:1.45; }
+.scenario-guide-card p { margin:0; font-size:15px; line-height:1.75; }
+.scenario-guide-card .scenario-guide-step { color:#1761ae; font-size:13px; font-weight:700; margin:0 0 6px; }
+.scenario-guide-card .scenario-guide-note { margin-top:10px; color:#526b86; font-size:13px; }
+.scenario-guide-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:15px; }
+.scenario-guide-button { min-height:42px; border:1px solid #b4cbe5; border-radius:7px; background:#fff; color:#21538a; padding:8px 12px; font:inherit; font-size:14px; line-height:1.5; font-weight:600; }
+.scenario-guide-button.primary { background:#154a85; border-color:#154a85; color:#fff; }
+.scenario-guide-action-hint { font-size:14px; color:#1a5b9f; font-weight:600; }
+.scenario-guide-card .scenario-guide-failure { padding:9px 11px; margin-top:10px; border:1px solid #ead09d; border-radius:6px; color:#79551b; background:#fff8e9; font-size:14px; }
+.scenario-guide-spotlight { position:fixed; pointer-events:none; border:3px solid #347bd0; border-radius:10px; box-shadow:0 0 0 9999px #173d6624,0 0 0 5px #fff9; }
+[data-guide-target] { outline:3px solid #347bd0 !important; outline-offset:4px; }
+[data-guide-result] { outline:3px solid #307c60 !important; outline-offset:4px; }
+.scenario-guide-layer[data-guide-phase="result"] .scenario-guide-spotlight { border-color:#307c60; }
+.scenario-guide-muted { opacity:.48; }
+.scenario-guide-active #showcase-scenario .showcase-panel > .showcase-details:not([open]) { opacity:.65; }
+.scenario-guide-button:focus-visible,.scenario-guide-close:focus-visible { outline:3px solid #83b6f3; outline-offset:3px; }
+@media(max-width:680px) {
+  .scenario-guide-card { padding:13px 15px; border-radius:11px; }
+  .scenario-guide-topline { margin-bottom:7px; font-size:12px; }
+  .scenario-guide-card h2 { font-size:18px; margin-bottom:7px; }
+  .scenario-guide-card p { font-size:14px; line-height:1.65; }
+  .scenario-guide-controls { margin-top:11px; gap:7px; }
+  .scenario-guide-button { min-height:40px; font-size:13px; padding:7px 10px; }
+  .scenario-guide-card .scenario-guide-note { font-size:12px; }
+}
