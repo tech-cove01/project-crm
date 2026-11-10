@@ -1,0 +1,57 @@
+/* Scoped styles for the four isolated showcase scenes. */
+.showcase-workspace { width:100%; height:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:28px clamp(18px,3.6vw,48px) 40px; color:#172b4d; background:#f7faff; font-size:16px; line-height:1.75; }
+.showcase-workspace *, .showcase-entry * { box-sizing:border-box; min-width:0; }
+.showcase-topline { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin:0 auto 20px; max-width:1120px; font-size:14px; }
+.showcase-topline a,.showcase-details a { color:#0755b3; text-underline-offset:4px; }
+.showcase-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; max-width:1120px; margin:0 auto 26px; }
+.showcase-tab { display:flex; justify-content:center; align-items:center; gap:8px; padding:12px 10px; min-height:48px; border:1px solid #cbd9ef; border-radius:9px; background:white; color:#284970; font-size:15px; font-weight:600; cursor:pointer; }
+.showcase-tab span,.showcase-entry a span { display:inline-flex; align-items:center; justify-content:center; width:23px; height:23px; flex-shrink:0; border-radius:50%; background:#eaf2ff; color:#1556a4; font-size:13px; }
+.showcase-tab.active { background:#123a71; color:white; border-color:#123a71; }
+.showcase-tab.active span { background:#315b92; color:white; }
+.showcase-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; max-width:1120px; margin:0 auto 18px; }
+.showcase-eyebrow { font-size:14px; font-weight:600; color:#47678c; margin-bottom:6px; }
+.showcase-heading h1 { font-size:clamp(23px,2.3vw,30px); line-height:1.4; letter-spacing:-.02em; margin:0 0 9px; color:#112d52; }
+.showcase-heading p { max-width:780px; }
+.showcase-heading > .showcase-button { flex-shrink:0; }
+.showcase-boundary { max-width:1120px; margin:0 auto 22px; padding:11px 14px; border:1px solid #cfdded; border-radius:8px; background:#ecf4ff; font-size:14px; color:#365878; }
+.showcase-panel { max-width:1120px; margin:0 auto; }
+.showcase-start { font-size:17px; line-height:1.85; margin:0 0 14px; }
+.showcase-steps { display:flex; flex-wrap:wrap; gap:8px 28px; padding-left:23px; margin:0 0 22px; color:#456489; font-size:14px; }
+.showcase-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0; align-items:start; }
+.showcase-card { padding:20px; background:white; border:1px solid #d5e0ee; border-radius:12px; overflow-wrap:anywhere; }
+.showcase-panel > .showcase-card { margin:16px 0; }
+.showcase-card h3 { color:#173c68; font-size:18px; line-height:1.5; margin:0 0 10px; }
+.showcase-card h4 { font-size:16px; margin:12px 0 6px; }
+.showcase-card p + p { margin-top:10px; }
+.showcase-card blockquote { margin:14px 0 0; border-left:3px solid #719bcf; padding-left:13px; color:#45617f; }
+.showcase-label { display:block; color:#54708e; font-size:14px; margin-bottom:8px; }
+.showcase-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:18px 0; }
+.showcase-button { display:inline-flex; justify-content:center; align-items:center; min-height:44px; padding:9px 16px; background:white; border:1px solid #adc3de; border-radius:8px; color:#164778; font-family:inherit; font-weight:600; font-size:15px; line-height:1.5; cursor:pointer; text-decoration:none; white-space:normal; text-align:center; }
+.showcase-button.primary { color:white; background:#123e76; border-color:#123e76; }
+.showcase-button.selected,.showcase-button.is-active { color:#123e76; border-color:#2466b5; background:#eaf3ff; box-shadow:inset 0 0 0 1px #2466b5; }
+.showcase-button:disabled { opacity:.48; cursor:default; }
+.showcase-button:focus-visible,.showcase-tab:focus-visible,.showcase-details summary:focus-visible,.showcase-entry a:focus-visible { outline:3px solid #91b9f0; outline-offset:3px; }
+.showcase-status { padding:14px 17px; margin:18px 0; border:1px solid #b4cce9; border-radius:9px; background:#edf5ff; color:#173f70; font-weight:600; overflow-wrap:anywhere; }
+.showcase-note { color:#526a83; font-size:14px; line-height:1.7; }
+.showcase-list { padding-left:23px; margin:12px 0 0; }
+.showcase-list li { margin:10px 0; }
+.showcase-list li p { color:#4c6480; font-size:15px; margin-top:4px; }
+.showcase-dl { display:grid; grid-template-columns:minmax(90px,.8fr) minmax(0,1.5fr); gap:9px 15px; margin:12px 0 0; font-size:15px; }
+.showcase-dl dt { color:#56708c; }
+.showcase-dl > div { display:contents; }
+.showcase-dl dd { margin:0; font-weight:600; overflow-wrap:anywhere; }
+.showcase-details { margin:18px 0; padding:15px 18px; border:1px solid #d2deed; border-radius:9px; background:white; overflow-wrap:anywhere; }
+.showcase-details summary { cursor:pointer; color:#1d4d85; font-weight:600; }
+.showcase-details[open] summary { margin-bottom:12px; }
+.showcase-details p + p { margin-top:10px; }
+.showcase-score-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:18px 0; }
+.showcase-card .showcase-fail { color:#a52c34; }
+.showcase-card .showcase-pass { color:#216b46; }
+.showcase-footer { max-width:1120px; margin:26px auto 0; padding-top:18px; border-top:1px solid #d7e2ef; color:#526c88; font-size:14px; }
+.showcase-entry { width:100%; padding:20px; border:1px solid #cadcf3; border-radius:12px; background:#f4f8ff; text-align:left; }
+.agent-welcome .showcase-entry h2 { font-size:21px; margin:0 0 8px; line-height:1.5; }
+.showcase-entry p { font-size:15px; color:#496585; line-height:1.7; }
+.showcase-entry-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:16px; }
+.showcase-entry-grid a { display:flex; align-items:center; gap:8px; min-height:46px; padding:10px; border:1px solid #c4d7f1; border-radius:8px; background:white; color:#1d4c85; font-size:15px; font-weight:600; text-decoration:none; }
+@media(max-width:900px) { .showcase-heading { flex-wrap:wrap; gap:12px; } .showcase-score-grid { grid-template-columns:1fr; } }
+@media(max-width:600px) { .showcase-workspace { padding:18px 14px 30px; font-size:16px; } .showcase-topline { align-items:flex-start; font-size:14px; margin-bottom:16px; } .showcase-tabs { grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-bottom:22px; } .showcase-tab { font-size:14px; padding:10px 6px; } .showcase-grid { grid-template-columns:1fr; gap:12px; } .showcase-card { padding:17px; } .showcase-actions { gap:8px; } .showcase-actions .showcase-button { flex:1 1 140px; } .showcase-dl { grid-template-columns:minmax(74px,.75fr) minmax(0,1.5fr); gap:9px; } .showcase-heading h1 { font-size:24px; } .showcase-start { font-size:16px; } .showcase-entry { padding:16px; } .showcase-entry-grid { grid-template-columns:1fr; } .showcase-topline > .showcase-button { padding:8px 12px; } }

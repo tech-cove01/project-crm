@@ -40,6 +40,7 @@
   }
   function showWelcome(opener) {
     if (mode) return;
+    if (window.CRM_SHOWCASE?.getState().scenario && !window.CRM_SHOWCASE.close()) return;
     returnFocus = opener || document.activeElement; mode = 'welcome'; lock(); updateCard(); focusAction('start');
   }
   function start() {
@@ -174,5 +175,6 @@
     history.replaceState(history.state, '', entryURL.href);
   }
   let seen = false; try { seen = !!sessionStorage.getItem(SEEN_KEY); } catch { /* Optional session preference. */ }
-  if ((requestedTutorial || !seen) && state.page === '/app/ai/workbench') queueMicrotask(()=>showWelcome());
+  const requestedScenario = ['execution','knowledge','collaboration','evaluation'].includes(entryURL.searchParams.get('scenario'));
+  if (!requestedScenario && (requestedTutorial || !seen) && state.page === '/app/ai/workbench') queueMicrotask(()=>showWelcome());
 })();
