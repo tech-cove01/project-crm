@@ -30,7 +30,7 @@
       <nav class="overview-actions" aria-label="项目主要入口">
         <div class="overview-primary-actions">
           <a class="button overview-workflow-action" href="./details.html#workflow">业务流程与案例</a>
-          <a class="button overview-demo-action" href="./demo/index.html?scenario=execution#/app/ai/workbench">体验静态演示</a>
+          <a class="button overview-demo-action" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">体验静态演示</a>
         </div>
         <div class="overview-secondary-actions">
           <a class="overview-action-link" href="#highlights" aria-label="查看四项项目亮点">四项<wbr>项目亮点</a>
@@ -61,7 +61,7 @@
             <li><strong>职责分层</strong>业务 Harness 负责权限与动作边界，独立 Worker 通过 SQL 队列和租约承接长任务。</li>
             <li><strong>审批续跑</strong>提案绑定对象与参数，获批后执行、保存回执并重读结果；结果未知时暂停核对。</li>
           </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution#/app/ai/workbench" aria-label="体验该场景：Pi 内核与受控执行">体验该场景</a><a href="./details.html#controlled-execution">了解 Pi 内核与执行分层 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：Pi 内核与受控执行">体验该场景</a><a href="./details.html#controlled-execution">了解 Pi 内核与执行分层 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
           <span class="overview-highlight-index">02 / MEMORY &amp; KNOWLEDGE</span><h3>客户记忆与可信知识</h3>
@@ -71,7 +71,7 @@
             <li><strong>可降级读取</strong>旧投影不能覆盖当前事实，Mem0 不可用时仍可读取 SQL 记忆。</li>
             <li><strong>知识版本</strong>WeKnora 读取授权原文，引用绑定来源版本；改版或撤回后重新核验。</li>
           </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge#/app/ai/workbench" aria-label="体验该场景：客户记忆与可信知识">体验该场景</a><a href="./details.html#trusted-context">了解事实与来源 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：客户记忆与可信知识">体验该场景</a><a href="./details.html#trusted-context">了解事实与来源 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
           <span class="overview-highlight-index">03 / MULTI-AGENT</span><h3>多 Agent 协作与商机分析</h3>
@@ -81,7 +81,7 @@
             <li><strong>证据汇总</strong>结合字段值和来源版本区分事实分歧、资料改版与互补信息，保留缺证、超时和局部失败。</li>
             <li><strong>写入收口</strong>专家只读取证，父流程承接受控动作；未解冲突进入人工复核，阻断相关商机动作。</li>
           </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="collaboration" href="./demo/index.html?scenario=collaboration#/app/ai/workbench" aria-label="体验该场景：多 Agent 协作与商机分析">体验该场景</a><a href="./details.html#expert-collaboration">了解父子任务与协作边界 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="collaboration" href="./demo/index.html?scenario=collaboration&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：多 Agent 协作与商机分析">体验该场景</a><a href="./details.html#expert-collaboration">了解父子任务与协作边界 <span aria-hidden="true">↗</span></a></div>
         </article>
         <article class="overview-highlight-card">
           <span class="overview-highlight-index">04 / EVALUATION &amp; OBSERVABILITY</span><h3>Agent 观测与评测回归</h3>
@@ -91,7 +91,7 @@
             <li><strong>观测解耦</strong>SQL 保存运行事实，脱敏轨迹异步投递 Langfuse，投递重试不重复执行业务。</li>
             <li><strong>失败回归</strong>保留实际误述、错引和无答案误召回，支持检索、上下文与回答策略的后续复查。</li>
           </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="evaluation" href="./demo/index.html?scenario=evaluation#/app/ai/workbench" aria-label="体验该场景：Agent 观测与评测回归">体验该场景</a><a href="./details.html#observation-evaluation">了解观测与评测 <span aria-hidden="true">↗</span></a></div>
+          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="evaluation" href="./demo/index.html?scenario=evaluation&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：Agent 观测与评测回归">体验该场景</a><a href="./details.html#observation-evaluation">了解观测与评测 <span aria-hidden="true">↗</span></a></div>
         </article>
       </div>
     </div></section>
