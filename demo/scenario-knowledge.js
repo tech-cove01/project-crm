@@ -126,7 +126,7 @@
         return button('knowledge-scenario-' + mode[0], mode[1], state.mode === mode[0], false);
       }).join('') + '</div></section>';
     html += '<div class="showcase-grid"><section class="showcase-card"><h3>1. 当前资料条件</h3>' +
-      '<dl class="showcase-dl">' + pair('SQL 记忆', data.sqlStatus) + pair('辅助检索', data.projection) +
+      '<dl class="showcase-dl" data-knowledge-conditions>' + pair('SQL 记忆', data.sqlStatus) + pair('辅助检索', data.projection) +
       pair('政策原文 P-17', data.pageStatus) + pair('原文当前版本', data.pageVersion) + '</dl>' +
       '<div class="showcase-actions">' + button('knowledge-source', state.sourceVisible ? '收起 SQL 记忆来源' : '查看 SQL 记忆来源', null, false) + '</div>';
     if (state.sourceVisible) {
@@ -146,9 +146,9 @@
     html += '</section></div>';
     if (result) {
       html += '<section class="showcase-card" data-knowledge-result aria-live="polite"><h3>3. 本次回答与证据取舍</h3>' +
-        '<h4>当前确认事实</h4>' + (result.facts.length ? list(result.facts) : '<p>没有可用的当前客户偏好事实。</p>') +
-        '<h4>通过核验的政策引用</h4>' + (result.citations.length ? list(result.citations) : '<p>无；本次回答不能引用失效或无权读取的政策正文。</p>') +
-        (result.rejected.length ? '<h4>拒绝使用的依据</h4>' + list(result.rejected) : '') +
+        '<div data-knowledge-facts><h4>当前确认事实</h4>' + (result.facts.length ? list(result.facts) : '<p>没有可用的当前客户偏好事实。</p>') + '</div>' +
+        '<div data-knowledge-citations><h4>通过核验的政策引用</h4>' + (result.citations.length ? list(result.citations) : '<p>无；本次回答不能引用失效或无权读取的政策正文。</p>') + '</div>' +
+        (result.rejected.length ? '<div data-knowledge-rejected><h4>拒绝使用的依据</h4>' + list(result.rejected) + '</div>' : '') +
         '<h4>由当前依据推导的建议</h4>' + list(result.advice) +
         '<details><summary>查看本次模拟检索轨迹</summary>' + list(result.trace) + '</details></section>';
     }

@@ -301,11 +301,13 @@
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); event.stopImmediatePropagation(); return; }
     if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); exit(); return; }
     if (event.key !== 'Tab') return;
-    const target = mode === 'step' && !result ? find(lesson()?.target) : null;
-    const items = [target, ...document.querySelectorAll('#scenario-guide button:not(:disabled),#scenario-guide a[href]')].filter(Boolean);
+    const target = mode === 'step' && !result && lesson()?.action !== 'observe' ? find(lesson()?.target) : null;
+    const focusableTarget = target && !target.matches(':disabled') && target.tabIndex >= 0 ? target : null;
+    const items = [focusableTarget, ...document.querySelectorAll('#scenario-guide button:not(:disabled),#scenario-guide a[href]')].filter(Boolean);
     const active = items.indexOf(document.activeElement);
     event.preventDefault(); event.stopImmediatePropagation();
-    items[(active + (event.shiftKey ? -1 : 1) + items.length) % items.length]?.focus({ preventScroll: true });
+    const nextIndex = active < 0 ? event.shiftKey ? items.length - 1 : 0 : (active + (event.shiftKey ? -1 : 1) + items.length) % items.length;
+    items[nextIndex]?.focus({ preventScroll: true });
   }, true);
   window.addEventListener('crm:showcase-change', event => {
     if (!mode && (event.detail.type === 'action' || event.detail.type === 'reset')) delete sessions[event.detail.scenario];
