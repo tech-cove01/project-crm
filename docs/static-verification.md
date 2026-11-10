@@ -21,7 +21,13 @@
 
 独立核对确认48个accepted labels唯一且逐项存在四份原报告，12源文件哈希与最终产品相符，截图存在。汇总manifest的browser字段沿用启动探测`.38`，四份实际运行原报告均为`.50`，本记录采用原报告版本；已冻结汇总及其SHA不覆盖。
 
-目前是本机实施自验通过；发布和线上回读另记，不提前称用户验收通过。未覆盖Firefox/Safari、完整旧路由回归、真实Pi/模型/SQL/外部服务、并行专家或生产运行；模拟分数不是整体准确率。
+### 发布及线上复核
+
+2026-11-10 10:45:22（Asia/Shanghai），GitHub Pages API确认产品提交 `267dc06360010890117e9a9d3c9c86415d21e9fb` built、error=null，来源gh-pages根目录。公开站点单次有限复核 **21/21通过**：1440/390/320px首页/详情映射和四深链布局、1440px四主题正常结果及刷新起点、390px两个主入口实点后完成阶段执行与重读。12/12发布资源HTTP200，响应内容SHA256逐项等于该提交Git blob（避免工作树CRLF归一导致错误对比）。未为线上重复本机48异常矩阵。
+
+线上报告 `.reviews/crm-1109-verification/runs/2026-11-10T02-45-38-186Z/result.json`，SHA-256 `acab31ed2d50dfe08c91e3b2ae13f7a5a8a5fca4a96b908202cdda3693aed379`；同目录保留3份trace及14图，包括 `live-1440-execution-result.png`、`live-1440-collaboration-result.png`、`live-390-execution-start.png`、`live-320-index.html.png`。线上pageerror、失败响应、失败请求及外部/API请求均0，无技术重试。临时8771预览器已核对自身PID后关闭，未触碰其他项目或正式服务。
+
+交付停在**待用户验收**，不提前代填用户认可。后续提交仅同步本次交接文档，不改产品资产。未覆盖Firefox/Safari、完整旧路由回归、真实Pi/模型/SQL/外部服务、并行专家或生产运行；模拟分数不是整体准确率。
 
 2026-11-01，Microsoft Edge / Playwright，无头实际浏览器。使用 `/project-crm/` 子路径预览，与 GitHub Pages 项目路径一致。
 
