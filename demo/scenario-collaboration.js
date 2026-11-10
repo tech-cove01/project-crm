@@ -206,10 +206,10 @@
       '<div class="showcase-actions">' + modes.map(function (mode) { return button('collaboration-scenario-' + mode[0], mode[1], state.mode === mode[0], false); }).join('') + '</div></section>';
     html += '<div class="showcase-grid">' + experts.map(function (expert, index) {
       const child = state.children[index];
-      return '<section class="showcase-card"><h3>' + esc(String(index + 1) + '. ' + expert.name) + '</h3>' +
+      return '<section class="showcase-card" data-collaboration-expert="' + esc(expert.id) + '"><h3>' + esc(String(index + 1) + '. ' + expert.name) + '</h3>' +
         '<dl class="showcase-dl">' + pair('独立子运行', expert.run) + pair('工具边界', expert.tool + '；禁止业务写入') +
         pair('状态', child ? child.status + ' · 已保存' : '尚未启动') + '</dl>' +
-        (child ? '<h4>保存的证据</h4>' + (child.evidence.length ? list(child.evidence) : '<p>无合格证据；保留缺证状态。</p>') + '<p>' + esc(child.conclusion) + '</p>' : '<p>' + esc(index === state.children.length ? '轮到该专家独立取证。' : '等待前一位专家完成并保存状态。') + '</p>') +
+        (child ? '<div data-collaboration-evidence="' + esc(expert.id) + '"><h4>保存的证据</h4>' + (child.evidence.length ? list(child.evidence) : '<p>无合格证据；保留缺证状态。</p>') + '<p>' + esc(child.conclusion) + '</p></div>' : '<p>' + esc(index === state.children.length ? '轮到该专家独立取证。' : '等待前一位专家完成并保存状态。') + '</p>') +
         '<div class="showcase-actions">' + button('collaboration-expert-' + expert.id, String(index + 1) + '. ' + expert.name + '取证', null, index !== state.children.length || state.aggregated) + '</div></section>';
     }).join('') + '</div>';
     html += '<section class="showcase-card"><h3>4. 父 Agent 汇总与复核</h3><div class="showcase-actions">' +
@@ -218,7 +218,7 @@
       '<p class="showcase-status" role="status" aria-live="polite">' + esc(state.message) + '</p></section>';
     if (state.aggregated) {
       html += '<section class="showcase-card" data-collaboration-result><h3>汇总：分歧、回查与未解项</h3>' +
-        summaryHTML(state) + conflictHTML(state) + '<h4>当前权威来源回查</h4>' + recheckHTML(state) +
+        summaryHTML(state) + conflictHTML(state) + '<div data-collaboration-recheck><h4>当前权威来源回查</h4>' + recheckHTML(state) + '</div>' +
         '<h4>未解决项</h4>' + (state.pending.length ? list(state.pending) : '<p>当前没有未解决的证据冲突或缺证项。</p>') +
         '<div class="showcase-actions">' +
         (hasConflict ? button('collaboration-authority', '选择当前权威依据', null, !state.rechecked || state.verified) : '') +
