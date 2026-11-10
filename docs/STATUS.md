@@ -1,6 +1,19 @@
 # 展示工作状态
 
-更新：2026-11-03。本页仅记录 `gh-pages` 静态展示，正式 CRM 已有功能和验收仍以 `main` 为准。
+更新：2026-11-10。本页仅记录 `gh-pages` 静态展示，正式 CRM 已有功能和验收仍以 `main` 为准。
+
+## 当前实施：1109 四主线展示更新
+
+以主仓 STATUS 页首2026-11-09需求为准，下面既有完成记录不是本次验收。当前尚未发布本次更新，实施自验后交用户验收。
+
+| 首页 / 详情区块 | 深链（相对站点根） | 操作 → 可见结果 |
+| --- | --- | --- |
+| Pi 内核与受控执行 / controlled-execution | demo/index.html?scenario=execution#/app/ai/workbench | 分析→阶段提案→批准/拒绝→回执与重读；待批/拒绝不改阶段 |
+| 客户记忆与可信知识 / trusted-context | demo/index.html?scenario=knowledge#/app/ai/workbench | 删改/服务异常/资料改撤及越权→检索同一问题；当前事实与授权版本决定结果 |
+| 多 Agent 协作与商机分析 / expert-collaboration | demo/index.html?scenario=collaboration#/app/ai/workbench | 三专家顺序取证→冲突/缺证→回查与人工复核→再次核验；未解项阻断动作 |
+| Agent 观测与评测回归 / observation-evaluation | demo/index.html?scenario=evaluation#/app/ai/workbench | 正常/错引/误述→规则/模拟Judge→严格合并→脱敏轨迹与失败回放 |
+
+STATIC-018：规格映射；019：首页/详情定向入口、业务问题/设计/收益；020：受控阶段执行；021：记忆知识边界；022：专家冲突复核；023：分层评测回放；024：浏览器自验、独立审查、发布及交接。小功能分别提交。全部固定浏览器示例，不接模型、数据库或外部服务；独立重置，刷新回起点，保留旧探索和教程。1440/390/320px按操作结果验证后部署，停在待用户验收。
 
 | 票据 | 状态 | 交付与验证 |
 | --- | --- | --- |
