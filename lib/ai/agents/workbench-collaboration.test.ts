@@ -9,13 +9,15 @@ import type { executePiTurnModelCall } from "@/lib/agent-engine/agent/pi-turn-ex
 import { OPPORTUNITY_REVIEW_PLAN } from "./collaboration";
 import { runWorkbenchCollaboration } from "./workbench-collaboration";
 
-const mocks = vi.hoisted(() => ({ execute: vi.fn(), cleanup: vi.fn(), buildTools: vi.fn() }));
+const mocks = vi.hoisted(() => ({ execute: vi.fn(), cleanup: vi.fn(), buildTools: vi.fn(), appendEvent: vi.fn() }));
 vi.mock("@/lib/agent-engine/agent/pi-turn-execution", () => ({ executePiTurnModelCall: mocks.execute }));
 vi.mock("@/lib/agent-engine/edge/crm/mcp-tools", () => ({
   buildMcpTurnTools: (...args: unknown[]) => mocks.buildTools(...args),
 }));
 vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({}) }));
-vi.mock("./workbench-events", () => ({ appendWorkbenchEvent: async () => undefined }));
+vi.mock("./workbench-events", () => ({ appendWorkbenchEvent: async (...args: unknown[]) => {
+  mocks.appendEvent(...args);
+} }));
 vi.mock("./workbench-collaboration-review", () => ({
   finishInitialCollaborationReview: async (_pool: unknown, _org: unknown, _run: unknown,
     _scope: unknown, outcome: unknown) => outcome,
@@ -56,7 +58,7 @@ function fixture(messages: RuntimeMessage[], text: string) {
     admin, deps: { crmCfg: {}, log: {}, llmCfg: {} },
     plan: { ...OPPORTUNITY_REVIEW_PLAN, specialists: OPPORTUNITY_REVIEW_PLAN.specialists.slice(0, 1) },
     root: { organizationId: "org", parentRunId: "parent", rootJobId: "job", agentId: "agent",
-      actorUserId: null, task: "核对客户", scope: { contactId: "contact", leadId: null,
+      actorUserId: null, mode: "inspect", task: "核对客户", scope: { contactId: "contact", leadId: null,
         conversationId: null, pipelineId: null }, budget: {} },
     agentConfig: { toolIds: ["crm_get_contact"], model: "qwen", provider: "dashscope",
       systemPrompt: "CRM" }, signal: new AbortController().signal,
@@ -72,6 +74,31 @@ function observation(value: unknown): RuntimeMessage {
 function recordTool(field: string) {
   return { description: "Read selected record", inputSchema: { type: "object", properties: { [field]: { type: "string" } }, required: [field] },
     execute: async (args: Record<string, string>) => ({ id: args[field], status: "open" }) };
+}
+
+const authorizedPolicy = { id: "policy-receipt", namespace: "organization_wiki", kind: "wiki_page",
+  title: "审批原文", excerpt: "等待人工明确决定", locator: { provider: "weknora", sourceId: "published-source" } };
+
+function knowledge(query: string, wikiStatus: string, evidence: unknown[] = [], verified = wikiStatus === "empty"): RuntimeMessage {
+  return {
+    role: "tool", toolName: "crm_search_knowledge", toolCallId: `wiki-${query}-${wikiStatus}`, isError: false,
+    content: JSON.stringify({
+      evidence, trechos: [],
+      retrieval: { query, status: evidence.length ? "complete" : "empty", wiki_status: wikiStatus,
+        empty_verified: verified, missing: [] },
+    }),
+  };
+}
+
+function policyFixture(messages: RuntimeMessage[], allowEmpty = false) {
+  const prepared = fixture(messages, "已报告政策工具当前结果。");
+  const { input } = prepared;
+  input.root.task = '产品原文使用企业知识搜索词“审批”。' +
+    (allowEmpty ? "若正常检索没有匹配，按缺证项留空。" : "要求该政策原文。");
+  input.plan.specialists = OPPORTUNITY_REVIEW_PLAN.specialists.filter(s => s.key === "policy_advisor");
+  input.agentConfig.toolIds = ["crm_search_knowledge", "crm_get_org_memory"];
+  input.agentConfig.knowledgeSourceIds = ["published-source"];
+  return prepared;
 }
 
 function useRealPi(responses: Parameters<ReturnType<typeof fauxProvider>["setResponses"]>[0]) {
@@ -164,6 +191,97 @@ describe("workbench specialist result boundary", () => {
     expect(mocks.execute.mock.calls[0]?.[1]).toMatchObject({ maxSteps: 3, finalTurn: { allowedToolNames: [] } });
   });
 
+  it("keeps the durable policy specialist in an explicitly CRM-only inspect run without searching unneeded material", async () => {
+    const { input, updates } = policyFixture([]);
+    input.root.task = "请取得实际依据并回答：value_cents（当前金额）。\n这是范围内的 CRM 核对；只需回答指定字段。";
+    const result = await runWorkbenchCollaboration(input);
+
+    expect(result.results[0]).toMatchObject({ specialistKey: "policy_advisor", status: "complete", evidence: [],
+      missingMaterial: [], toolCalls: 0, usage: { modelTurns: 0 } });
+    expect(updates).toContainEqual(expect.objectContaining({ status: "completed" }));
+    expect(mocks.buildTools).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.appendEvent).toHaveBeenCalledWith(input.admin, expect.objectContaining({
+      type: "usage_reported", payload: { inputTokens: 0, outputTokens: 0, costCents: null, calls: 0 },
+    }));
+
+    input.root.mode = "act";
+    const act = await runWorkbenchCollaboration(input);
+    expect(mocks.buildTools).toHaveBeenCalledOnce();
+    expect(act.results[0]).toMatchObject({ status: "partial", missingMaterial: ["tool_observations"] });
+  });
+
+  it("keeps tool authority and executes the explicitly selected query after a model tries to rewrite it", async () => {
+    const { input } = policyFixture([]);
+    const read = vi.fn(async (args: Record<string, unknown>) => {
+      const response = knowledge(String(args.pergunta), "complete", [authorizedPolicy]);
+      return JSON.parse(response.content as string);
+    });
+    mocks.buildTools.mockResolvedValue({
+      tools: { crm_search_knowledge: { ...recordTool("pergunta"), execute: read }, crm_get_org_memory: recordTool("unused") },
+      cleanup: mocks.cleanup,
+    });
+    useRealPi([
+      fauxAssistantMessage(fauxToolCall("crm_search_knowledge", { pergunta: "无关政策" }), { stopReason: "toolUse" }),
+      fauxAssistantMessage("已取得审批原文。"),
+    ]);
+    const result = await runWorkbenchCollaboration(input);
+
+    expect(mocks.buildTools.mock.calls[0]?.[2].toolIds).toEqual(["crm_search_knowledge"]);
+    expect(mocks.buildTools.mock.calls[0]?.[4]).toMatchObject({ readOnly: true });
+    expect(read).toHaveBeenCalledOnce();
+    expect(read.mock.calls[0]?.[0]).toMatchObject({ pergunta: "审批" });
+    expect(result.results[0]).toMatchObject({ status: "complete", evidence: [authorizedPolicy] });
+  });
+
+  it("does not force a query or permit empty results based on a prohibited or quoted phrase", async () => {
+    const prohibited = policyFixture([knowledge("审批", "empty")], true);
+    prohibited.input.root.task = "禁止使用企业知识搜索词“审批”。若正常检索没有匹配，按缺证项留空。";
+    expect((await runWorkbenchCollaboration(prohibited.input)).results[0]).toMatchObject({
+      status: "partial", missingMaterial: ["required_policy_evidence"],
+    });
+    expect(mocks.buildTools.mock.calls[0]?.[2].toolIds).toEqual(["crm_search_knowledge", "crm_get_org_memory"]);
+
+    const disallow = policyFixture([knowledge("审批", "empty")]);
+    disallow.input.root.task += "\n旧说明写着：若正常检索没有匹配，按缺证项留空。";
+    expect((await runWorkbenchCollaboration(disallow.input)).results[0]?.status).toBe("partial");
+  });
+
+  it("resolves early empty only when the required term later returns an authorized observation", async () => {
+    const { input } = policyFixture([knowledge("审批", "empty"), knowledge("审批", "complete", [authorizedPolicy])]);
+    const result = await runWorkbenchCollaboration(input);
+    expect(result.results[0]).toMatchObject({ status: "complete", missingMaterial: [] });
+  });
+
+  it.each([
+    ["required absent", [knowledge("审批", "empty")], "required_policy_evidence"],
+    ["unrelated hit", [knowledge("审批", "empty"), knowledge("其他", "complete", [authorizedPolicy])], "required_policy_evidence"],
+    ["unauthorized hit", [knowledge("审批", "complete", [{ ...authorizedPolicy,
+      locator: { provider: "weknora", sourceId: "other-source" } }])], "published_knowledge_sources"],
+    ["service unavailable even after a hit", [knowledge("审批", "complete", [authorizedPolicy]),
+      knowledge("审批", "unavailable")], "published_knowledge_sources"],
+  ])("keeps %s partial", async (_label, messages, missing) => {
+    const { input } = policyFixture(messages);
+    const result = await runWorkbenchCollaboration(input);
+    expect(result.results[0]).toMatchObject({ status: "partial", missingMaterial: [missing] });
+  });
+
+  it("records verified absence only for an exact allowed-empty check", async () => {
+    const { input } = policyFixture([knowledge("审批", "empty")], true);
+    const result = await runWorkbenchCollaboration(input);
+    expect(result.results[0]).toMatchObject({
+      status: "complete", evidence: [], missingMaterial: [], summary: expect.stringContaining("正常检索无匹配"),
+    });
+
+    for (const wikiStatus of ["disabled", "unavailable"]) {
+      const afterFailure = policyFixture([knowledge("审批", wikiStatus)], true);
+      const guarded = await runWorkbenchCollaboration(afterFailure.input);
+      expect(guarded.results[0]?.status).toBe("partial");
+    }
+    const unverified = policyFixture([knowledge("审批", "empty", [], false)], true);
+    expect((await runWorkbenchCollaboration(unverified.input)).results[0]?.status).toBe("partial");
+  });
+
   it("keeps all organization policy while exposing only the selected customer's minimal tools", async () => {
     const { input } = fixture([observation({ id: "contact" })], "已核对事实");
     input.agentConfig.systemPrompt = "组织安全：禁止外联。父销售通用清单：先检查商机和跟进记录。";
@@ -212,7 +330,7 @@ describe("workbench specialist result boundary", () => {
     expect(updates).toContainEqual(expect.objectContaining({ status: "partial", final_text: null }));
   });
 
-  it.each([{ permitido: false, motivo: "target_scope_denied" }, { ok: false }, { error: "read_failed" }])(
+  it.each([{ permitido: false, motivo: "target_scope_denied" }, { ok: false }, { error: "read_failed" }, { erro: "refused" }])(
     "keeps a provider/CRM refusal partial even when isError was false: %j", async (value) => {
       const { input } = fixture([observation(value)], "本次读取被拒绝，缺少客户事实。");
       const outcome = await runWorkbenchCollaboration(input);

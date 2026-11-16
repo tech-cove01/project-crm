@@ -578,10 +578,29 @@ describe("WeKnora current-source Wiki evidence", () => {
     const query = ".*|[unknown";
     f.http.mockImplementation(async () => j({ pages: [] }));
     const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
-    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: false, queryMode: "literal" });
+    expect(result).toMatchObject({
+      evidence: [], status: "empty", emptyVerified: true, fallbackUsed: false, queryMode: "literal",
+    });
     expect(f.http).toHaveBeenCalledTimes(1);
     expect(new URL(String(f.http.mock.calls[0]![0])).searchParams.get("q")).toBe("\\.\\*\\|\\[unknown");
     expect(f.manifests).toEqual([]);
+  });
+  it("does not verify empty when the published Wiki no longer falls under the binding", async () => {
+    const f = fixture();
+    f.source.source_metadata.knowledge_base_id = "kb-outside-binding";
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "unknown", 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: false, handledSourceIds: [sourceId] });
+    expect(f.http).not.toHaveBeenCalled();
+  });
+  it("does not verify empty when the only published source is withdrawn during lookup", async () => {
+    const f = fixture();
+    f.http.mockImplementation(async () => {
+      f.revoke();
+      return j({ pages: [] });
+    });
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "unknown", 3, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: false, handledSourceIds: [sourceId] });
+    expect(f.http).toHaveBeenCalledOnce();
   });
   it("uses one bounded keyword retry after an upstream zero and validates the current published page", async () => {
     const f = fixture();
@@ -618,7 +637,7 @@ describe("WeKnora current-source Wiki evidence", () => {
       ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug, title: "客户记忆向量检索" }] })
       : original(url));
     const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
-    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true });
+    expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: true, fallbackUsed: true });
     expect(searches).toBe(2);
     expect(f.manifests).toEqual([]);
   });
@@ -631,9 +650,16 @@ describe("WeKnora current-source Wiki evidence", () => {
     f.http.mockImplementation(async url => String(url).includes("/search?")
       ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug }] }) : original(url));
     const result = await searchCompanyWiki(f.pool, org, [sourceId], "火星基地量子电池的政府采购合同编号是什么？", 3, undefined, f.http);
-    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true });
+    expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: true, fallbackUsed: true });
     expect(searches).toBe(2);
     expect(f.manifests).toEqual([]);
+  });
+  it("does not verify absence for an unreadable search candidate", async () => {
+    const f = fixture();
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: [{ slug: f.page.slug }] }) : new Response(null, { status: 503 }));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "widget", 3, undefined, f.http);
+    expect(result).toMatchObject({ status: "empty", emptyVerified: false, evidence: [] });
   });
   it.each(["missing property", "slug only", "late constraint"])("rejects fallback evidence with %s instead of accepting topical overlap", async variant => {
     const f = fixture();

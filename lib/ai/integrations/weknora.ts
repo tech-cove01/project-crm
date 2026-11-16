@@ -134,12 +134,13 @@ export async function searchCompanyWiki(
     ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
     : AbortSignal.timeout(15000);
   const binding = await enabledIntegration(pool, org, "weknora");
-  if (!binding) return { evidence: [], status: "disabled", handledSourceIds: [] as string[] };
+  if (!binding) return { evidence: [], status: "disabled", handledSourceIds: [] as string[], emptyVerified: false };
   const allowed = await sourcesFor(pool, org, authorizedSourceIds);
   const evidence = [];
   const max = Math.max(1, Math.min(10, limit));
   const planned = planWikiQuery(query);
   const searched = new Map<string, { pages: unknown[]; usedFallback: boolean }>();
+  const checkedEmptySources = new Set<string>();
   let fallbackUsed = false;
   for (const source of allowed.slice(0, 5)) {
     const kb = source.source_metadata.knowledge_base_id;
@@ -163,6 +164,7 @@ export async function searchCompanyWiki(
       searched.set(kb, result);
     }
     const { usedFallback } = result;
+    let unrelated = 0;
     for (const candidate of result.pages.slice(0, max)) {
       signal?.throwIfAborted();
       const candidateIdentity = z.object({ slug: z.string() }).safeParse(candidate);
@@ -178,7 +180,10 @@ export async function searchCompanyWiki(
           ),
         );
         if (page.knowledge_base_id !== kb) throw new Error("wiki_page_scope_mismatch");
-        if (usedFallback && !supportsWikiQuery([page.title, page.content.slice(0, 12000)], planned)) continue;
+        if (usedFallback && !supportsWikiQuery([page.title, page.content.slice(0, 12000)], planned)) {
+          unrelated += 1;
+          continue;
+        }
         const documentIds = [...new Set(page.source_refs.map((ref) => ref.split("|")[0]!))].sort();
         const docs = await Promise.all(
           documentIds.map((ref) => document(binding, kb, ref, signal, fetchImpl)),
@@ -252,12 +257,20 @@ export async function searchCompanyWiki(
       }
       if (evidence.length >= max) break;
     }
+    if (result.pages.length < max && unrelated === result.pages.length) checkedEmptySources.add(source.id);
     if (evidence.length >= max) break;
   }
+  // An absence may exclude readable fallback pages that fail the query guard.
+  // Failed reads, revoked bindings and results at the bounds prove no absence.
+  const checkedEmpty = evidence.length === 0 && allowed.length > 0 && checkedEmptySources.size === allowed.length;
+  const current = checkedEmpty ? await sourcesFor(pool, org, allowed.map(source => source.id)) : [];
+  const emptyVerified = checkedEmpty && current.length === allowed.length &&
+    allowed.every(source => sameSource(source, current.find(row => row.id === source.id)));
   return {
     evidence,
     status: evidence.length ? "complete" : "empty",
     handledSourceIds: allowed.map((source) => source.id),
+    emptyVerified,
     queryMode: fallbackUsed ? "keyword_fallback" : "literal",
     fallbackUsed,
   };

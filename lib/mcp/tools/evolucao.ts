@@ -77,6 +77,7 @@ export const crmSearchKnowledge: McpToolDefinition<typeof buscarInputShape> = {
         trechos: [],
         evidence: [],
         retrieval: {
+          query: input.pergunta,
           status: "unavailable",
           namespace: "organization_wiki",
           missing: ["published_knowledge_sources"],
@@ -88,8 +89,8 @@ export const crmSearchKnowledge: McpToolDefinition<typeof buscarInputShape> = {
 
     const wiki = integrationBinding(ctx.organizationId, "weknora")
       ? await searchCompanyWiki(getRequestPool(), ctx.organizationId, fontes, input.pergunta, input.quantidade)
-        .catch(() => ({ evidence: [], status: "unavailable", handledSourceIds: [] as string[] }))
-      : { evidence: [], status: "disabled", handledSourceIds: [] as string[] };
+        .catch(() => ({ evidence: [], status: "unavailable", handledSourceIds: [] as string[], emptyVerified: false }))
+      : { evidence: [], status: "disabled", handledSourceIds: [] as string[], emptyVerified: false };
     const localSources = fontes.filter((sourceId) => !wiki.handledSourceIds.includes(sourceId));
     const resultado = localSources.length ? await buscarConhecimento(ctx.supabase, {
       organizationId: ctx.organizationId,
@@ -99,6 +100,8 @@ export const crmSearchKnowledge: McpToolDefinition<typeof buscarInputShape> = {
       limiar: LIMIAR_PADRAO,
     }) : { trechos: [], melhorSimilaridade: null };
 
+    const hasMatches = resultado.trechos.length > 0 || wiki.evidence.length > 0;
+    const emptyVerified = !hasMatches && wiki.emptyVerified && localSources.length === 0;
     return {
       trechos: resultado.trechos,
       evidence: [...wiki.evidence, ...resultado.trechos.map((trecho) => ({
@@ -124,10 +127,12 @@ export const crmSearchKnowledge: McpToolDefinition<typeof buscarInputShape> = {
         },
       }))],
       retrieval: {
+        query: input.pergunta,
         wiki_status: wiki.status,
-        status: resultado.trechos.length > 0 || wiki.evidence.length > 0 ? "complete" : "empty",
+        status: hasMatches ? "complete" : "empty",
         namespace: "organization_wiki",
-        missing: [],
+        empty_verified: emptyVerified,
+        missing: !hasMatches && wiki.status === "empty" && !emptyVerified ? ["verified_knowledge_search"] : [],
       },
       melhor_similaridade: resultado.melhorSimilaridade,
     };

@@ -45,6 +45,7 @@ interface RootRunMetadata {
   rootJobId: string;
   agentId: string;
   actorUserId: string | null;
+  mode: string;
   task: string;
   scope: WorkbenchScope;
   budget: {
@@ -216,7 +217,8 @@ class SupabaseCollaborationStore implements AgentCollaborationStore {
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
         costCents: result.usage.costCents,
-        calls: 1,
+        // llm_calls stores a single aggregate for each specialist that ran Pi.
+        calls: result.usage.modelTurns > 0 ? 1 : 0,
       },
     });
   }
@@ -333,10 +335,10 @@ function structuredValue(message: Extract<RuntimeMessage, { role: "tool" }>): un
 function failedToolObservation(message: Extract<RuntimeMessage, { role: "tool" }>): boolean {
   if (message.isError) return true;
   const value = structuredValue(message) as {
-    permitido?: boolean; isError?: boolean; ok?: boolean; error?: unknown;
+    permitido?: boolean; isError?: boolean; ok?: boolean; error?: unknown; erro?: unknown;
   } | null;
   return value?.permitido === false || value?.isError === true ||
-    value?.ok === false || value?.error != null;
+    value?.ok === false || value?.error != null || value?.erro != null;
 }
 
 function toolEvidence(
@@ -372,10 +374,66 @@ function toolEvidence(
   ];
 }
 
-function unavailableKnowledge(message: Extract<RuntimeMessage, { role: "tool" }>): boolean {
-  if (message.toolName !== "crm_search_knowledge") return false;
-  const text = textOfMessage(message);
-  return /"status"\s*:\s*"(?:unavailable|empty)"|published_knowledge_sources/i.test(text);
+type PolicyRequirement = { query: string; allowEmpty: boolean };
+
+function policyRequirement(task: string): PolicyRequirement | null {
+  // Only narrow an explicitly quoted enterprise search. Ambiguous task scope
+  // keeps the existing policy role and its conservative missing-evidence rule.
+  const queries = [...task.matchAll(/^产品原文使用企业知识搜索词[“"]([^”"\r\n]{1,180})[”"]。(?:(若正常检索没有匹配，按缺证项留空。)$)?/gm)];
+  const query = queries.length === 1 ? queries[0]?.[1]?.trim() : undefined;
+  if (!query) return null;
+  return {
+    query,
+    allowEmpty: Boolean(queries[0]?.[2]) ||
+      /^该政策项只核验是否存在。授权资料正常检索无匹配时，明确留空并回答其余已核实字段。$/m.test(task),
+  };
+}
+
+function crmFieldsOnly(task: string): boolean {
+  if (!/^这是范围内的 CRM 核对；只需回答指定字段。$/m.test(task) ||
+      task.includes("企业知识搜索词")) return false;
+  const fields = /^请取得实际依据并回答：(.+)。$/m.exec(task)?.[1];
+  return /不需要政策或企业资料。$/m.test(task) || (fields !== undefined &&
+    fields.split("、").every(field =>
+      /^(?:stage_id|value_cents|contact_name|lead_title|expected_close_date)（[^）]+）$/.test(field)));
+}
+
+function policyEvidenceStatus(
+  messages: readonly Extract<RuntimeMessage, { role: "tool" }>[],
+  requirement: PolicyRequirement | null,
+  allowedSourceIds: readonly string[],
+): "unavailable" | "missing" | "verified_empty" | "complete" {
+  let matched = false;
+  let empty = false;
+  for (const message of messages) {
+    if (message.toolName !== "crm_search_knowledge") continue;
+    const value = structuredValue(message) as {
+      retrieval?: { query?: string; status?: string; wiki_status?: string; missing?: string[]; empty_verified?: boolean };
+      evidence?: unknown[];
+      trechos?: unknown[];
+    } | null;
+    const retrieval = value?.retrieval;
+    if (failedToolObservation(message) || retrieval?.missing?.length ||
+        !["complete", "empty", "disabled"].includes(retrieval?.wiki_status ?? "") ||
+        (retrieval?.status !== "complete" && retrieval?.status !== "empty"))
+      return "unavailable";
+    if (!requirement && retrieval.status === "empty") return "missing";
+    if (!requirement || retrieval.query !== requirement.query) continue;
+    if (retrieval.status === "empty") {
+      if (!Array.isArray(value?.evidence) || value.evidence.length ||
+          !Array.isArray(value.trechos) || value.trechos.length)
+        return "unavailable";
+      empty ||= retrieval.wiki_status === "empty" && retrieval.empty_verified === true;
+    } else {
+      const authorized = normalizeKnowledgeEvidence(value).some(item =>
+        item.namespace === "organization_wiki" && item.excerpt.trim().length > 0 &&
+        allowedSourceIds.includes(item.locator.sourceId));
+      if (!authorized) return "unavailable";
+      matched = true;
+    }
+  }
+  if (!requirement || matched) return "complete";
+  return requirement.allowEmpty && empty ? "verified_empty" : "missing";
 }
 
 class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
@@ -388,6 +446,16 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
 
   async execute(input: Parameters<AgentSpecialistExecutor["execute"]>[0]) {
     input.signal.throwIfAborted();
+    const scopedPolicy = this.root.mode === "inspect" && input.task.specialist.key === "policy_advisor";
+    const requiredPolicy = scopedPolicy ? policyRequirement(input.task.task) : null;
+    if (scopedPolicy && !requiredPolicy && crmFieldsOnly(input.task.task)) {
+      return {
+        status: "complete",
+        summary: "本次只读任务明确仅核对所列 CRM 字段，政策取证不适用。",
+        evidence: [], claims: [], missingMaterial: [], toolCalls: 0,
+        usage: { inputTokens: 0, outputTokens: 0, costCents: null, modelTurns: 0 },
+      } satisfies Omit<AgentSpecialistResult, "childRunId" | "specialistKey">;
+    }
     // Specialists gather the minimum selected evidence; the parent retains
     // broader investigation tools. Never infer extra targets from task prose.
     const scopedTools = input.task.specialist.key === "customer_evidence"
@@ -397,7 +465,7 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
         ]
       : input.task.specialist.key === "opportunity_diagnosis"
         ? input.task.scope.leadId ? ["crm_get_lead"] : []
-        : input.task.specialist.allowedToolIds;
+        : requiredPolicy ? ["crm_search_knowledge"] : input.task.specialist.allowedToolIds;
     const allowed = new Set(input.task.specialist.allowedToolIds.filter((id) => scopedTools.includes(id)));
     const childConfig: PublishedAgentConfig = {
       ...this.agentConfig,
@@ -425,6 +493,15 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
       const tools = Object.fromEntries(
         Object.entries(mcp?.tools ?? {}).filter(([name]) => allowed.has(name)),
       ) as ToolSet;
+      const search = tools.crm_search_knowledge;
+      if (requiredPolicy && search?.execute) {
+        const execute = search.execute;
+        tools.crm_search_knowledge = {
+          ...search,
+          execute: (args, options) =>
+            execute({ ...(args as Record<string, unknown>), pergunta: requiredPolicy.query }, options),
+        };
+      }
       const selectedRecords = ["customer_evidence", "opportunity_diagnosis"].includes(input.task.specialist.key);
       const maxSteps = selectedRecords
         ? Math.min(input.plan.maxTurnsPerSpecialist, Object.keys(tools).length + 1)
@@ -451,6 +528,12 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
             childConfig.systemPrompt,
             `你是${input.task.specialist.role}，是父 Agent 的只读 specialist。`,
             input.task.specialist.objective,
+            ...(requiredPolicy ? [
+              `本角色只核验指定企业知识搜索词 ${JSON.stringify(requiredPolicy.query)}，按工具的实际回读报告。`,
+              requiredPolicy.allowEmpty
+                ? "若授权来源正常检索且没有匹配，报告已核验无匹配。这已完成存在性核验；建议父任务将政策字段及引用留空。"
+                : "此项需要授权原文依据，空结果是待解决缺口。",
+            ] : []),
             "父 Agent 的组织安全、权限与来源策略始终有效；通用销售工作清单不能扩大本次专职取证范围。父任务中的其他角色要求只是背景，不由你代做。",
             "只完成当前角色目标。职责中列举的主题不是本次必须逐项读取的清单；未分配给本角色的事实、未选择的会话、未来推进所需材料不能自动当作本次缺口。",
             "只允许使用分配给你的只读工具。必须至少调用一个相关工具取得 observation 后再输出；每个相同范围的工具最多调用一次。",
@@ -541,10 +624,12 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
           scope: input.task.scope,
         }),
       );
+      const policyStatus = policyEvidenceStatus(toolMessages, requiredPolicy, childConfig.knowledgeSourceIds);
       const missingMaterial = [
         ...(toolErrors || toolMessages.some(failedToolObservation)
           ? ["failed_tool_observations"] : []),
-        ...(toolMessages.some(unavailableKnowledge) ? ["published_knowledge_sources"] : []),
+        ...(policyStatus === "unavailable" ? ["published_knowledge_sources"] : []),
+        ...(policyStatus === "missing" ? ["required_policy_evidence"] : []),
         ...(toolCalls === 0 ? ["tool_observations"] : []),
       ];
       const extractedAnswer = extractProductFinalAnswer(modelResult.result.text);
@@ -554,6 +639,9 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
       if (extractedAnswer.inspection.likelyTruncated)
         missingMaterial.push("complete_specialist_summary");
       const status = toolErrors > 0 || missingMaterial.length > 0 ? "partial" : "complete";
+      const summary = status === "complete" && policyStatus === "verified_empty"
+        ? "已在授权资料核验指定词，正常检索无匹配，按任务要求将政策项及该项引用留空。"
+        : extractedAnswer.text;
       const { error: stateError } = await this.admin.from("ai_agent_run_states").upsert(
         {
           organization_id: this.root.organizationId,
@@ -566,7 +654,7 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
       if (stateError) throw new Error("specialist_state_persist_failed");
       return {
         status,
-        summary: extractedAnswer.text,
+        summary,
         evidence,
         claims,
         missingMaterial: [...new Set(missingMaterial)],

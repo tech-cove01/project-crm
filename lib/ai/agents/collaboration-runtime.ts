@@ -419,7 +419,8 @@ export function formatCollaborationContext(outcome: AgentCollaborationOutcome): 
 function collaborationResultReferences(result: AgentSpecialistResult): Array<Record<string, unknown>> {
   const uuid = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
   const references: Array<Record<string, unknown>> = [];
-  if (uuid(result.childRunId)) references.push({ sourceType: "specialist", sourceId: result.childRunId });
+  if ((result.toolCalls > 0 || result.usage.modelTurns > 0) && uuid(result.childRunId))
+    references.push({ sourceType: "specialist", sourceId: result.childRunId });
   // Recursive CRM claims can contain nested memory/owner IDs; do not relabel
   // those IDs as contact/lead records. A child UUID safely addresses its report.
   for (const evidence of result.evidence.slice(0, 12)) {

@@ -304,6 +304,7 @@ export async function runWorkbenchStartJob(
             rootJobId: job.id,
             agentId: run.agent_id,
             actorUserId: run.actor_user_id,
+            mode: run.mode,
             task: run.task,
             scope: {
               contactId: scope.contactId,
