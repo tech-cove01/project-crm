@@ -13,6 +13,7 @@ import { SCORE_VERSION, prepareReview, scoreComplex, scoreSimple } from './crm02
 import { BASE, ROOT, at, authorizeWiki, business, bytes, configuration, context, crm, digest, folder, idle,
   one, optional, prepareMaterials, read, restoreConfiguration, seal, seedMaterials, sha, uuid, verifyMaterial } from './crm024-fixtures.mjs';
 import { containedScopeRejections, countsFor, reportedTokens, toolBody } from './crm024-scope-audit.mjs';
+import { isReconciledListResult, originalScripts, readListReconciliation } from './crm024-list-reconciliation.mjs';
 import { approveContinuation, continuationPlan, CORRECTION_FILE, HISTORICAL_PHASE, isHistoricalException,
   NEVER_CREATED_LABEL, readCorrection, readHistoricalIncident, RECOVERY_FILE, RECOVERY_PLAN, RECOVERY_REVIEW,
   REJECTED_LABEL } from './crm024-recovery.mjs';
@@ -25,7 +26,8 @@ const arms = ['disabled', 'auto'];
 const terminals = ['completed', 'partial', 'failed', 'cancelled', 'awaiting_confirmation'];
 const runtimePaths = ['app', 'lib', 'workers', 'supabase', 'pnpm-lock.yaml', 'package.json', 'next.config.ts', 'proxy.ts'];
 const scriptNames = ['crm024-paired.mjs', 'crm024-fixtures.mjs', 'crm024-cases.mjs', 'crm024-freeze.mjs', 'crm024-score.mjs',
-  'crm024-score-resumed.mjs', 'crm024-continuation-fixtures.mjs', 'crm024-scope-audit.mjs', 'crm024-recovery.mjs', 'crm022-sales.mjs'];
+  'crm024-score-resumed.mjs', 'crm024-continuation-fixtures.mjs', 'crm024-scope-audit.mjs', 'crm024-recovery.mjs',
+  'crm024-list-reconciliation.mjs', 'crm022-sales.mjs'];
 const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', timeout: 15000, maxBuffer: 16 * 1024 * 1024, windowsHide: true }).trim();
 const currentScripts = async () => Object.fromEntries(await Promise.all(scriptNames.map(async name => [name, digest(await readFile(resolve(import.meta.dirname, name)))])));
 const auth = hash => assert(process.env.CRM024_EXECUTE === hash, 'crm024_exact_opt_in_required');
@@ -102,8 +104,10 @@ async function frozenContinuation(protocolHash, plan, incident) {
   assert(blobHash(blobs('origin/main')) === product.effective && plan?.protocolHash === protocolHash &&
     /^[a-f0-9]{40}$/.test(plan.fixedProduct?.commit ?? '') &&
     blobHash(blobs(plan.fixedProduct.commit)) === product.effective, 'crm024_fixed_product_unpushed_or_changed');
-  const expected = continuationPlan(incident, { ...product, head: plan.fixedProduct.commit }, await currentScripts());
+  const overlay = await readListReconciliation(protocolHash);
+  const expected = continuationPlan(incident, { ...product, head: plan.fixedProduct.commit }, originalScripts(await currentScripts(), overlay));
   assert(same(plan, expected), 'crm024_continuation_plan_changed');
+  return overlay;
 }
 
 async function readContinuation(protocolHash, expectedHash) {
@@ -115,9 +119,9 @@ async function readContinuation(protocolHash, expectedHash) {
   const incident = await readCorrection(BASE, protocolHash);
   const plan = await read(resolve(BASE, RECOVERY_PLAN), recovery.planHash);
   const review = await read(resolve(BASE, RECOVERY_REVIEW), recovery.reviewHash);
-  await frozenContinuation(protocolHash, plan, incident);
+  const listReconciliation = await frozenContinuation(protocolHash, plan, incident);
   assert(same(recovery, approveContinuation(plan, recovery.planHash, review, recovery.reviewHash)), 'crm024_continuation_receipt_changed');
-  return { recovery, recoveryHash, missingScope: incident.missingScope };
+  return { recovery, recoveryHash, missingScope: incident.missingScope, listReconciliation };
 }
 
 async function freezePhase(p, c, phase, protocolHash, materials, continuation) {
@@ -170,7 +174,7 @@ async function matchingRoots(q, c, payload) {
   [c.org, c.initiatorUserId, payload.agentId, payload.task, JSON.stringify(payload.scope)]);
 }
 
-async function ledger(p, phase, scope, protocolHash, recovery) {
+async function ledger(p, phase, scope, protocolHash, recovery, listReconciliation) {
   let spent = 0, roots = 0, specialistCount = 0;
   const missingUsage = { noModelRows: 0, unknownInputRows: 0, unknownOutputRows: 0 };
   for (const step of phases) {
@@ -190,6 +194,7 @@ async function ledger(p, phase, scope, protocolHash, recovery) {
       const result = JSON.parse(raw);
       const guard = result.protection;
       const historical = isHistoricalException(recovery, step, slot, raw);
+      const reconciled = isReconciledListResult(listReconciliation, step, slot, raw);
       const measured = reportedTokens(result.snapshot.calls);
       const previousScope = fixtures.cases[slot];
       const recomputed = countsFor(result.snapshot, previousScope, fixtures.org, frozen.config.sourceIds);
@@ -207,7 +212,7 @@ async function ledger(p, phase, scope, protocolHash, recovery) {
         guard.unchanged === true && guard.sameExecution === true && guard.proposals === 0 &&
         same(result.snapshot.state, fixtures.objects[slot].before) && result.snapshot.proposals === 0 &&
         children.length === result.childRoles.length && children.every(row => terminals.includes(row.status) && row.status !== 'awaiting_confirmation') &&
-        (guard.scopeViolations === 0 || historical || (step !== HISTORICAL_PHASE && contained)) &&
+        (guard.scopeViolations === 0 || historical || reconciled || (step !== HISTORICAL_PHASE && contained)) &&
         guard.writeAttempts === 0 && guard.outboundAttempts === 0, 'crm024_unreconciled_intent_or_safety_stop');
       spent += measured.input + measured.output;
       missingUsage.noModelRows += Number(measured.modelRows === 0);
@@ -225,11 +230,14 @@ async function ledger(p, phase, scope, protocolHash, recovery) {
 
 async function create(c, p, phase, frozen, hash, f, scope, materials, continuation) {
   auth(hash);
+  const overlay = continuation.listReconciliation;
+  assert(!overlay || phase !== overlay.phase || hash === overlay.archive.freezeHash && overlay.remainingLabels.includes(scope.label),
+    'crm024_r2_list_only_remaining_slots');
   const lockPath = resolve(BASE, 'create.lock');
   // An interrupted process leaves this lock in place until a read-only human reconciliation.
   const lock = await open(lockPath, 'wx', 0o600);
   try {
-    const accumulated = await ledger(p, phase, scope, frozen.protocolHash, continuation.recovery);
+    const accumulated = await ledger(p, phase, scope, frozen.protocolHash, continuation.recovery, overlay);
     if (phase === 'formal') await requireAdmission(p, frozen.protocolHash, frozen.product, continuation);
     const payload = payloadFor(p, frozen.config, scope);
     await crm(c, true, async q => {
@@ -580,8 +588,10 @@ async function main(args) {
     'crm024_explicit_run_command_required');
   const frozen = await read(resolve(folder(phase), 'frozen.json'), hash);
   const p = await protocol(frozen.protocolHash);
+  const overlay = phase === 'calibration-2' ? await readListReconciliation(frozen.protocolHash) : null;
+  assert(!overlay || hash === overlay.archive.freezeHash, 'crm024_r2_list_original_freeze_required');
   assert(frozen.phase === phase && frozen.scoreVersion === SCORE_VERSION && sha.test(frozen.continuationHash) &&
-    same(frozen.scripts, await currentScripts()), 'crm024_frozen_harness_changed');
+    same(frozen.scripts, originalScripts(await currentScripts(), overlay)), 'crm024_frozen_harness_changed');
   const fixture = await read(resolve(folder(phase), 'fixtures.json'), frozen.fixtureHash);
   const scope = fixture.cases[`${id}-${arm}`];
   assert(scope && frozen.labels.includes(scope.label) && [scope.leadId, scope.contactId, scope.stageId, scope.pipelineId].every(value => uuid.test(value)),
