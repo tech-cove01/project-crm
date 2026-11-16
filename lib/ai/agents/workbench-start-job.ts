@@ -316,8 +316,10 @@ export async function runWorkbenchStartJob(
           },
           agentConfig: modelAgentConfig,
           signal: abortController.signal,
+          assertJobLease: beforeSideEffect,
         })
       : null;
+    if (collaboration) await beforeSideEffect();
     const collaborationBlocked = await hasPendingCollaborationReview(pool, job.organization_id, runId);
     workbenchMcp = await buildMcpTurnTools(
       deps.crmCfg,
@@ -394,6 +396,8 @@ export async function runWorkbenchStartJob(
       ? `${run.task}\n\n已校验的当前 CRM 目标范围（由工作台选择；请先用只读工具读取这些精确对象，不要猜选其他记录）：\n${selectedScopeLines.join("\n")}`
       : run.task;
     if (collaboration) taskWithScope += formatCollaborationContext(collaboration);
+    if (run.mode === "inspect" && !scope.conversationId)
+      taskWithScope += "\n\n本次未选择会话。只使用已选 CRM 对象和已授权资料取证，不把其他对象 ID 当作会话 ID。";
     if (run.mode === "inspect")
       taskWithScope += "\n\n若用户明确要求 summary 为纯 JSON，只提交一个符合所需键的 JSON 对象，从 { 开始、到 } 结束，前后不加 Markdown 或说明。事实依据和真实缺口分别放在结构化 evidence 和 missingInformation。用户允许核验无匹配后留空，且授权搜索已确认无匹配时，政策项和该项引用填 null，evidence 不为该政策项加入不存在的知识回执。已读取的 CRM 字段即使为 null，也仍可引用其实际 CRM 来源。";
     const remainingMaxSteps = Math.max(

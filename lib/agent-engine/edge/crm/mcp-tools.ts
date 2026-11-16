@@ -71,8 +71,12 @@ export function resolveMcpTurnToolIds(toolIds: readonly string[], options?: McpT
           options?.confirmationTools?.includes(id) === true),
     ),
   );
+  const withoutSelectedConversation = options?.readOnly && options.targetScope && !options.targetScope.conversationId;
   return {
-    allowed: toolIds.filter((id) => !BLOCKED_TOOL_IDS.has(id) || proposalTools.has(id)),
+    allowed: toolIds.filter((id) =>
+      (!BLOCKED_TOOL_IDS.has(id) || proposalTools.has(id)) &&
+      !(withoutSelectedConversation && (id === "crm_get_conversation" || id === "crm_get_conversation_history")),
+    ),
     blocked: toolIds.filter((id) => BLOCKED_TOOL_IDS.has(id) && !proposalTools.has(id)),
     proposalTools,
   };

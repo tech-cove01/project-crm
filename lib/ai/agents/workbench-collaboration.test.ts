@@ -61,7 +61,7 @@ function fixture(messages: RuntimeMessage[], text: string) {
       actorUserId: null, mode: "inspect", task: "核对客户", scope: { contactId: "contact", leadId: null,
         conversationId: null, pipelineId: null }, budget: {} },
     agentConfig: { toolIds: ["crm_get_contact"], model: "qwen", provider: "dashscope",
-      systemPrompt: "CRM" }, signal: new AbortController().signal,
+      systemPrompt: "CRM" }, signal: new AbortController().signal, assertJobLease: vi.fn(async () => {}),
   } as unknown as Parameters<typeof runWorkbenchCollaboration>[0];
   return { input, updates };
 }
@@ -108,6 +108,7 @@ function useRealPi(responses: Parameters<ReturnType<typeof fauxProvider>["setRes
     streamFn: faux.provider.streamSimple.bind(faux.provider) as never }));
   mocks.execute.mockImplementation(async (_deps: unknown, call: Parameters<typeof executePiTurnModelCall>[1]) => {
     const result = await runPiAiSdkCall({ system: call.system ?? "", messages: call.messages,
+      runtimeMessages: call.runtimeMessages,
       tools: call.tools, maxSteps: call.maxSteps, finalTurn: call.finalTurn,
       beforeToolCall: call.beforeToolCall, onEvent: call.onEvent, runtime,
       model: { provider: "specialist-test", model: "model", apiKey: "fake" },
@@ -131,6 +132,7 @@ describe("workbench specialist result boundary", () => {
     input.plan.specialists = OPPORTUNITY_REVIEW_PLAN.specialists.filter(s => s.key === key);
     input.agentConfig.toolIds = [tool];
     input.root.scope.leadId = "lead";
+    if (key === "opportunity_diagnosis") input.root.mode = "act";
     mocks.buildTools.mockResolvedValue({ tools: { [tool]: recordTool(field) }, cleanup: mocks.cleanup });
     let secondTools: string[] = [];
     useRealPi([
@@ -147,6 +149,97 @@ describe("workbench specialist result boundary", () => {
     expect(mocks.execute.mock.calls[0]?.[1].maxSteps).toBe(2);
     expect(secondTools).toEqual([]);
     expect(result.results[0]).toMatchObject({ status: "complete", toolCalls: 1, missingMaterial: [], usage: { modelTurns: 2 } });
+  });
+
+  it("supplies the actual selected lead observation before an inspection model that calls no tools", async () => {
+    const { input } = fixture([], "");
+    input.plan.specialists = OPPORTUNITY_REVIEW_PLAN.specialists.filter(s => s.key === "opportunity_diagnosis");
+    input.root.scope.leadId = "lead";
+    input.agentConfig.toolIds = ["crm_get_lead"];
+    const execute = vi.fn(async (args: { lead_id: string }, options: { toolCallId: string }) => {
+      expect(options.toolCallId).toBeTruthy();
+      return { lead: { id: args.lead_id, status: "open", value_cents: 734500 } };
+    });
+    mocks.buildTools.mockResolvedValue({ tools: { crm_get_lead: { ...recordTool("lead_id"), execute } }, cleanup: mocks.cleanup });
+    useRealPi([context => {
+      expect(getCurrentTools(context.messages)).toEqual([]);
+      expect(context.messages).toContainEqual(expect.objectContaining({ role: "toolResult", toolName: "crm_get_lead",
+        details: { lead: { id: "lead", status: "open", value_cents: 734500 } },
+      }));
+      return fauxAssistantMessage("已读取指定商机，当前状态为开放，金额为 734500 分。");
+    }]);
+
+    const result = await runWorkbenchCollaboration(input);
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledWith({ lead_id: "lead" }, expect.objectContaining({ toolCallId: expect.any(String) }));
+    const toolCallId = execute.mock.calls[0]?.[1]?.toolCallId;
+    expect(mocks.execute.mock.calls[0]?.[1].maxSteps).toBe(1);
+    expect(result.results[0]).toMatchObject({ status: "complete", toolCalls: 1, missingMaterial: [], usage: { modelTurns: 1 },
+      claims: expect.arrayContaining([expect.objectContaining({ subject: { resource: "lead", id: "lead" }, field: "value_cents" })]),
+    });
+    for (const type of ["tool_started", "tool_completed"]) {
+      expect(mocks.appendEvent).toHaveBeenCalledWith(input.admin, expect.objectContaining({ type,
+        payload: expect.objectContaining({ tool: "crm_get_lead", toolCallId }),
+      }));
+    }
+  });
+
+  it.each([
+    ["denial", () => ({ permitido: false, motivo: "workbench_target_out_of_scope" }), true],
+    ["missing record", () => ({ lead: null }), false],
+    ["service error", () => { throw new Error("transport unavailable"); }, true],
+  ] as const)("keeps %s partial after the bounded opportunity read", async (_label, execute, failed) => {
+    const { input } = fixture([], "");
+    input.plan.specialists = OPPORTUNITY_REVIEW_PLAN.specialists.filter(s => s.key === "opportunity_diagnosis");
+    input.root.scope.leadId = "lead";
+    input.agentConfig.toolIds = ["crm_get_lead"];
+    mocks.buildTools.mockResolvedValue({ tools: { crm_get_lead: { ...recordTool("lead_id"), execute } }, cleanup: mocks.cleanup });
+    useRealPi([fauxAssistantMessage("已说明取证缺口。")]);
+
+    const result = await runWorkbenchCollaboration(input);
+
+    expect(result.results[0]).toMatchObject({ status: "partial", toolCalls: 1, claims: [], evidence: [],
+      missingMaterial: failed ? ["failed_tool_observations", "selected_lead_evidence"] : ["selected_lead_evidence"],
+    });
+  });
+
+  it("leaves the selected lead missing when the existing tool budget refuses the read", async () => {
+    const { input } = fixture([], "");
+    input.root.scope.leadId = "lead";
+    input.plan.specialists = OPPORTUNITY_REVIEW_PLAN.specialists.filter(s => s.key === "opportunity_diagnosis");
+    input.plan.maxTotalToolCalls = 0;
+    input.agentConfig.toolIds = ["crm_get_lead"];
+    const execute = vi.fn();
+    mocks.buildTools.mockResolvedValue({ tools: { crm_get_lead: { ...recordTool("lead_id"), execute } }, cleanup: mocks.cleanup });
+    useRealPi([fauxAssistantMessage("未取得商机观察。")]);
+
+    const result = await runWorkbenchCollaboration(input);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.results[0]).toMatchObject({ status: "partial", toolCalls: 0,
+      missingMaterial: ["tool_observations", "selected_lead_evidence"],
+    });
+  });
+
+  it.each([1, 2, 3])("halts the opportunity path when the root lease fails check %i", async failingCheck => {
+    const { input } = fixture([], "");
+    input.root.scope.leadId = "lead";
+    input.plan.specialists = OPPORTUNITY_REVIEW_PLAN.specialists.filter(s => s.key === "opportunity_diagnosis");
+    input.agentConfig.toolIds = ["crm_get_lead"];
+    let checks = 0;
+    input.assertJobLease = vi.fn(async () => {
+      if (++checks === failingCheck) throw new Error("workbench_job_lease_lost");
+    });
+    const execute = vi.fn(async () => ({ lead: { id: "lead" } }));
+    mocks.buildTools.mockResolvedValue({ tools: { crm_get_lead: { ...recordTool("lead_id"), execute } }, cleanup: mocks.cleanup });
+
+    const result = await runWorkbenchCollaboration(input);
+
+    expect(input.assertJobLease).toHaveBeenCalledTimes(failingCheck);
+    expect(execute).toHaveBeenCalledTimes(failingCheck === 3 ? 1 : 0);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(result.results[0]).toMatchObject({ status: "failed", toolCalls: 0, evidence: [] });
   });
 
   it("keeps two explicit record reads and one tool-free answer within the original three turns", async () => {

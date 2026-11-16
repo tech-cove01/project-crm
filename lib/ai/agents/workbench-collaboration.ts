@@ -5,7 +5,9 @@ import { executePiTurnModelCall } from "@/lib/agent-engine/agent/pi-turn-executi
 import type { PublishedAgentConfig } from "@/lib/agent-engine/agent/agent-config";
 import type { requestTurnDeps } from "@/lib/agent-engine/agent/request-deps";
 import { buildMcpTurnTools } from "@/lib/agent-engine/edge/crm/mcp-tools";
-import type { RuntimeMessage } from "@/lib/agent-runtime";
+import type { AgentRuntimeEvent, RuntimeMessage } from "@/lib/agent-runtime";
+import { adaptAiTools } from "@/lib/agent-runtime/pi/ai-sdk-compat";
+import { guardServiceEffect } from "@/lib/atendimento/fronteira-server";
 import type {
   AgentCollaborationOutcome,
   AgentCollaborationPlan,
@@ -468,6 +470,7 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
     private readonly deps: TurnDeps,
     private readonly root: RootRunMetadata,
     private readonly agentConfig: PublishedAgentConfig,
+    private readonly assertJobLease: () => Promise<void>,
   ) {}
 
   async execute(input: Parameters<AgentSpecialistExecutor["execute"]>[0]) {
@@ -531,7 +534,72 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
           },
         };
       }
-      const selectedRecords = ["customer_evidence", "opportunity_diagnosis"].includes(input.task.specialist.key);
+      const opportunity = input.task.specialist.key === "opportunity_diagnosis";
+      const selectedRecords = opportunity || input.task.specialist.key === "customer_evidence";
+      const name = "crm_get_lead";
+      const leadId = input.task.scope.leadId;
+      const leadTool = this.root.mode === "inspect" && opportunity && leadId && leadId === this.root.scope.leadId &&
+        workbenchToolEffect(name)?.effect === "read" && tools[name]
+        ? adaptAiTools({ [name]: tools[name] })[0]
+        : undefined;
+      const userMessage = {
+        role: "user" as const,
+        content: `${input.task.task}\n\n已校验 CRM 范围：\n${scopeLines || "未指定对象"}`,
+      };
+      let runtimeMessages: RuntimeMessage[] | undefined;
+      const onEvent = async ({ type, data }: AgentRuntimeEvent) => {
+        const tool = typeof data.tool_name === "string" ? data.tool_name : undefined;
+        const toolCallId = typeof data.tool_call_id === "string" ? data.tool_call_id : undefined;
+        if (type === "tool_execution_start" && tool)
+          await appendWorkbenchEvent(this.admin, {
+            organizationId: this.root.organizationId, runId: input.childRunId,
+            type: "tool_started", payload: { tool, toolCallId },
+          });
+        else if (type === "tool_execution_end") {
+          toolCalls += 1;
+          if (data.is_error) toolErrors += 1;
+          await appendWorkbenchEvent(this.admin, {
+            organizationId: this.root.organizationId, runId: input.childRunId,
+            type: "tool_completed", payload: { tool, toolCallId, status: data.is_error ? "error" : "success" },
+          });
+        } else if (type === "turn_end")
+          await appendWorkbenchEvent(this.admin, {
+            organizationId: this.root.organizationId, runId: input.childRunId,
+            type: "model_decision", payload: { toolResultCount: toolCalls },
+          });
+      };
+      if (leadTool) {
+        // The selected opportunity read is part of the specialist's job. Use
+        // the same MCP authorization and tool budget before the one model turn.
+        delete tools[name];
+        if (input.claimToolCall()) {
+          await this.assertJobLease();
+          await guardServiceEffect();
+          input.signal.throwIfAborted();
+          const toolCallId = randomUUID();
+          const args = { lead_id: leadId };
+          const data = { tool_name: name, tool_call_id: toolCallId };
+          await onEvent({ type: "tool_execution_start", data });
+          await this.assertJobLease();
+          input.signal.throwIfAborted();
+          let observation: Extract<RuntimeMessage, { role: "tool" }>;
+          try {
+            const result = await leadTool.execute(args, { toolCallId, signal: input.signal });
+            observation = { ...result, role: "tool", toolName: name, toolCallId };
+          } catch {
+            observation = { role: "tool", toolName: name, toolCallId, isError: true, content: "读取指定商机失败。" };
+          }
+          await onEvent({ type: "tool_execution_end", data: { ...data, is_error: failedToolObservation(observation) } });
+          input.signal.throwIfAborted();
+          runtimeMessages = [
+            userMessage,
+            { role: "assistant", content: "", toolCalls: [{ id: toolCallId, name, arguments: args }] },
+            observation,
+            { role: "user", content: "根据工作台为你执行的商机读取结果，输出本角色的取证报告。" },
+          ];
+        }
+        await this.assertJobLease();
+      }
       const maxSteps = selectedRecords
         ? Math.min(input.plan.maxTurnsPerSpecialist, Object.keys(tools).length + 1)
         : input.plan.maxTurnsPerSpecialist;
@@ -566,17 +634,15 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
             ] : []),
             "父 Agent 的组织安全、权限与来源策略始终有效；通用销售工作清单不能扩大本次专职取证范围。父任务中的其他角色要求只是背景，不由你代做。",
             "只完成当前角色目标。职责中列举的主题不是本次必须逐项读取的清单；未分配给本角色的事实、未选择的会话、未来推进所需材料不能自动当作本次缺口。",
-            "只允许使用分配给你的只读工具。必须至少调用一个相关工具取得 observation 后再输出；每个相同范围的工具最多调用一次。",
+            ...(leadTool ? ["读取指定商机由工作台执行，只依据实际返回的观察报告事实。"] : [
+              "只允许使用分配给你的只读工具。必须至少调用一个相关工具取得 observation 后再输出；每个相同范围的工具最多调用一次。",
+            ]),
             "如果工具返回空结果，应把空结果作为事实并说明边界；如果没有可用工具或关键字段，应明确列为缺失材料。",
             "最终报告不超过 800 个中文字符；优先保留对象 ID、时间、金额、阶段、引用来源、缺失材料与冲突。",
             "只输出报告正文，不输出内部计划、写作指令或思维过程。不得声称执行了写入。",
           ].join("\n"),
-          messages: [
-            {
-              role: "user",
-              content: `${input.task.task}\n\n已校验 CRM 范围：\n${scopeLines || "未指定对象"}`,
-            },
-          ],
+          messages: [userMessage],
+          ...(runtimeMessages ? { runtimeMessages } : {}),
           tools,
           maxSteps,
           finalTurn: {
@@ -609,45 +675,21 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
                 : null;
             return allocated !== null && cumulativeUsage.totalTokens >= allocated;
           },
-          onEvent: async (event) => {
-            const data = event.data;
-            const tool = typeof data.tool_name === "string" ? data.tool_name : undefined;
-            const toolCallId =
-              typeof data.tool_call_id === "string" ? data.tool_call_id : undefined;
-            if (event.type === "tool_execution_start" && tool)
-              await appendWorkbenchEvent(this.admin, {
-                organizationId: this.root.organizationId,
-                runId: input.childRunId,
-                type: "tool_started",
-                payload: { tool, toolCallId },
-              });
-            else if (event.type === "tool_execution_end") {
-              toolCalls += 1;
-              if (data.is_error) toolErrors += 1;
-              await appendWorkbenchEvent(this.admin, {
-                organizationId: this.root.organizationId,
-                runId: input.childRunId,
-                type: "tool_completed",
-                payload: { tool, toolCallId, status: data.is_error ? "error" : "success" },
-              });
-            } else if (event.type === "turn_end")
-              await appendWorkbenchEvent(this.admin, {
-                organizationId: this.root.organizationId,
-                runId: input.childRunId,
-                type: "model_decision",
-                payload: { toolResultCount: toolCalls },
-              });
-          },
+          onEvent,
         },
       );
       const messages = modelResult.result.runtimeMessages as RuntimeMessage[];
       const toolMessages = messages.filter(
         (message): message is Extract<RuntimeMessage, { role: "tool" }> => message.role === "tool",
       );
-      const evidence = toolMessages.flatMap((message) =>
+      const observedLead = (message: Extract<RuntimeMessage, { role: "tool" }>) =>
+        message.toolName === name && !failedToolObservation(message) &&
+        (structuredValue(message) as { lead?: { id?: unknown } } | null)?.lead?.id === leadId;
+      const evidenceMessages = leadTool ? toolMessages.filter(observedLead) : toolMessages;
+      const evidence = evidenceMessages.flatMap((message) =>
         toolEvidence(message, input.task.specialist.key),
       );
-      const claims = toolMessages.filter((message) => !failedToolObservation(message)).flatMap((message) =>
+      const claims = evidenceMessages.filter((message) => !failedToolObservation(message)).flatMap((message) =>
         extractToolClaims({
           message,
           specialistKey: input.task.specialist.key,
@@ -667,6 +709,7 @@ class PiWorkbenchSpecialistExecutor implements AgentSpecialistExecutor {
         ...(policy.state === "unavailable" ? ["published_knowledge_sources"] : []),
         ...(policy.state === "missing" ? ["required_policy_evidence"] : []),
         ...(toolCalls === 0 ? ["tool_observations"] : []),
+        ...(leadTool && evidenceMessages.length === 0 ? ["selected_lead_evidence"] : []),
       ];
       const extractedAnswer = extractProductFinalAnswer(modelResult.result.text);
       if (!extractedAnswer.text.trim()) missingMaterial.push("specialist_summary");
@@ -718,6 +761,7 @@ export async function runWorkbenchCollaboration(input: {
   root: RootRunMetadata;
   agentConfig: PublishedAgentConfig;
   signal: AbortSignal;
+  assertJobLease: () => Promise<void>;
 }): Promise<AgentCollaborationOutcome> {
   const tasks = input.plan.specialists.map<AgentSpecialistTask>((specialist) => ({
     parentRunId: input.root.parentRunId,
@@ -735,7 +779,7 @@ export async function runWorkbenchCollaboration(input: {
   }));
   const runtime = new BoundedAgentCollaborationRuntime(
     new SupabaseCollaborationStore(input.admin, input.root),
-    new PiWorkbenchSpecialistExecutor(input.admin, input.deps, input.root, input.agentConfig),
+    new PiWorkbenchSpecialistExecutor(input.admin, input.deps, input.root, input.agentConfig, input.assertJobLease),
   );
   const outcome = await runtime.runReadOnlySpecialists(input.plan, tasks, input.signal);
   return finishInitialCollaborationReview(getRequestPool(), input.root.organizationId,
