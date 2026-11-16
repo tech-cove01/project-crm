@@ -24,6 +24,11 @@ function keywordPattern(term: string): string {
     : literal;
 }
 
+function isTopicTerm(term: string): boolean {
+  return /[a-z\p{Script=Han}]/iu.test(term) &&
+    !/^(?:\d+|[〇零一二两三四五六七八九十百千万]+)(?:年|月|日|天|小时|分钟|秒|元|个|条|场|次|席|人|类|种|%|％)?$/.test(term);
+}
+
 function normalizeLexicalVariants(value: string): string {
   return value
     .replace(/框架/g, "架构")
@@ -114,10 +119,8 @@ export function planWikiQuery(query: string) {
       addTerm(quantity);
     }
   }
-  // Candidate discovery stays small; support checks must not lose later constraints.
-  const terms = supportTerms.slice(0, 6);
-  const hasTopic = supportTerms.some(term => /[a-z\p{Script=Han}]/iu.test(term) &&
-    !/^(?:\d+|[〇零一二两三四五六七八九十百千万]+)(?:年|月|日|天|小时|分钟|秒|元|个|条|场|次|席|人|类|种|%|％)$/.test(term));
+  const terms = supportTerms.filter(isTopicTerm);
+  const hasTopic = terms.length > 0;
   return {
     literal: escapeWikiRegex(bounded),
     terms,
@@ -126,7 +129,7 @@ export function planWikiQuery(query: string) {
     hasTopic,
     permissionQuestion,
     outboundChannels,
-    fallback: supportComplete && hasTopic && terms.length ? `(${terms.map(keywordPattern).join("|")})` : null,
+    fallback: supportComplete && hasTopic ? `(${terms.map(keywordPattern).join("|")})` : null,
   };
 }
 
@@ -140,4 +143,33 @@ export function supportsWikiQuery(fields: string[], plan: ReturnType<typeof plan
     if (term === "直接") return requiresPriorDecision(normalized);
     return plan.outboundChannels.includes(term) && coversOutboundChannel(normalized, term);
   });
+}
+
+/** Rank related pages by their actual title and visible excerpt. A match makes no claim about the answer. */
+export function rankWikiCandidates<T extends { title: string; excerpt: string }>(
+  pages: readonly T[],
+  plan: ReturnType<typeof planWikiQuery>,
+): T[] {
+  if (!plan.supportComplete || !plan.hasTopic || pages.length === 0) return [];
+  const patterns = plan.terms.map(term => new RegExp(keywordPattern(term), "iu"));
+  const matches = pages.map(page => {
+    const title = normalizeLexicalVariants(page.title);
+    const excerpt = normalizeLexicalVariants(page.excerpt);
+    return { page, weights: patterns.map(pattern => 2 * Number(pattern.test(title)) + Number(pattern.test(excerpt))) };
+  });
+  // Query terms found throughout the candidate window say little about which page is most relevant.
+  const termWeights = patterns.map((_, index) => {
+    const frequency = matches.filter(match => match.weights[index]! > 0).length;
+    return Math.log1p((pages.length - frequency + 0.5) / (frequency + 0.5));
+  });
+  const ranked = matches
+    .filter(({ weights }) => weights.filter(weight => weight > 0).length >= Math.min(2, patterns.length))
+    .map(({ page, weights }) => ({
+      page,
+      score: weights.reduce((score, weight, index) => score + weight * termWeights[index]!, 0),
+      fullCoverage: supportsWikiQuery([page.title, page.excerpt], plan),
+    }))
+    .sort((a, b) => b.score - a.score || Number(b.fullCoverage) - Number(a.fullCoverage));
+  const minimum = (ranked[0]?.score ?? 0) / 4;
+  return ranked.filter(match => match.score >= minimum).map(match => match.page);
 }

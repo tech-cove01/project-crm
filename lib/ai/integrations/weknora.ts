@@ -4,7 +4,7 @@ import { z } from "zod";
 import { enabledIntegration, type IntegrationBinding } from "./config";
 import { integrationFetch } from "./http";
 import { integrationQuery } from "./db";
-import { supportsWikiQuery, planWikiQuery } from "./wiki-query";
+import { planWikiQuery, rankWikiCandidates } from "./wiki-query";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const id = z
@@ -25,6 +25,12 @@ const pageSchema = z.object({
   updated_at: z.string().datetime({ offset: true }),
   deleted_at: z.null().optional(),
 });
+type WikiPage = z.infer<typeof pageSchema>;
+const candidateSchema = z.object({ slug: z.string().min(1).max(255), id: id.optional() });
+type WikiCandidate = z.infer<typeof candidateSchema>;
+const excerptLength = 12_000;
+const fallbackPageBudget = 30;
+const fallbackReadConcurrency = 4;
 const documentSchema = z.object({
   id,
   knowledge_base_id: id,
@@ -120,6 +126,69 @@ function slugPath(slug: string) {
   return slug.split("/").map(encodeURIComponent).join("/");
 }
 
+async function readWikiCandidate(
+  binding: IntegrationBinding,
+  kb: string,
+  raw: unknown,
+  signal: AbortSignal,
+  fetchImpl?: typeof fetch,
+): Promise<WikiPage | null> {
+  signal.throwIfAborted();
+  const candidate = candidateSchema.safeParse(raw);
+  if (!candidate.success) return null;
+  const { slug, id } = candidate.data;
+  try {
+    const page = pageSchema.parse(await json(
+      binding,
+      `/api/v1/knowledgebase/${encodeURIComponent(kb)}/wiki/pages/${slugPath(slug)}`,
+      signal,
+      fetchImpl,
+    ));
+    return page.knowledge_base_id === kb && page.slug === slug && (id === undefined || page.id === id) ? page : null;
+  } catch {
+    signal.throwIfAborted();
+    return null;
+  }
+}
+
+type WikiSearchResult =
+  | { mode: "literal"; pages: Array<{ candidate: unknown; observation?: WikiPage | null }>; exhausted: boolean }
+  | { mode: "keyword_fallback"; pages: WikiPage[]; exhausted: boolean };
+
+async function rankFallbackPages(
+  candidates: unknown[],
+  window: number,
+  plan: ReturnType<typeof planWikiQuery>,
+  readPage: (candidate: WikiCandidate) => Promise<WikiPage | null>,
+): Promise<WikiSearchResult> {
+  let exhausted = candidates.length < window;
+  const bySlug = new Map<string, WikiCandidate>();
+  for (const raw of candidates.slice(0, window)) {
+    const parsed = candidateSchema.safeParse(raw);
+    if (!parsed.success) {
+      exhausted = false;
+      continue;
+    }
+    const candidate = parsed.data;
+    const previous = bySlug.get(candidate.slug);
+    if (previous?.id && candidate.id && previous.id !== candidate.id) {
+      exhausted = false;
+      continue;
+    }
+    if (!previous?.id) bySlug.set(candidate.slug, candidate);
+  }
+  const values = [...bySlug.values()];
+  const pages = [];
+  for (let offset = 0; offset < values.length; offset += fallbackReadConcurrency) {
+    const batch = await Promise.all(values.slice(offset, offset + fallbackReadConcurrency).map(readPage));
+    for (const page of batch) {
+      if (page) pages.push({ page, title: page.title, excerpt: page.content.slice(0, excerptLength) });
+      else exhausted = false;
+    }
+  }
+  return { mode: "keyword_fallback", pages: rankWikiCandidates(pages, plan).map(({ page }) => page), exhausted };
+}
+
 /** A published CRM source grants an entire uniform-visibility KB, never a filtered mixed-ACL synthesis. */
 export async function searchCompanyWiki(
   pool: Pool,
@@ -139,51 +208,49 @@ export async function searchCompanyWiki(
   const evidence = [];
   const max = Math.max(1, Math.min(10, limit));
   const planned = planWikiQuery(query);
-  const searched = new Map<string, { pages: unknown[]; usedFallback: boolean }>();
+  const searchable = allowed.slice(0, 5).filter(source =>
+    binding.visibility === "organization" && binding.knowledge_base_ids?.includes(source.source_metadata.knowledge_base_id));
+  const coveredKbs = new Set(searchable.map(source => source.source_metadata.knowledge_base_id));
+  // Share the expanded window among authorized KBs without shrinking the existing per-KB top-K window.
+  const fallbackWindow = Math.max(max, Math.floor(Math.min(fallbackPageBudget, max * 6) / Math.max(1, coveredKbs.size)));
+  const searched = new Map<string, WikiSearchResult>();
   const checkedEmptySources = new Set<string>();
   let fallbackUsed = false;
-  for (const source of allowed.slice(0, 5)) {
+  for (const source of searchable) {
     const kb = source.source_metadata.knowledge_base_id;
-    if (!binding.knowledge_base_ids?.includes(kb) || binding.visibility !== "organization")
-      continue;
-    const search = async (pattern: string) => z
+    const search = async (pattern: string, window: number) => z
       .object({ pages: z.array(z.unknown()).max(100) })
       .parse(await json(binding,
-        `/api/v1/knowledgebase/${encodeURIComponent(kb)}/wiki/search?q=${encodeURIComponent(pattern)}&limit=${max}`,
+        `/api/v1/knowledgebase/${encodeURIComponent(kb)}/wiki/search?q=${encodeURIComponent(pattern)}&limit=${window}`,
         signal, fetchImpl));
+    const readPage = (candidate: unknown) => readWikiCandidate(binding, kb, candidate, signal, fetchImpl);
     let result = searched.get(kb);
     if (!result) {
-      let response = await search(planned.literal);
+      const literal = await search(planned.literal, max);
       // Only an upstream zero-candidate result permits retry; invalid/stale pages never widen the search.
-      const usedFallback = response.pages.length === 0 && planned.fallback !== null;
-      if (usedFallback) {
+      if (literal.pages.length === 0 && planned.fallback !== null) {
         fallbackUsed = true;
-        response = await search(planned.fallback!);
+        const fallback = await search(planned.fallback, fallbackWindow);
+        result = await rankFallbackPages(fallback.pages, fallbackWindow, planned, readPage);
+      } else {
+        result = { mode: "literal", pages: literal.pages.slice(0, max).map(candidate => ({ candidate })),
+          exhausted: planned.supportComplete && literal.pages.length < max };
       }
-      result = { pages: response.pages, usedFallback };
       searched.set(kb, result);
     }
-    const { usedFallback } = result;
-    let unrelated = 0;
-    for (const candidate of result.pages.slice(0, max)) {
-      signal?.throwIfAborted();
-      const candidateIdentity = z.object({ slug: z.string() }).safeParse(candidate);
-      if (!candidateIdentity.success) continue;
-      // Search snippets are not evidence; read the actual current published page and its sources.
+    for (let index = 0; index < Math.min(max, result.pages.length); index++) {
+      signal.throwIfAborted();
+      let page;
+      if (result.mode === "literal") {
+        const candidate = result.pages[index]!;
+        if (candidate.observation === undefined) candidate.observation = await readPage(candidate.candidate);
+        page = candidate.observation;
+      } else {
+        page = result.pages[index];
+      }
+      if (!page) continue;
+      // Candidate relevance uses the published page. Its source documents still need verification.
       try {
-        const page = pageSchema.parse(
-          await json(
-            binding,
-            `/api/v1/knowledgebase/${encodeURIComponent(kb)}/wiki/pages/${slugPath(candidateIdentity.data.slug)}`,
-            signal,
-            fetchImpl,
-          ),
-        );
-        if (page.knowledge_base_id !== kb) throw new Error("wiki_page_scope_mismatch");
-        if (usedFallback && !supportsWikiQuery([page.title, page.content.slice(0, 12000)], planned)) {
-          unrelated += 1;
-          continue;
-        }
         const documentIds = [...new Set(page.source_refs.map((ref) => ref.split("|")[0]!))].sort();
         const docs = await Promise.all(
           documentIds.map((ref) => document(binding, kb, ref, signal, fetchImpl)),
@@ -196,6 +263,8 @@ export async function searchCompanyWiki(
           documentIds.map((ref) => document(binding, kb, ref, signal, fetchImpl)),
         );
         if (JSON.stringify(docs) !== JSON.stringify(finalDocs)) continue;
+        // Ranking can hold a page snapshot while other candidates are read. Recheck it before persisting a receipt.
+        if (result.mode === "keyword_fallback" && JSON.stringify(await readPage(page)) !== JSON.stringify(page)) continue;
         const manifest = manifestSchema.parse({
           provider: "weknora",
           knowledge_base_id: kb,
@@ -232,7 +301,7 @@ export async function searchCompanyWiki(
           namespace: "organization_wiki",
           kind: "wiki_page",
           title: page.title,
-          excerpt: page.content.slice(0, 12000),
+          excerpt: page.content.slice(0, excerptLength),
           locator: {
             provider: "weknora",
             sourceId: source.id,
@@ -249,15 +318,15 @@ export async function searchCompanyWiki(
             chunk_ids: manifest.chunk_ids,
             authority: manifest.authority,
             revision_kind: "immutable_observation_manifest",
-            queryMode: usedFallback ? "keyword_fallback" : "literal",
+            queryMode: result.mode,
           },
         });
       } catch {
-        signal?.throwIfAborted(); /* Fail closed per synthesized page; no partial ACL filtering. */
+        signal.throwIfAborted(); /* Fail closed per synthesized page; no partial ACL filtering. */
       }
       if (evidence.length >= max) break;
     }
-    if (result.pages.length < max && unrelated === result.pages.length) checkedEmptySources.add(source.id);
+    if (result.exhausted && result.pages.length === 0) checkedEmptySources.add(source.id);
     if (evidence.length >= max) break;
   }
   // An absence may exclude readable fallback pages that fail the query guard.

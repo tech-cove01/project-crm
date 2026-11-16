@@ -47,9 +47,10 @@ const LIMIAR_PADRAO = 0.4;
 export const crmSearchKnowledge: McpToolDefinition<typeof buscarInputShape> = {
   name: "crm_search_knowledge",
   description:
-    "Busca semantica no acervo de conhecimento da organizacao (RAG). Devolve os trechos mais " +
-    "relevantes com a similaridade de cada um. Quando nada passa do limiar, devolve " +
-    "`melhor_similaridade` para distinguir 'nao ha nada sobre isso' de 'ha algo perto, mas fraco'.",
+    "Busca materiais candidatos no acervo autorizado. Use o campo obrigatório `pergunta`. " +
+    "A relevância do material orienta a leitura. Sustente cada conclusão com trechos que a declarem e preserve unidades, prazos e condições. " +
+    "Quando faltar base, informe o ponto que ficou sem confirmação. Um resultado vazio descreve a consulta executada. " +
+    "A busca semântica também pode informar `melhor_similaridade`.",
   inputSchema: buscarInputShape,
   category: "read",
   requiresRole: "agent",

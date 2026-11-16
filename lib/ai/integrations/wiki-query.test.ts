@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeWikiRegex, planWikiQuery, supportsWikiQuery } from "./wiki-query";
+import { escapeWikiRegex, planWikiQuery, rankWikiCandidates, supportsWikiQuery } from "./wiki-query";
 
 const longQuery = "Pi Native CRM 的客户记忆由什么服务提供向量检索，数据库是否是事实来源？";
 const noAnswerQuery = "火星基地量子电池的政府采购合同编号是什么？";
@@ -21,7 +21,7 @@ describe("natural-language Wiki query boundaries", () => {
     expect(plan.terms).not.toContain("Native");
     expect(plan.terms).not.toContain("CRM");
     expect(plan.terms).not.toEqual(expect.arrayContaining(["什么", "服务", "提供", "是否"]));
-    expect(plan.terms.length).toBeLessThanOrEqual(6);
+    expect(plan.terms.length).toBeLessThanOrEqual(32);
     expect(supportsWikiQuery(["Pi Native CRM", "客户记忆由向量检索服务支持，数据库是事实来源。"], plan)).toBe(true);
     expect(supportsWikiQuery(["Pi Native CRM", "Pi Native CRM", "Pi Native CRM"], plan)).toBe(false);
   });
@@ -51,12 +51,30 @@ describe("natural-language Wiki query boundaries", () => {
     expect(planWikiQuery("客户 客户 记忆 记忆").terms).toEqual(["客户", "记忆"]);
   });
 
-  it("keeps later constraints for lexical support while limiting candidate discovery to six terms", () => {
-    const plan = planWikiQuery("客户记忆向量检索事实来源保留引用自动归档周期");
-    expect(plan.terms).toHaveLength(6);
-    expect(plan.supportTerms.length).toBeGreaterThan(6);
+  it("uses later topics for discovery and preserves amounts or dates as lexical constraints", () => {
+    const plan = planWikiQuery("客户记忆向量检索事实来源保留引用自动归档周期14天");
+    expect(plan.terms.length).toBeGreaterThan(6);
+    expect(plan.fallback).toContain(plan.terms.at(-1));
+    expect(plan.supportTerms).toContain("14天");
+    expect(plan.terms).not.toContain("14天");
     expect(supportsWikiQuery([plan.terms.join(" ")], plan)).toBe(false);
     expect(supportsWikiQuery([plan.supportTerms.join(" ")], plan)).toBe(true);
+  });
+
+  it("prefers complementary title matches and drops repeated shared names", () => {
+    const plan = planWikiQuery("Acme Cloud 备份恢复时间与加密协议是什么？");
+    const nameOnly = { title: "Acme Cloud", excerpt: "Acme Cloud Acme Cloud" };
+    const recovery = { title: "Acme Cloud 备份恢复", excerpt: "备份恢复时间为两小时。" };
+    const encryption = { title: "备份加密协议", excerpt: "备份须按批准的加密协议处理。" };
+    expect(rankWikiCandidates([nameOnly, recovery, encryption], plan)).toEqual([encryption, recovery]);
+    expect(supportsWikiQuery([recovery.title, recovery.excerpt], plan)).toBe(false);
+  });
+
+  it("allows a single topic to find a related page without inferring its requested unit", () => {
+    const plan = planWikiQuery("备份14天");
+    const page = { title: "备份", excerpt: "可使用备份服务14次。" };
+    expect(rankWikiCandidates([page], plan)).toEqual([page]);
+    expect(supportsWikiQuery([page.title, page.excerpt], plan)).toBe(false);
   });
 
   it("requires every non-generic support term rather than any two topical matches", () => {

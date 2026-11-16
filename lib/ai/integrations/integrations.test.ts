@@ -10,7 +10,7 @@ import {
 } from "./langfuse";
 import { syncCustomerMemory, readConfirmedCustomerMemory, customerMemoryInput } from "./mem0";
 import { searchCompanyWiki, readCompanyWikiEvidence } from "./weknora";
-import { escapeWikiRegex } from "./wiki-query";
+import { escapeWikiRegex, planWikiQuery, supportsWikiQuery } from "./wiki-query";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import type { AgentEvalReport } from "@/lib/ai/evals/contracts";
 
@@ -626,6 +626,41 @@ describe("WeKnora current-source Wiki evidence", () => {
     expect(result.evidence[0]?.metadata).toMatchObject({ queryMode: "keyword_fallback", authority: "derived_company_knowledge_not_commercial_approval" });
     expect(f.manifests).toHaveLength(1);
   });
+  it("finds a late related page after one expanded search and validates only retained sources", async () => {
+    const f = fixture();
+    const question = "Acme Cloud 的产品设备保修自动续约周期与批准要求是什么？";
+    f.page.title = "Acme Cloud 设备保修";
+    f.page.content = "设备保修适用于批准的设备，续约服务另行说明。";
+    const noise = Array.from({ length: 6 }, (_, index) => ({ ...f.page, id: `noise-${index}`, slug: `noise/${index}`,
+      title: "Acme Cloud", content: "Acme Cloud Acme Cloud" }));
+    const candidates = [...noise, noise[0]!, f.page];
+    const original = f.http.getMockImplementation()!;
+    const searchWindows: string[] = [];
+    let activePageReads = 0;
+    let peakPageReads = 0;
+    f.http.mockImplementation(async url => {
+      const target = new URL(String(url));
+      if (target.pathname.endsWith("/search")) {
+        searchWindows.push(target.searchParams.get("limit")!);
+        return j({ pages: searchWindows.length === 1 ? [] : candidates.map(({ id, slug }) => ({ id, slug, title: question })) });
+      }
+      const entry = candidates.find(candidate => target.pathname.endsWith(`/wiki/pages/${candidate.slug}`));
+      if (!entry) return original(url);
+      activePageReads++;
+      peakPageReads = Math.max(peakPageReads, activePageReads);
+      await Promise.resolve();
+      activePageReads--;
+      return j(entry);
+    });
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], question, 5, undefined, f.http);
+    expect(searchWindows).toEqual(["5", "30"]);
+    expect(result.evidence.map(entry => entry.title)).toEqual([f.page.title]);
+    expect(f.http.mock.calls.filter(([url]) => String(url).includes("/wiki/pages/"))).toHaveLength(8);
+    expect(f.http.mock.calls.filter(([url]) => String(url).endsWith(`/wiki/pages/${f.page.slug}`))).toHaveLength(2);
+    expect(peakPageReads).toBeLessThanOrEqual(4);
+    expect(f.http.mock.calls.filter(([url]) => String(url).endsWith("/knowledge/doc-a"))).toHaveLength(2);
+    expect(f.manifests).toHaveLength(1);
+  });
   it.each(["one repeated term", "terms outside the returned excerpt"])("rejects fallback candidates with %s even when search snippets claim relevance", async variant => {
     const f = fixture();
     const query = "Pi Native CRM 的客户记忆由什么服务提供向量检索，数据库是否是事实来源？";
@@ -661,15 +696,58 @@ describe("WeKnora current-source Wiki evidence", () => {
     const result = await searchCompanyWiki(f.pool, org, [sourceId], "widget", 3, undefined, f.http);
     expect(result).toMatchObject({ status: "empty", emptyVerified: false, evidence: [] });
   });
-  it.each(["missing property", "slug only", "late constraint"])("rejects fallback evidence with %s instead of accepting topical overlap", async variant => {
+  it.each(["candidate limit reached", "page read failed", "page identity changed"])(
+    "keeps fallback empty unverified when %s", async reason => {
+      const f = fixture();
+      const candidates = Array.from({ length: reason === "candidate limit reached" ? 6 : 1 }, (_, index) => ({
+        ...f.page, title: "办公通讯目录", content: "联系行政获取会议室编号。", id: `result-${index}`, slug: `result/${index}`,
+      }));
+      let searches = 0;
+      f.http.mockImplementation(async url => {
+        const target = new URL(String(url));
+        if (target.pathname.endsWith("/search")) return j({ pages: ++searches === 1 ? [] : candidates.map(({ id, slug }) => ({ id, slug })) });
+        if (reason === "page read failed") return new Response(null, { status: 503 });
+        const page = candidates.find(candidate => target.pathname.endsWith(`/wiki/pages/${candidate.slug}`));
+        return reason === "page identity changed" ? j({ ...page, id: "different-page" }) : j(page);
+      });
+      const result = await searchCompanyWiki(f.pool, org, [sourceId], "设备保修自动续约周期", 1, undefined, f.http);
+      expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: false, fallbackUsed: true });
+      expect(searches).toBe(2);
+      expect(f.manifests).toEqual([]);
+    },
+  );
+  it("rejects an initially current fallback page that changes before its receipt despite stable source documents", async () => {
+    const f = fixture();
+    f.page.title = "设备保修策略";
+    f.page.content = "设备保修自动续约周期为一年。";
+    f.page.version = 1;
+    const original = f.http.getMockImplementation()!;
+    let searches = 0;
+    let pageReads = 0;
+    f.http.mockImplementation(async url => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/search")) return j({ pages: ++searches === 1 ? [] : [{ id: f.page.id, slug: f.page.slug }] });
+      if (path.includes("/wiki/pages/")) return j(++pageReads === 1 ? f.page : {
+        ...f.page, version: 2, content: "设备保修自动续约周期改为两年。", updated_at: "2026-10-01T03:00:00Z",
+      });
+      return original(url);
+    });
+    const result = await searchCompanyWiki(f.pool, org, [sourceId], "设备保修的自动续约周期是多少？", 5, undefined, f.http);
+    expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: false, fallbackUsed: true });
+    expect(searches).toBe(2);
+    expect(pageReads).toBe(2);
+    expect(f.http.mock.calls.filter(([url]) => String(url).endsWith("/knowledge/doc-a"))).toHaveLength(2);
+    expect(f.manifests).toEqual([]);
+  });
+  it.each(["missing property", "slug only", "late constraint"])("checks actual fallback content with %s", async variant => {
     const f = fixture();
     const query = variant === "late constraint"
       ? "设备维护计划检查周期负责人审批归档保存期限"
       : "设备保修的自动续约周期是多少？";
-    f.page.title = "设备保修";
+    f.page.title = variant === "slug only" ? "办公通讯目录" : "设备保修";
     f.page.content = variant === "late constraint"
       ? "设备维护计划包含检查周期负责人审批归档保存。"
-      : "设备保修可自动提醒，检查周期为一个月。";
+      : variant === "slug only" ? "联系行政获取会议室编号。" : "设备保修可自动提醒，检查周期为一个月。";
     if (variant === "slug only") f.page.slug = "设备保修自动续约周期";
     const original = f.http.getMockImplementation()!;
     let searches = 0;
@@ -677,9 +755,11 @@ describe("WeKnora current-source Wiki evidence", () => {
       ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug, title: query }] })
       : original(url));
     const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
-    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true });
+    expect(result).toMatchObject({ status: variant === "slug only" ? "empty" : "complete", fallbackUsed: true });
+    expect(result.evidence).toHaveLength(variant === "slug only" ? 0 : 1);
+    expect(supportsWikiQuery([f.page.title, f.page.content], planWikiQuery(query))).toBe(false);
     expect(searches).toBe(2);
-    expect(f.manifests).toEqual([]);
+    expect(f.manifests).toHaveLength(variant === "slug only" ? 0 : 1);
   });
   it("retains a fallback page that actually contains the requested non-CRM attributes", async () => {
     const f = fixture();
@@ -701,44 +781,44 @@ describe("WeKnora current-source Wiki evidence", () => {
       query: "设备多步工具调用框架",
       title: "设备架构",
       content: "设备架构执行多步工具调用。",
-      accepted: true,
+      lexicalCoverage: true,
     },
     {
       name: "directional file transfer",
       query: "备份工具能否替用户把文件全自动搬过去？",
       title: "备份工具",
       content: "备份工具支持文件自动迁移。",
-      accepted: true,
+      lexicalCoverage: true,
     },
     {
       name: "unconditional outbound policy",
       query: "设备资料导出政策是否允许直接外发电子邮件？",
       title: "设备资料导出政策",
       content: "设备资料导出须等待人工明确决定后执行。本政策不授权外部消息。",
-      accepted: true,
+      lexicalCoverage: true,
     },
     {
       name: "conditional outbound exception",
       query: "设备资料导出政策是否允许直接外发电子邮件？",
       title: "设备资料导出政策",
       content: "设备资料导出须等待人工明确决定后执行。如果未经批准，本政策不授权外部消息。",
-      accepted: false,
+      lexicalCoverage: false,
     },
     {
       name: "positive parent channel without email support",
       query: "设备资料导出政策是否允许直接外发电子邮件？",
       title: "设备资料导出政策",
       content: "设备资料导出须等待人工明确决定后执行。本政策支持外部消息。",
-      accepted: false,
+      lexicalCoverage: false,
     },
     {
       name: "wrong numeric unit",
       query: "设备保修14天",
       title: "设备保修",
       content: "设备保修14次。",
-      accepted: false,
+      lexicalCoverage: false,
     },
-  ])("checks $name against the actual page before creating its receipt", async ({ query, title, content, accepted }) => {
+  ])("records the related page for $name and keeps lexical coverage separate", async ({ query, title, content, lexicalCoverage }) => {
     const f = fixture();
     f.page.title = title;
     f.page.content = content;
@@ -749,10 +829,11 @@ describe("WeKnora current-source Wiki evidence", () => {
       : original(url));
     const result = await searchCompanyWiki(f.pool, org, [sourceId], query, 3, undefined, f.http);
     expect(searches).toBe(2);
-    expect(result).toMatchObject({ status: accepted ? "complete" : "empty", fallbackUsed: true });
-    expect(result.evidence).toHaveLength(accepted ? 1 : 0);
-    expect(f.manifests).toHaveLength(accepted ? 1 : 0);
-    if (accepted) expect(f.manifests[0]).toMatchObject({ page_version: 3, content_hash: sha(content) });
+    expect(result).toMatchObject({ status: "complete", fallbackUsed: true });
+    expect(result.evidence).toHaveLength(1);
+    expect(f.manifests).toHaveLength(1);
+    expect(f.manifests[0]).toMatchObject({ page_version: 3, content_hash: sha(content) });
+    expect(supportsWikiQuery([title, content], planWikiQuery(query))).toBe(lexicalCoverage);
   });
   it("does not broaden a query whose support terms exceed the bounded plan", async () => {
     const f = fixture();
@@ -772,7 +853,7 @@ describe("WeKnora current-source Wiki evidence", () => {
     expect(f.http.mock.calls.filter(([url]) => String(url).includes("/search?"))).toHaveLength(1);
     expect(f.manifests).toEqual([]);
   });
-  it("limits the keyword retry to one per KB when selected CRM sources share that KB", async () => {
+  it("shares the keyword retry and ranked page reads when selected CRM sources use the same KB", async () => {
     const f = fixture();
     const original = f.query.getMockImplementation()!;
     f.query.mockImplementation(async (query, values) => {
@@ -782,10 +863,37 @@ describe("WeKnora current-source Wiki evidence", () => {
         return { rows: [f.source, { ...f.source, id: other }].filter(source => (args![1] as string[]).includes(source.id)) };
       return original(query, values);
     });
-    f.http.mockImplementation(async () => j({ pages: [] }));
+    let searches = 0;
+    f.http.mockImplementation(async url => String(url).includes("/search?")
+      ? j({ pages: ++searches === 1 ? [] : [{ slug: f.page.slug }] }) : j(f.page));
     const result = await searchCompanyWiki(f.pool, org, [sourceId, other], "客户记忆向量检索", 3, undefined, f.http);
-    expect(f.http).toHaveBeenCalledTimes(2);
-    expect(result).toMatchObject({ evidence: [], status: "empty", fallbackUsed: true, handledSourceIds: [sourceId, other] });
+    expect(searches).toBe(2);
+    expect(f.http).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({ evidence: [], status: "empty", emptyVerified: true, fallbackUsed: true, handledSourceIds: [sourceId, other] });
+  });
+  it("shares the expanded discovery window across authorized KBs", async () => {
+    const f = fixture();
+    vi.stubEnv("AI_INTEGRATION_BINDINGS", JSON.stringify([{ organization_id: org, provider: "weknora",
+      base_url: "https://wiki.test", api_key: "synthetic", knowledge_base_ids: ["kb-a", "kb-b"], visibility: "organization" }]));
+    const original = f.query.getMockImplementation()!;
+    const anotherSource = { ...f.source, id: other, source_metadata: { ...f.source.source_metadata, knowledge_base_id: "kb-b" } };
+    f.query.mockImplementation(async (query, values) => {
+      const sql = typeof query === "string" ? query : query.text;
+      const args = typeof query === "string" ? values : query.values;
+      if (sql.includes("select id,source_metadata"))
+        return { rows: [f.source, anotherSource].filter(source => (args![1] as string[]).includes(source.id)) };
+      return original(query, values);
+    });
+    f.http.mockImplementation(async () => j({ pages: [] }));
+    const result = await searchCompanyWiki(f.pool, org, [sourceId, other], "客户记忆向量检索", 5, undefined, f.http);
+    expect(result).toMatchObject({ status: "empty", emptyVerified: true, fallbackUsed: true });
+    expect(f.http.mock.calls.map(([url]) => {
+      const { pathname, searchParams } = new URL(String(url));
+      return [pathname, searchParams.get("limit")];
+    })).toEqual([
+      ["/api/v1/knowledgebase/kb-a/wiki/search", "5"], ["/api/v1/knowledgebase/kb-a/wiki/search", "15"],
+      ["/api/v1/knowledgebase/kb-b/wiki/search", "5"], ["/api/v1/knowledgebase/kb-b/wiki/search", "15"],
+    ]);
   });
   it("hides a previously captured receipt after page correction or deletion", async () => {
     const f = fixture();
