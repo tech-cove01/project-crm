@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { digest, optional, read, ROOT, seal, sha } from './crm024-fixtures.mjs';
 import { toolBody } from './crm024-scope-audit.mjs';
 import { MEMORY_ROOT } from './crm026-memory-environment-config.mjs';
+import { readMemorySlot } from './crm026-memory-run.mjs';
 import { GENERALIZATION_FILES } from './crm026-generalization-environment.mjs';
 
 const version = 'crm026-read-evidence-v2';
@@ -184,7 +185,7 @@ async function main([mode, phase, ...extra]) {
   const entries = [];
   for (const item of await scope(phase, freeze)) {
     const resultHash = await hashFile(item.path);
-    const result = await read(item.path, resultHash);
+    const result = phase === 'memory' ? await readMemorySlot(item.path, item.key, resultHash) : await read(item.path, resultHash);
     assert(result.fixtureHash === item.fixtureHash && result.key === item.key, 'crm026_judge_observation_unbound');
     const previous = original?.entries.find(row => row.key === item.key);
     const reviewId = previous?.reviewId ?? randomUUID();

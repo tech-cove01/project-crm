@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { digest, optional, read, ROOT, seal, sha } from './crm024-fixtures.mjs';
-import { executeSlot } from './crm026-memory-run.mjs';
+import { executeSlot, readMemorySlot, readSystemRecovery } from './crm026-memory-run.mjs';
 import { MEMORY_ROOT, PRODUCT_COMMIT } from './crm026-memory-environment-config.mjs';
 import { GENERALIZATION_ARM, GENERALIZATION_FILES, generalizationTransaction, generalizationTransport,
   loadGeneralizationEnvironment } from './crm026-generalization-environment.mjs';
@@ -25,7 +25,11 @@ async function bind(c, truthHash) {
   assert(c.preflight?.ready === true && c.preflight.noModel === true && expected.slots.length === 12 &&
     sha.test(expected.profilesHash) && sha.test(expected.preflightHash), 'crm026_generalization_not_preflighted');
   const prior = await optional(bindingPath);
-  if (prior) assert(digest(JSON.stringify(prior)) === digest(JSON.stringify(expected)), 'crm026_generalization_frozen_binding_changed');
+  if (prior) {
+    const recovery = await readSystemRecovery();
+    const frozen = recovery ? { ...prior, runnerHash: recovery.replacementGeneralizationRunnerHash } : prior;
+    assert(digest(JSON.stringify(frozen)) === digest(JSON.stringify(expected)), 'crm026_generalization_frozen_binding_changed');
+  }
   else await seal(bindingPath, expected, false);
   return expected;
 }
@@ -38,7 +42,7 @@ async function run(c, id) {
     binding.slots.includes(id), 'crm026_generalization_batch_not_frozen');
   // Read the memory ledger and the earlier G receipts before admitting any new task.
   for (const key of freeze.slots) {
-    const prior = await read(resolve(MEMORY_ROOT, 'runs', `${key}-result.json`));
+    const prior = await readMemorySlot(resolve(MEMORY_ROOT, 'runs', `${key}-result.json`), key);
     assert(prior.fixtureHash === freeze.fixtureHash && prior.verification.safe, 'crm026_memory_slot_unsettled');
   }
   await mkdir(runFolder, { recursive: true, mode: 0o700 });

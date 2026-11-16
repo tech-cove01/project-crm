@@ -22,6 +22,14 @@ const categories = new Set(['preference', 'confirmed_fact', 'communication_conte
 const scoped = (c, action) => memoryTransaction(c, true, action);
 const initialPreflight = resolve(MEMORY_ROOT, 'initial-preflight.json');
 const freezePath = resolve(MEMORY_ROOT, 'freeze.json');
+const recoveryPath = resolve(MEMORY_ROOT, 'system-message-recovery.json');
+const initialRun = Object.freeze({
+  key: 'A1.none',
+  freezeHash: 'fb8fc0af9d281573be55b4537984aaa67ccd75afe4e9ae22b4af43ae8d607034',
+  rawHash: 'fbda4bd1ac34ac6b47677a5093d3f223f6ef540c4b05f76f04fd80a08a6600c3',
+  intentHash: 'fb337ae79d97c5f10fa2b67b743a20a276a24e2bf04dd7c039e58ebb0c2510b2',
+  httpHash: 'd01648a46328fdbffdd1f444594f81976a676d26b27d3a09759fd5e3f15dae05',
+});
 
 function when(c, slot, check, type, index) {
   return { fixtureHash: c.fixtureHash, key: slot.key, type, index, scenarioHash: digest(JSON.stringify(check)) };
@@ -175,7 +183,7 @@ export async function executeSlot(c, slot, task, profile, {
       return captureRun(q, slot, root.id);
     });
     if (observed) {
-      const verification = verifyRun(observed, { ...slot, versionId: profile.versionId }, payload, intent.before, pages);
+      const verification = verifyRun(observed, { ...slot, versionId: profile.versionId, promptHash: profile.promptHash }, payload, intent.before, pages);
       const result = { fixtureHash: c.fixtureHash, key: slot.key, intentHash: digest(await readFile(intentPath)),
         receipt: launched, elapsedMs: Math.round(Date.now() - Date.parse(intent.at)), observed, verification };
       await seal(resultPath, result, false);
@@ -189,11 +197,14 @@ export async function executeSlot(c, slot, task, profile, {
 async function run(c, input, requested) {
   assert(c.profiles && slotOrder.includes(requested), 'crm026_frozen_slot_required');
   const freeze = await read(freezePath);
-  assert(digest(JSON.stringify(freeze)) === digest(JSON.stringify(await bindingsFor(c))), 'crm026_frozen_batch_drift');
+  const live = await bindingsFor(c);
+  const recovery = await readSystemRecovery();
+  const effective = recovery ? { ...freeze, scripts: recovery.replacementScripts } : freeze;
+  assert(digest(JSON.stringify(effective)) === digest(JSON.stringify(live)), 'crm026_frozen_batch_drift');
   await mkdir(resolve(MEMORY_ROOT, 'runs'), { recursive: true });
   const index = slotOrder.indexOf(requested);
   for (const prior of slotOrder.slice(0, index)) {
-    const result = await read(files(prior, 'result'));
+    const result = await readMemorySlot(files(prior, 'result'), prior);
     assert(result.fixtureHash === c.fixtureHash && result.verification.safe, 'crm026_previous_slot_requires_reconciliation');
   }
   const slot = c.fixture.slots[requested];
@@ -203,11 +214,88 @@ async function run(c, input, requested) {
   const events = [];
   for (const [i, event] of check.eventsBefore.entries()) events.push(await applyEvent(c, slot, check, event, i, all));
   await flushMem0(c, slot, events.flatMap(row => row.memory ? [row.memory.id] : []), slot.key);
-  const result = await executeSlot(c, slot, check.task, c.profiles.profiles[slot.arm]);
+  const result = requested === initialRun.key && recovery ? await readMemorySlot(files(requested, 'result'), requested) :
+    await executeSlot(c, slot, check.task, c.profiles.profiles[slot.arm]);
   assert(result.verification.safe, 'crm026_tool_or_scope_effect_unresolved');
   if (result.disposition === 'rejected_no_root') return { key: slot.key, disposition: result.disposition, http: result.receipt.httpStatus, input: 0, output: 0 };
   return { key: slot.key, runId: result.observed.root.id, terminal: result.observed.root.status, configuration: result.verification.configuration,
     fresh: result.verification.fresh, input: result.observed.usage.reported.input, output: result.observed.usage.reported.output };
+}
+
+export async function readSystemRecovery() {
+  const receipt = await optional(recoveryPath);
+  if (!receipt) return null;
+  assert(receipt.version === 'crm026-system-receipt-v1' && receipt.key === initialRun.key &&
+    receipt.originalFreezeHash === initialRun.freezeHash && receipt.originalResultHash === initialRun.rawHash &&
+    receipt.originalIntentHash === initialRun.intentHash && receipt.originalHttpHash === initialRun.httpHash &&
+    receipt.verification?.fresh === true && receipt.verification.safe === true && receipt.originalSafe === false,
+  'crm026_system_recovery_unbound');
+  const old = await read(freezePath, initialRun.freezeHash);
+  const replacement = receipt.replacementScripts;
+  assert(Object.keys(old.scripts).length === Object.keys(replacement).length &&
+    Object.entries(old.scripts).every(([name, hash]) => name === 'crm026-memory-probes.mjs' ?
+      replacement[name] === hash : sha.test(replacement[name])) &&
+    receipt.originalGeneralizationRunnerHash === old.generalization.runnerHash && sha.test(receipt.replacementGeneralizationRunnerHash),
+  'crm026_system_recovery_source_scope');
+  for (const [name, hash] of [...Object.entries(receipt.replacementScripts),
+    ['crm026-generalization-run.mjs', receipt.replacementGeneralizationRunnerHash]]) {
+    assert(digest(await readFile(resolve(import.meta.dirname, name))) === hash, 'crm026_system_recovery_source_drift');
+  }
+  return receipt;
+}
+
+export async function readMemorySlot(path, key, expectedHash) {
+  if (key !== initialRun.key) return read(path, expectedHash);
+  assert(!expectedHash || expectedHash === initialRun.rawHash, 'crm026_original_run_recovery_drift');
+  const raw = await read(path, initialRun.rawHash);
+  const recovery = await readSystemRecovery();
+  if (!recovery) return raw;
+  const frozen = await read(freezePath, initialRun.freezeHash);
+  const c = await loadMemoryEnvironment(frozen.fixtureHash, { profilesHash: frozen.profilesHash });
+  const slot = c.fixture.slots[initialRun.key];
+  const profile = c.profiles.profiles.none;
+  const intent = await read(files(initialRun.key, 'intent'), initialRun.intentHash);
+  const payload = { agentId: profile.agentId, task: raw.observed.root.task, mode: 'inspect', collaboration: 'disabled', scope: slot.crmScope };
+  const verification = verifyRun(raw.observed, { ...slot, versionId: profile.versionId, promptHash: profile.promptHash }, payload, intent.before);
+  assert(raw.observed.root.id === recovery.originalRunId && raw.verification.safe === false &&
+    intent.payloadHash === digest(JSON.stringify(payload)) && digest(JSON.stringify(verification)) === digest(JSON.stringify(recovery.verification)),
+    'crm026_original_run_recovery_drift');
+  return { ...raw, verification };
+}
+
+async function recoverSystemMessage(c, input) {
+  const frozen = await read(freezePath, initialRun.freezeHash);
+  assert(frozen.fixtureHash === c.fixtureHash && frozen.profilesHash === c.profilesHash, 'crm026_original_run_recovery_drift');
+  const current = await bindingsFor(c);
+  assert(digest(JSON.stringify({ ...current, scripts: frozen.scripts })) === digest(JSON.stringify(frozen)),
+    'crm026_original_run_recovery_drift');
+  const [raw, intent, http] = await Promise.all([read(files(initialRun.key, 'result'), initialRun.rawHash),
+    read(files(initialRun.key, 'intent'), initialRun.intentHash), read(files(initialRun.key, 'http'), initialRun.httpHash)]);
+  const slot = c.fixture.slots[initialRun.key];
+  const profile = c.profiles.profiles.none;
+  const payload = { agentId: profile.agentId, task: input.trajectories[0].checks[0].task, mode: 'inspect', collaboration: 'disabled', scope: slot.crmScope };
+  assert(raw.key === initialRun.key && raw.fixtureHash === c.fixtureHash && raw.intentHash === initialRun.intentHash &&
+    raw.verification.safe === false && raw.verification.fresh === false && intent.payloadHash === digest(JSON.stringify(payload)) &&
+    http.httpStatus === 201 && raw.observed.root.id === http.data?.run_id && digest(JSON.stringify(raw.receipt)) === digest(JSON.stringify(http)) &&
+    raw.observed.jobs.length === 1 && raw.observed.jobs[0].attempts === 1,
+  'crm026_original_run_recovery_drift');
+  const verification = verifyRun(raw.observed, { ...slot, versionId: profile.versionId, promptHash: profile.promptHash }, payload, intent.before);
+  const { fresh: _fresh, safe: _safe, systemPromptHash: _prompt, systemPolicyHash: _policy, ...newChecks } = verification;
+  const { fresh: _oldFresh, safe: _oldSafe, ...oldChecks } = raw.verification;
+  assert(verification.safe && verification.fresh && digest(JSON.stringify(oldChecks)) === digest(JSON.stringify(newChecks)),
+    'crm026_system_observer_recovery_invalid');
+  const evidence = { version: 'crm026-system-receipt-v1', key: initialRun.key, originalRunId: raw.observed.root.id,
+    originalSafe: false, originalFreezeHash: initialRun.freezeHash, originalResultHash: initialRun.rawHash,
+    originalIntentHash: initialRun.intentHash, originalHttpHash: initialRun.httpHash,
+    originalGeneralizationRunnerHash: frozen.generalization.runnerHash,
+    replacementGeneralizationRunnerHash: digest(await readFile(resolve(import.meta.dirname, 'crm026-generalization-run.mjs'))),
+    replacementScripts: current.scripts, verification };
+  const prior = await optional(recoveryPath);
+  if (prior) {
+    assert(digest(JSON.stringify(prior)) === digest(JSON.stringify(evidence)), 'crm026_system_recovery_changed');
+    return { sha256: digest(await readFile(recoveryPath)) };
+  }
+  return seal(recoveryPath, evidence, false);
 }
 
 async function preflight(c, input) {
@@ -267,11 +355,12 @@ async function bindingsFor(c) {
 }
 
 async function main([mode, fixtureHash, inputPath, key, ...rest]) {
-  assert(!rest.length && sha.test(fixtureHash ?? '') && ['preflight', 'freeze', 'run'].includes(mode), 'crm026_memory_run_arguments');
+  assert(!rest.length && sha.test(fixtureHash ?? '') && ['preflight', 'freeze', 'recover-system-message', 'run'].includes(mode), 'crm026_memory_run_arguments');
   const c = await loadMemoryEnvironment(fixtureHash);
   const input = validateMemoryInput(await read(resolve(inputPath), c.fixture.inputHash));
   const result = mode === 'preflight' ? await preflight(c, input) :
-    mode === 'freeze' ? await seal(freezePath, await bindingsFor(c), false) : await run(c, input, key);
+    mode === 'freeze' ? await seal(freezePath, await bindingsFor(c), false) :
+      mode === 'recover-system-message' ? await recoverSystemMessage(c, input) : await run(c, input, key);
   console.info(JSON.stringify(result));
 }
 

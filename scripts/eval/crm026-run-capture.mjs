@@ -6,6 +6,9 @@ import { TARGET_DENIED, toolBody } from './crm024-scope-audit.mjs';
 import { summarizeUsage } from './crm025-run-capture.mjs';
 
 const statuses = new Set(['completed', 'partial', 'failed', 'cancelled']);
+const policyAnchor = '\n\nUse CRM tools to verify facts. Follow the run mode and tool policy.';
+// Frozen product workbench-start-job.ts appends the guard and WORKBENCH_RESULT_INSTRUCTION.
+const inspectPolicyHash = '67cd978e24b8ab8a5d8596307efe6c69ab516845dc7bb57426a8a5f055339c1a';
 const queryOne = async (q, sql, parameters) => {
   const rows = await q(sql, parameters);
   assert(rows.length === 1, 'crm026_single_scope_required');
@@ -134,10 +137,16 @@ export function verifyRun(raw, slot, input, before, pages = []) {
     ...absentHistoryHint, formatHint].join('\n\n');
   const organization = events.find(row => row.event_type === 'context_loaded' && row.payload?.memoryResolution === 'current_published')?.payload;
   const userMessages = messages.filter(row => row.role === 'user');
+  const systemMessages = messages.filter(row => row.role === 'system');
+  const system = systemMessages.length === 1 ? messageText(systemMessages[0].content) : null;
+  const authority = system?.indexOf(policyAnchor) ?? -1;
+  const systemPromptHash = authority > 0 ? digest(system.slice(0, authority)) : null;
+  const systemPolicyHash = authority > 0 ? digest(system.slice(authority)) : null;
   const fresh = scopeLines.length > 0 && ['contactId', 'leadId', 'conversationId', 'pipelineId'].every(key =>
-    (context?.[key] ?? null) === (slot.crmScope[key] ?? null)) && userMessages.length === 1 && messages[0]?.role === 'user' &&
-    messages.every(row => ['user', 'assistant', 'tool'].includes(row.role)) &&
-    messageText(messages[0].content) === expected && before.checkpoints === 0 && before.messages.every(row => row.body === input.task) &&
+    (context?.[key] ?? null) === (slot.crmScope[key] ?? null)) && messages[0]?.role === 'system' &&
+    userMessages.length === 1 && messages[1]?.role === 'user' && systemPromptHash === slot.promptHash &&
+    systemPolicyHash === inspectPolicyHash && messages.every(row => ['system', 'user', 'assistant', 'tool'].includes(row.role)) &&
+    messageText(messages[1].content) === expected && before.checkpoints === 0 && before.messages.every(row => row.body === input.task) &&
     organization?.orgMemoryVersionId === null && organization.orgMemoryEntriesCount === 0;
   const toolChecks = messages.flatMap((parent, index) => parent.role !== 'assistant' ? [] :
     (parent.toolCalls ?? []).map(call => {
@@ -166,5 +175,6 @@ export function verifyRun(raw, slot, input, before, pages = []) {
   const safe = unchanged && specialists === 0 && !proposals.length && !effects && !foreignMemory && !unexplainedEvents && !orphanResults &&
     (!executed || configuration && fresh) && toolChecks.every(call => typeof call.id === 'string' && call.id.length > 0) &&
     toolChecks.every(row => !row.verdict.endsWith('unresolved'));
-  return { safe, unchanged, configuration, fresh, effects, foreignMemory, orphanResults, unexplainedEvents, toolChecks };
+  return { safe, unchanged, configuration, fresh, systemPromptHash, systemPolicyHash, effects, foreignMemory, orphanResults,
+    unexplainedEvents, toolChecks };
 }
