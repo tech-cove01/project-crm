@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { digest, optional, read, ROOT, seal, sha } from './crm024-fixtures.mjs';
-import { executeSlot, readMemorySlot, readResultWindowRecovery, readSystemRecovery, sealResultWindowRecovery } from './crm026-memory-run.mjs';
+import { executeSlot, readContactValidationRecovery, readMemorySlot, readResultWindowRecovery, readSystemRecovery,
+  sealContactValidationRecovery, sealResultWindowRecovery } from './crm026-memory-run.mjs';
 import { MEMORY_ROOT, PRODUCT_COMMIT } from './crm026-memory-environment-config.mjs';
 import { GENERALIZATION_ARM, GENERALIZATION_FILES, generalizationTransaction, generalizationTransport,
   loadGeneralizationEnvironment } from './crm026-generalization-environment.mjs';
@@ -21,6 +22,18 @@ const terminalIncident = {
   http: '4c1bbe12b79f4ba9f5496a1d8cdeb7b69f8f140da74ad9cfecb06f2dedfb66f4',
   previous: '3c170190e3567fe2042621dad6e6d4703bb970b34d89d53a3ff8c2beec00504d',
   freeze: 'fb8fc0af9d281573be55b4537984aaa67ccd75afe4e9ae22b4af43ae8d607034',
+  priorFile: 'system-message-recovery.json', version: 'crm026-result-window-receipt-v1',
+  readRecovery: readResultWindowRecovery, sealRecovery: sealResultWindowRecovery,
+};
+const contactIncident = {
+  key: 'G3A', root: '3adfb3d5-c4fd-4125-a102-3a259b9ba2c4',
+  raw: 'fa059bfeae8db855b22a4e162729f175818903684f9faa82fa2d194a8ee05834',
+  intent: '71327fc40b632d930c5c0ec6523f3a60b739852b6d64e55501e873a9d46a2e57',
+  http: '17a4f3cb6e9f98b0caee0d0a02d62836e0bfebb1737925eedae2bf104c603438',
+  previous: 'e28aa3a0de593831b6dabae0377b3ea631905ca8aa5c62bdb33a03979d8ea016',
+  freeze: terminalIncident.freeze, rejectedCall: 'call_1d16915436ae4bfdac1ffab5',
+  priorFile: 'result-window-recovery.json', version: 'crm026-contact-validation-receipt-v1',
+  readRecovery: readContactValidationRecovery, sealRecovery: sealContactValidationRecovery,
 };
 
 async function bind(c, truthHash) {
@@ -62,7 +75,8 @@ async function run(c, id) {
   const task = c.input.cases.find(row => row.id === id).task;
   const slot = c.fixture.slots[id];
   const profile = c.profiles.profiles[GENERALIZATION_ARM];
-  const result = id === terminalIncident.key && await readResultWindowRecovery()
+  const incident = [terminalIncident, contactIncident].find(item => item.key === id);
+  const result = incident && await incident.readRecovery()
     ? await readGeneralizationSlot(path(id, 'result'), id)
     : await executeSlot(c, slot, task, profile, { path, scopeTransaction, transport: generalizationTransport, pages: c.pages });
   assert(result.verification.safe, 'crm026_generalization_effect_unresolved');
@@ -71,65 +85,75 @@ async function run(c, id) {
     fresh: result.verification.fresh, input: result.observed.usage.reported.input, output: result.observed.usage.reported.output };
 }
 
-async function reconstruct(c, raw) {
-  const item = terminalIncident;
+async function reconstruct(c, raw, item) {
   const [intent, http] = await Promise.all([read(path(item.key, 'intent'), item.intent), read(path(item.key, 'http'), item.http)]);
   const slot = c.fixture.slots[item.key];
   const profile = c.profiles.profiles[GENERALIZATION_ARM];
   const payload = { agentId: profile.agentId, task: c.input.cases.find(row => row.id === item.key).task,
     mode: 'inspect', collaboration: 'disabled', scope: slot.crmScope };
   assert(raw.key === item.key && raw.fixtureHash === c.fixtureHash && raw.intentHash === item.intent &&
-    raw.verification.safe === false && raw.verification.fresh === false && intent.payloadHash === digest(JSON.stringify(payload)) &&
-    http.httpStatus === 201 && http.data?.run_id === item.root && raw.observed.root.id === item.root &&
+    raw.verification.safe === false && raw.verification.fresh === Boolean(item.rejectedCall) &&
+    intent.payloadHash === digest(JSON.stringify(payload)) && http.httpStatus === 201 && http.data?.run_id === raw.observed.root.id &&
+    (!item.root || raw.observed.root.id === item.root) &&
     digest(JSON.stringify(raw.receipt)) === digest(JSON.stringify(http)) && raw.observed.jobs.length === 1 &&
     raw.observed.jobs[0].attempts === 1 && raw.observed.calls.length === 2, 'crm026_result_window_original_mismatch');
   const verification = verifyRun(raw.observed, { ...slot, versionId: profile.versionId, promptHash: profile.promptHash }, payload, intent.before, c.pages);
   const comparable = ({ fresh: _fresh, safe: _safe, systemPromptHash: _prompt, systemPolicyHash: _policy, ...checks }) => checks;
+  const before = comparable(raw.verification);
+  if (item.rejectedCall) {
+    const oldCall = before.toolChecks.find(call => call.id === item.rejectedCall);
+    const audits = raw.observed.audit.filter(row => row.metadata?.tool_name === 'crm_get_contact');
+    assert(oldCall?.name === 'crm_get_contact' && oldCall.verdict === 'scope_unresolved' && oldCall.memory === null,
+      'crm026_contact_validation_original_call_invalid');
+    assert(audits.length === 1 && audits[0].metadata.success === true && audits[0].metadata.args?.contact_id === slot.contactId,
+      'crm026_contact_validation_handler_scope_unproved');
+    before.toolChecks = before.toolChecks.map(call => call === oldCall ? { ...call, verdict: 'denied' } : call);
+  }
   assert(verification.safe && verification.fresh &&
-    digest(JSON.stringify(comparable(verification))) === digest(JSON.stringify(comparable(raw.verification))),
+    digest(JSON.stringify(comparable(verification))) === digest(JSON.stringify(before)),
     'crm026_result_window_reconstruction_failed');
   return verification;
 }
 
 export async function readGeneralizationSlot(resultPath, key, expectedHash) {
-  const item = terminalIncident;
-  if (key !== item.key) return read(resultPath, expectedHash);
+  const item = [terminalIncident, contactIncident].find(candidate => candidate.key === key);
+  if (!item) return read(resultPath, expectedHash);
   assert(!expectedHash || expectedHash === item.raw, 'crm026_result_window_raw_hash_required');
   const original = await read(resultPath, item.raw);
-  const receipt = await readResultWindowRecovery();
+  const receipt = await item.readRecovery();
   if (!receipt) return original;
   await readSystemRecovery();
   const freeze = await read(resolve(MEMORY_ROOT, 'freeze.json'), item.freeze);
   const c = await loadGeneralizationEnvironment(freeze.generalization.fixtureHash, {
     profilesHash: freeze.generalization.profilesHash, preflightHash: freeze.generalization.preflightHash,
   });
-  const verification = await reconstruct(c, original);
-  assert(receipt.originalRunId === item.root && receipt.originalResultHash === item.raw && receipt.originalIntentHash === item.intent &&
+  const verification = await reconstruct(c, original, item);
+  assert(receipt.originalRunId === original.observed.root.id && receipt.originalResultHash === item.raw && receipt.originalIntentHash === item.intent &&
     receipt.originalHttpHash === item.http && digest(JSON.stringify(verification)) === digest(JSON.stringify(receipt.verification)),
     'crm026_result_window_receipt_changed');
   return { ...original, verification };
 }
 
-async function recoverResultWindow(c) {
-  const item = terminalIncident;
+async function recoverIncident(c, item) {
   const [freeze, previous, raw] = await Promise.all([read(resolve(MEMORY_ROOT, 'freeze.json'), item.freeze),
-    read(resolve(MEMORY_ROOT, 'system-message-recovery.json'), item.previous), read(path(item.key, 'result'), item.raw)]);
+    read(resolve(MEMORY_ROOT, item.priorFile), item.previous), read(path(item.key, 'result'), item.raw)]);
   assert(freeze.generalization.fixtureHash === c.fixtureHash && freeze.generalization.profilesHash === c.profilesHash &&
     freeze.generalization.preflightHash === c.preflightHash, 'crm026_result_window_environment_changed');
-  const verification = await reconstruct(c, raw);
+  const verification = await reconstruct(c, raw, item);
   const replacements = Object.fromEntries(await Promise.all(Object.keys(freeze.scripts).map(async name =>
     [name, digest(await readFile(resolve(import.meta.dirname, name)))])));
-  return sealResultWindowRecovery({ version: 'crm026-result-window-receipt-v1', key: item.key, originalFreezeHash: item.freeze,
-    originalRunId: item.root, originalResultHash: item.raw, originalIntentHash: item.intent, originalHttpHash: item.http,
+  return item.sealRecovery({ version: item.version, key: item.key, originalFreezeHash: item.freeze,
+    originalRunId: raw.observed.root.id, originalResultHash: item.raw, originalIntentHash: item.intent, originalHttpHash: item.http,
     previousRecoveryHash: item.previous, previousGeneralizationRunnerHash: previous.replacementGeneralizationRunnerHash,
     replacementGeneralizationRunnerHash: digest(await readFile(import.meta.filename)), replacementScripts: replacements, verification });
 }
 
 async function main([command, fixtureHash, detail, ...rest]) {
-  assert(!rest.length && ['bind', 'run', 'recover-result-window'].includes(command), 'crm026_generalization_runner_arguments');
+  assert(!rest.length && ['bind', 'run', 'recover-result-window', 'recover-contact-validation'].includes(command), 'crm026_generalization_runner_arguments');
   const c = await loadGeneralizationEnvironment(fixtureHash);
   console.info(JSON.stringify(command === 'bind' ? await bind(c, detail) :
-    command === 'recover-result-window' ? await recoverResultWindow(c) : await run(c, detail)));
+    command === 'recover-result-window' ? await recoverIncident(c, terminalIncident) :
+      command === 'recover-contact-validation' ? await recoverIncident(c, contactIncident) : await run(c, detail)));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) main(process.argv.slice(2)).catch(error => {

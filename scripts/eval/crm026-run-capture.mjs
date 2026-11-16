@@ -13,6 +13,10 @@ const inspectPolicyHash = '67cd978e24b8ab8a5d8596307efe6c69ab516845dc7bb57426a8a
 const recoveryPolicyHash = 'e6c170556a2a07556c780598050aa86ec02cbb299fda45a8c2d3efea297d611b';
 const recoveryReminderHash = '79b82045f8feb240dbbb37030667422adcce47419fa130248b0437622d6a0cff';
 const finalWindowHash = 'fed05a73066e10276a4ae660c08ee3e90ede77ff137fe9ba0578afbc62e91d00';
+const readIdentity = { crm_get_contact: 'contact_id', crm_get_lead: 'lead_id', crm_get_conversation: 'conversation_id',
+  crm_get_conversation_history: 'conversation_id' };
+const sdkUuidPattern = '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$';
+const sdkUuid = new RegExp(sdkUuidPattern, 'i');
 const queryOne = async (q, sql, parameters) => {
   const rows = await q(sql, parameters);
   assert(rows.length === 1, 'crm026_single_scope_required');
@@ -123,6 +127,18 @@ function messageText(value) {
   return value.map(item => item.text).join('\n');
 }
 
+function rejectedReadIdentity(call, message, events) {
+  const field = readIdentity[call.name];
+  const args = call.arguments;
+  if (!field || typeof args?.[field] !== 'string' || Object.keys(args).length !== 1 || sdkUuid.test(args[field]) || message.isError !== true ||
+      !same(message.details, {}) || !Array.isArray(message.content) || message.content.length !== 1) return false;
+  const text = [`Validation failed for tool "${call.name}":`, `  - ${field}: must match format "uuid"`,
+    `  - ${field}: must match pattern "${sdkUuidPattern}"`, '', 'Received arguments:', JSON.stringify(args, null, 2)].join('\n');
+  const matched = events.filter(event => event.payload?.toolCallId === call.id && event.payload?.tool === call.name);
+  return messageText(message.content) === text && matched.length === 2 &&
+    matched[0].event_type === 'tool_started' && matched[1].event_type === 'tool_completed' && matched[1].payload.status === 'error';
+}
+
 function resultWindow(messages) {
   return messages.every(row => row.role === 'assistant' ? (row.toolCalls ?? []).every(call => call.name === 'submit_workbench_result') :
     row.role === 'tool' && row.toolName === 'submit_workbench_result');
@@ -193,7 +209,8 @@ export function verifyRun(raw, slot, input, before, pages = []) {
       const position = messages.indexOf(message);
       const body = message ? toolBody(message) : null;
       const verdict = outcomes.length === 1 && position > index
-        ? checkTool(call.name, call.arguments, body, message, slot, before, pages) : 'effect_unresolved';
+        ? rejectedReadIdentity(call, message, events) ? 'denied' :
+          checkTool(call.name, call.arguments, body, message, slot, before, pages) : 'effect_unresolved';
       return { name: call.name, id: call.id, verdict, memory: verdict === 'success' ? memoryFor(call.name, body, slot) : null,
         visibleOnLaterTurn: position > index && messages.slice(position + 1).some(row => row.role === 'assistant') };
     }));

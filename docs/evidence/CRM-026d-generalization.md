@@ -14,3 +14,11 @@
 | `memory/result-window-recovery.json` | `e28aa3a0de593831b6dabae0377b3ea631905ca8aa5c62bdb33a03979d8ea016` |
 
 原件继续保留 `safe=false` 和原终态。复算只追加与两个事故原件及脚本版本绑定的技术证明，记忆阶段汇总哈希保持一致。本批没有重发 G2A，没有更改产品、样例、权限或评分规则。后续从 G2B 继续。
+
+## G3A 的参数拒绝对账
+
+G3A 的首次联系人参数不符合 UUID 格式，锁定版 Pi 在调用 MCP 处理器之前完成校验并返回错误。原始回执有唯一同 ID 的工具开始、错误结束和 SDK 拒绝文本，没有联系人数据。四条实际 MCP 审计中，唯一的联系人处理器调用来自后续合法参数，实际回读所选联系人。前后快照一致，越界返回、提案和业务效果均为 0。
+
+只在已知只读工具、畸形 UUID、完整匹配的 SDK 文本、同 ID 错误事件和当槽实际审计都成立时，对这类回执作拒绝分类。原错误尝试保留，原 HTTP 201、`completed`、唯一作业第 1 次领取、输入 10,745、输出 841、缓存读 32,768 token 均不变。没有补发 G3A。
+
+原结果 `generalization/runs/G3A-result.json` SHA-256 `fa059bfeae8db855b22a4e162729f175818903684f9faa82fa2d194a8ee05834`。追加 `memory/contact-validation-recovery.json` SHA-256 `f8d7afd7668b0b0cd6fa51cfc5be12787903c74575443a96877acd6221efa924`，绑定原意图、HTTP 和此前两次技术证明。三次追加投影均已经从原件重算。

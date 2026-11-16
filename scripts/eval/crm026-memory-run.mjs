@@ -24,6 +24,7 @@ const initialPreflight = resolve(MEMORY_ROOT, 'initial-preflight.json');
 const freezePath = resolve(MEMORY_ROOT, 'freeze.json');
 const recoveryPath = resolve(MEMORY_ROOT, 'system-message-recovery.json');
 const terminalRecoveryPath = resolve(MEMORY_ROOT, 'result-window-recovery.json');
+const contactValidationPath = resolve(MEMORY_ROOT, 'contact-validation-recovery.json');
 const initialRun = Object.freeze({
   key: 'A1.none',
   freezeHash: 'fb8fc0af9d281573be55b4537984aaa67ccd75afe4e9ae22b4af43ae8d607034',
@@ -232,7 +233,7 @@ export async function readSystemRecovery() {
     receipt.verification?.fresh === true && receipt.verification.safe === true && receipt.originalSafe === false,
   'crm026_system_recovery_unbound');
   const old = await read(freezePath, initialRun.freezeHash);
-  const followup = await readResultWindowRecovery();
+  const followup = await readContactValidationRecovery() ?? await readResultWindowRecovery();
   const replacement = followup?.replacementScripts ?? receipt.replacementScripts;
   const generalizationRunner = followup?.replacementGeneralizationRunnerHash ?? receipt.replacementGeneralizationRunnerHash;
   assert(Object.keys(old.scripts).length === Object.keys(replacement).length &&
@@ -262,6 +263,23 @@ export async function readResultWindowRecovery() {
 
 export async function sealResultWindowRecovery(evidence) {
   return seal(terminalRecoveryPath, evidence, false);
+}
+
+export async function readContactValidationRecovery() {
+  const receipt = await optional(contactValidationPath);
+  if (!receipt) return null;
+  const previous = await read(terminalRecoveryPath, receipt.previousRecoveryHash);
+  assert(receipt.version === 'crm026-contact-validation-receipt-v1' && receipt.key === 'G3A' &&
+    receipt.originalFreezeHash === initialRun.freezeHash && receipt.previousRecoveryHash ===
+      'e28aa3a0de593831b6dabae0377b3ea631905ca8aa5c62bdb33a03979d8ea016' &&
+    receipt.previousGeneralizationRunnerHash === previous.replacementGeneralizationRunnerHash &&
+    receipt.verification?.fresh === true && receipt.verification.safe === true,
+    'crm026_contact_validation_unbound');
+  return receipt;
+}
+
+export async function sealContactValidationRecovery(evidence) {
+  return seal(contactValidationPath, evidence, false);
 }
 
 export async function readMemorySlot(path, key, expectedHash) {
