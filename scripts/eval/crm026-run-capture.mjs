@@ -9,6 +9,10 @@ const statuses = new Set(['completed', 'partial', 'failed', 'cancelled']);
 const policyAnchor = '\n\nUse CRM tools to verify facts. Follow the run mode and tool policy.';
 // Frozen product workbench-start-job.ts appends the guard and WORKBENCH_RESULT_INSTRUCTION.
 const inspectPolicyHash = '67cd978e24b8ab8a5d8596307efe6c69ab516845dc7bb57426a8a5f055339c1a';
+// Frozen workbench-result-recovery.ts repeats the result contract and closes the CRM tools.
+const recoveryPolicyHash = 'e6c170556a2a07556c780598050aa86ec02cbb299fda45a8c2d3efea297d611b';
+const recoveryReminderHash = '79b82045f8feb240dbbb37030667422adcce47419fa130248b0437622d6a0cff';
+const finalWindowHash = 'fed05a73066e10276a4ae660c08ee3e90ede77ff137fe9ba0578afbc62e91d00';
 const queryOne = async (q, sql, parameters) => {
   const rows = await q(sql, parameters);
   assert(rows.length === 1, 'crm026_single_scope_required');
@@ -119,6 +123,47 @@ function messageText(value) {
   return value.map(item => item.text).join('\n');
 }
 
+function resultWindow(messages) {
+  return messages.every(row => row.role === 'assistant' ? (row.toolCalls ?? []).every(call => call.name === 'submit_workbench_result') :
+    row.role === 'tool' && row.toolName === 'submit_workbench_result');
+}
+
+function originalWindow(messages) {
+  const reminder = messages.findIndex(row => row.role === 'user');
+  if (reminder < 0) return messages.every(row => ['assistant', 'tool'].includes(row.role));
+  return messages.slice(0, reminder).every(row => ['assistant', 'tool'].includes(row.role)) &&
+    messageHash(messages[reminder]) === finalWindowHash && resultWindow(messages.slice(reminder + 1));
+}
+
+function messageHash(message) {
+  const value = messageText(message?.content);
+  return value === null ? null : digest(value);
+}
+
+function promptEnvelope(messages, events, expected, promptHash) {
+  const system = messages[0]?.role === 'system' ? messageText(messages[0].content) : null;
+  const authority = system?.indexOf(policyAnchor) ?? -1;
+  const systemPromptHash = authority > 0 ? digest(system.slice(0, authority)) : null;
+  const systemPolicyHash = authority > 0 ? digest(system.slice(authority)) : null;
+  if (systemPromptHash !== promptHash || messages[1]?.role !== 'user' || messageText(messages[1].content) !== expected)
+    return { valid: false, systemPromptHash, systemPolicyHash };
+  const tail = messages.slice(2);
+  if (systemPolicyHash === inspectPolicyHash)
+    return { valid: originalWindow(tail), systemPromptHash, systemPolicyHash };
+  const boundary = tail.findIndex(row => row.role === 'system');
+  const recovery = events.filter(row => row.event_type === 'model_decision' &&
+    ['submitted', 'missing'].includes(row.payload?.resultRecovery));
+  const submitted = tail.slice(boundary + 3);
+  const accepted = submitted.some(row => row.role === 'tool' && toolBody(row)?.accepted === true);
+  const valid = systemPolicyHash === recoveryPolicyHash && boundary > 0 && recovery.length === 1 &&
+    originalWindow(tail.slice(0, boundary)) && messageText(tail[boundary].content) === '' &&
+    tail[boundary + 1]?.role === 'user' && messageHash(tail[boundary + 1]) === recoveryReminderHash &&
+    tail[boundary + 2]?.role === 'user' && messageHash(tail[boundary + 2]) === finalWindowHash &&
+    submitted.filter(row => row.role === 'assistant').length <= 2 && resultWindow(submitted) &&
+    (recovery[0]?.payload.resultRecovery !== 'submitted' || accepted);
+  return { valid, systemPromptHash, systemPolicyHash };
+}
+
 export function verifyRun(raw, slot, input, before, pages = []) {
   const { root, jobs, specialists, proposals, calls, events, messages, state } = raw;
   const configuration = root.actor_user_id === slot.actorUserId && root.agent_id === input.agentId &&
@@ -136,17 +181,10 @@ export function verifyRun(raw, slot, input, before, pages = []) {
   const expected = [input.task, `已校验的当前 CRM 目标范围（由工作台选择；请先用只读工具读取这些精确对象，不要猜选其他记录）：\n${scopeLines.join('\n')}`,
     ...absentHistoryHint, formatHint].join('\n\n');
   const organization = events.find(row => row.event_type === 'context_loaded' && row.payload?.memoryResolution === 'current_published')?.payload;
-  const userMessages = messages.filter(row => row.role === 'user');
-  const systemMessages = messages.filter(row => row.role === 'system');
-  const system = systemMessages.length === 1 ? messageText(systemMessages[0].content) : null;
-  const authority = system?.indexOf(policyAnchor) ?? -1;
-  const systemPromptHash = authority > 0 ? digest(system.slice(0, authority)) : null;
-  const systemPolicyHash = authority > 0 ? digest(system.slice(authority)) : null;
+  const { valid: promptValid, systemPromptHash, systemPolicyHash } = promptEnvelope(messages, events, expected, slot.promptHash);
   const fresh = scopeLines.length > 0 && ['contactId', 'leadId', 'conversationId', 'pipelineId'].every(key =>
-    (context?.[key] ?? null) === (slot.crmScope[key] ?? null)) && messages[0]?.role === 'system' &&
-    userMessages.length === 1 && messages[1]?.role === 'user' && systemPromptHash === slot.promptHash &&
-    systemPolicyHash === inspectPolicyHash && messages.every(row => ['system', 'user', 'assistant', 'tool'].includes(row.role)) &&
-    messageText(messages[1].content) === expected && before.checkpoints === 0 && before.messages.every(row => row.body === input.task) &&
+    (context?.[key] ?? null) === (slot.crmScope[key] ?? null)) && promptValid &&
+    before.checkpoints === 0 && before.messages.every(row => row.body === input.task) &&
     organization?.orgMemoryVersionId === null && organization.orgMemoryEntriesCount === 0;
   const toolChecks = messages.flatMap((parent, index) => parent.role !== 'assistant' ? [] :
     (parent.toolCalls ?? []).map(call => {

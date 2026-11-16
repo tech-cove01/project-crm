@@ -23,6 +23,7 @@ const scoped = (c, action) => memoryTransaction(c, true, action);
 const initialPreflight = resolve(MEMORY_ROOT, 'initial-preflight.json');
 const freezePath = resolve(MEMORY_ROOT, 'freeze.json');
 const recoveryPath = resolve(MEMORY_ROOT, 'system-message-recovery.json');
+const terminalRecoveryPath = resolve(MEMORY_ROOT, 'result-window-recovery.json');
 const initialRun = Object.freeze({
   key: 'A1.none',
   freezeHash: 'fb8fc0af9d281573be55b4537984aaa67ccd75afe4e9ae22b4af43ae8d607034',
@@ -231,17 +232,36 @@ export async function readSystemRecovery() {
     receipt.verification?.fresh === true && receipt.verification.safe === true && receipt.originalSafe === false,
   'crm026_system_recovery_unbound');
   const old = await read(freezePath, initialRun.freezeHash);
-  const replacement = receipt.replacementScripts;
+  const followup = await readResultWindowRecovery();
+  const replacement = followup?.replacementScripts ?? receipt.replacementScripts;
+  const generalizationRunner = followup?.replacementGeneralizationRunnerHash ?? receipt.replacementGeneralizationRunnerHash;
   assert(Object.keys(old.scripts).length === Object.keys(replacement).length &&
     Object.entries(old.scripts).every(([name, hash]) => name === 'crm026-memory-probes.mjs' ?
       replacement[name] === hash : sha.test(replacement[name])) &&
-    receipt.originalGeneralizationRunnerHash === old.generalization.runnerHash && sha.test(receipt.replacementGeneralizationRunnerHash),
+    receipt.originalGeneralizationRunnerHash === old.generalization.runnerHash && sha.test(generalizationRunner),
   'crm026_system_recovery_source_scope');
-  for (const [name, hash] of [...Object.entries(receipt.replacementScripts),
-    ['crm026-generalization-run.mjs', receipt.replacementGeneralizationRunnerHash]]) {
+  for (const [name, hash] of [...Object.entries(replacement),
+    ['crm026-generalization-run.mjs', generalizationRunner]]) {
     assert(digest(await readFile(resolve(import.meta.dirname, name))) === hash, 'crm026_system_recovery_source_drift');
   }
+  return { ...receipt, replacementScripts: replacement, replacementGeneralizationRunnerHash: generalizationRunner };
+}
+
+export async function readResultWindowRecovery() {
+  const receipt = await optional(terminalRecoveryPath);
+  if (!receipt) return null;
+  const original = await read(recoveryPath, receipt.previousRecoveryHash);
+  assert(receipt.version === 'crm026-result-window-receipt-v1' && receipt.key === 'G2A' &&
+    receipt.originalFreezeHash === initialRun.freezeHash && receipt.previousRecoveryHash ===
+      '3c170190e3567fe2042621dad6e6d4703bb970b34d89d53a3ff8c2beec00504d' &&
+    receipt.previousGeneralizationRunnerHash === original.replacementGeneralizationRunnerHash &&
+    receipt.verification?.fresh === true && receipt.verification.safe === true,
+    'crm026_result_window_unbound');
   return receipt;
+}
+
+export async function sealResultWindowRecovery(evidence) {
+  return seal(terminalRecoveryPath, evidence, false);
 }
 
 export async function readMemorySlot(path, key, expectedHash) {

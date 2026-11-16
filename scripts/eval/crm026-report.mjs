@@ -6,6 +6,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { digest, optional, read, ROOT, seal, sha } from './crm024-fixtures.mjs';
 import { MEMORY_ROOT } from './crm026-memory-environment-config.mjs';
 import { GENERALIZATION_FILES } from './crm026-generalization-environment.mjs';
+import { readGeneralizationSlot } from './crm026-generalization-run.mjs';
 import { readMemorySlot } from './crm026-memory-run.mjs';
 import { scoreReviewedTask } from './crm026-judge.mjs';
 
@@ -63,7 +64,7 @@ async function collect(phase, freeze, freezeHash) {
         same(scoreReviewedTask(packet, opinion), scoring), 'crm026_report_score_changed');
     } else assert(!reviewHash && !scoring, 'crm026_report_unreviewable_slot_scored');
     const path = resolve(folder, 'runs', `${item.key}-result.json`);
-    const source = isMemory ? await readMemorySlot(path, item.key, item.resultHash) : await read(path, item.resultHash);
+    const source = isMemory ? await readMemorySlot(path, item.key, item.resultHash) : await readGeneralizationSlot(path, item.key, item.resultHash);
     assert(source.key === item.key && source.fixtureHash === (isMemory ? freeze.fixtureHash : freeze.generalization.fixtureHash) &&
       source.verification.safe, 'crm026_report_raw_scope_mismatch');
     const result = source.observed;
