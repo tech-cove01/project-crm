@@ -30,6 +30,11 @@
 | `memory/initial-preflight.json` | `ccb05824142f36ba4d0dd92e7f1495ce39ab25be61bd2c4974c30dd42a210b2b` |
 | `memory/adapter-preflight.json` | `ee63c39603277765778b0cb0e3c601ffcfe13f91bea3120db5152506c90e8dce` |
 | `generalization/preflight.json` | `b38e564be8602ae3b6fee3c74fadd6e07709bd23cb0a012961808aecf9151018` |
-| `memory/freeze.json` | `087e4da508855e4625db19d32fb8a29e26e94ebb73748ea6b6b94dd829eeb37f` |
+| `memory/worker-warmup-readback.json` | `afbbff17c50c5c67e61351b00506ba9a9c167a4d420ca80901a46f002e7b43a3` |
+| `memory/freeze.json` | `fb8fc0af9d281573be55b4537984aaa67ccd75afe4e9ae22b4af43ae8d607034` |
 
-冻结绑定两边夹具和身份、输入、原生配置、受测工具、原始观察、评分及 30 个槽次序。独立审查后在正式开跑前收紧实际提示词与孤立工具回执检查，旧封签留在 `memory/freeze-before-prompt-guard.json`，两次封签都没有生成请求。正式根 0/30、专家 0。接续记忆 18 根、泛化 12 根，输入加输出累计上限 1,200,000 token。实际失败照录，状态未知先对账同一原请求。
+冻结绑定两边夹具和身份、输入、原生配置、受测工具、原始观察、评分及 30 个槽次序。正式开跑前补充提示词边界、孤立工具回执和同家族评分继承检查。正向事实需引用后续模型回合实际能读到的来源，冻结的缺证条目可引用实际 Wiki 检索回执，纯跟进建议按对应条目评分。全部 12 题的原冻结评分条目已解析，两个定向测试通过。旧封签留在 `memory/freeze-before-*.json`。
+
+启用专用 Worker 后，27 条种子入站事件各结算一次。没有活跃会话 Agent，回复处理跳过；情感分类的默认模型在本地白名单校验处被拒绝。数据库仍有 27 条未消费的路由事件，工作台根、作业、模型计量、提案和外发均为 0。该检查使用 SQL 回执与模型调用前的拒绝代码路径。
+
+接续记忆 18 根、泛化 12 根，专家 0，输入加输出累计上限 1,200,000 token。实际失败照录，状态未知先对账同一原请求。

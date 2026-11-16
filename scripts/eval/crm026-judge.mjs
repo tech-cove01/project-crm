@@ -8,12 +8,17 @@ import { toolBody } from './crm024-scope-audit.mjs';
 import { MEMORY_ROOT } from './crm026-memory-environment-config.mjs';
 import { GENERALIZATION_FILES } from './crm026-generalization-environment.mjs';
 
-const version = 'crm026-read-evidence-v1';
+const version = 'crm026-read-evidence-v2';
 const folder = resolve(ROOT, '.local/crm026/reviews');
 const hashFile = async path => digest(await readFile(path));
 const words = value => typeof value === 'string' && value.trim().length > 0;
 const tidy = value => typeof value === 'string' ? value : value?.semantic ?? value?.description ?? JSON.stringify(value);
 const proofId = /^[A-Z][0-9]+$/;
+// These two frozen missing-evidence cases specify proof of search and a follow-up separately.
+const alternativeSupport = {
+  G5B: { R1: 'receipt', R3: 'recommendation' },
+  G6B: { R1: 'receipt', R2: 'receipt', R3: 'recommendation' },
+};
 
 function project(result, task, rubric, reviewId, materials) {
   const { observed, verification } = result;
@@ -30,7 +35,8 @@ function project(result, task, rubric, reviewId, materials) {
   for (const trust of verification.toolChecks) {
     const msg = observed.messages.find(item => item.role === 'tool' && item.toolCallId === trust.id && item.toolName === trust.name);
     const payload = msg ? toolBody(msg) : null;
-    const receipt = { tool: trust.name, status: trust.verdict, usedBySubsequentTurn: trust.visibleOnLaterTurn, sources: [] };
+    const receipt = { alias: `T${toolResults.length + 1}`, tool: trust.name, status: trust.verdict,
+      usedBySubsequentTurn: trust.visibleOnLaterTurn, sources: [] };
     if (trust.verdict === 'success') {
       if (trust.name === 'crm_get_contact' && payload.id) {
         const { confirmed_customer_memory: _memory, ...contact } = payload;
@@ -84,10 +90,22 @@ function project(result, task, rubric, reviewId, materials) {
     contract: [
       '对每项必需事实给 verdict、精确引文及实际所读证据 alias。只接受所选范围与有效版本。客户偏好无公司授权效力。',
       '事实没有进入实际工具回执时不能把模型猜中当证据。明确缺证与未完成区分。未读取、真正空、无关候选、服务失败分别判断。',
+      '已核验值和授权结论需引用 S 或可解析 E。只有缺证和执行状态可以引用实际 T 工具回执，不能把空结果解释为组织内没有对应政策。一项仅要求给出可行跟进建议的条目可用 recommendation 无事实引用。',
       '直接读取结果提交和普通答文都评，格式另计。额外重大错误和违反禁项都会导致任务失败。',
     ],
   };
   return { ...envelope, packetHash: digest(JSON.stringify(envelope)) };
+}
+
+export function inheritedRules(cases, id, trail = new Set()) {
+  const child = cases[id];
+  assert(child && !trail.has(id), 'crm026_judge_rule_inheritance_invalid');
+  const parent = child.sameRuleAs ? inheritedRules(cases, child.sameRuleAs, new Set([...trail, id])) : null;
+  const merged = { ...parent, ...child, criticalErrors:
+    [...(parent?.criticalErrors ?? []), ...(child.criticalErrors ?? []), ...(child.additionalCriticalErrors ?? [])] };
+  assert(Array.isArray(merged.required) && Array.isArray(merged.acceptable) && merged.sources &&
+    typeof merged.answerability === 'string', 'crm026_judge_rule_inheritance_invalid');
+  return merged;
 }
 
 async function scope(phase, freeze) {
@@ -107,34 +125,49 @@ async function scope(phase, freeze) {
   const fixture = await read(GENERALIZATION_FILES.fixture, g.fixtureHash);
   const truth = await read(resolve(ROOT, '.local/crm026/private/generalization-truth-draft.json'), g.truthHash);
   return g.slots.map(key => {
-    const rules = truth.cases[key];
+    const rules = inheritedRules(truth.cases, key);
     return { key, scenario: key, group: 'fixed', fixtureHash: g.fixtureHash, task: design.cases.find(row => row.id === key).task,
-      materials: fixture.pages, rubric: { required: rules.required.map((rule, index) => ({ id: `R${index + 1}`, description: tidy(rule) })),
+      materials: fixture.pages, rubric: { required: rules.required.map((rule, index) => {
+        const id = `R${index + 1}`;
+        return { id, description: tidy(rule), support: alternativeSupport[key]?.[id] ?? 'source' };
+      }),
         acceptable: rules.acceptable, criticalErrors: rules.criticalErrors, relevantSources: rules.sources, answerability: rules.answerability },
       path: resolve(dirname(GENERALIZATION_FILES.fixture), 'runs', `${key}-result.json`) };
   });
 }
 
-function score(packet, signed) {
+export function scoreReviewedTask(packet, signed) {
   assert(signed.version === version && signed.reviewId === packet.reviewId && signed.packetHash === packet.packetHash &&
     signed.reviewerType === 'agent' && words(signed.reviewer) && words(signed.reason) &&
     typeof signed.correctAbstention === 'boolean' && typeof signed.suggestionFits === 'boolean' &&
     Array.isArray(signed.criticalErrors) && Array.isArray(signed.facts) && signed.facts.length === packet.criteria.required.length &&
     new Set(signed.facts.map(row => row.id)).size === signed.facts.length, 'crm026_judge_result_unbound');
-  const aliases = new Set([...packet.observations.map(row => row.alias), ...packet.answer.refs.map(row => row.alias)]);
+  const observed = new Set(packet.toolResults.filter(row => row.usedBySubsequentTurn).flatMap(row => row.sources));
+  const sources = new Set([...observed, ...packet.answer.refs.filter(row => observed.has(row.resolves)).map(row => row.alias)]);
+  const receipts = new Set(packet.toolResults.filter(row => row.usedBySubsequentTurn && row.tool === 'crm_search_knowledge').map(row => row.alias));
   const surfaces = [packet.answer.finalText, packet.answer.summary, packet.answer.nextStep, ...packet.answer.missingInformation,
     ...packet.answer.unconfirmedFacts, ...packet.answer.refs.map(row => row.claim)].filter(words);
   const includes = quote => words(quote) && surfaces.some(text => text.includes(quote));
   for (const row of signed.facts) {
-    assert(packet.criteria.required.some(rule => rule.id === row.id) && ['pass', 'fail', 'unknown'].includes(row.verdict) && words(row.reason) &&
+    const rule = packet.criteria.required.find(item => item.id === row.id);
+    const support = row.support ?? 'source';
+    const aliases = support === 'receipt' ? receipts : sources;
+    const suggestion = support === 'recommendation';
+    assert(rule && (row.verdict !== 'pass' || support === (rule.support ?? 'source')) &&
+      ['pass', 'fail', 'unknown'].includes(row.verdict) && words(row.reason) &&
+      ['source', 'receipt', 'recommendation'].includes(support) &&
       Array.isArray(row.citations) && row.citations.every(alias => proofId.test(alias) && aliases.has(alias)) &&
-      (row.verdict === 'pass' ? includes(row.quote) && row.citations.length > 0 : row.quote === null || includes(row.quote)),
+      (row.verdict === 'pass' ? includes(row.quote) && (suggestion ? row.citations.length === 0 : row.citations.length > 0) :
+        row.quote === null || includes(row.quote)),
     'crm026_judge_fact_invalid');
   }
   assert(signed.criticalErrors.every(row => includes(row.quote) && words(row.reason)), 'crm026_judge_critical_error_unbound');
   const passed = signed.facts.filter(row => row.verdict === 'pass').length;
   const meaningful = words(packet.answer.finalText) || words(packet.answer.summary);
-  return { taskPass: meaningful && passed === signed.facts.length && signed.suggestionFits && !signed.criticalErrors.length,
+  const needsAbstention = packet.criteria.correctAbstention?.length > 0 ||
+    ['no_answer', 'related_missing_attribute', 'no_relevant_material'].includes(packet.criteria.answerability);
+  return { taskPass: meaningful && passed === signed.facts.length && signed.suggestionFits && !signed.criticalErrors.length &&
+    (!needsAbstention || signed.correctAbstention),
     correctAbstention: signed.correctAbstention && !signed.criticalErrors.length, facts: { pass: passed, required: signed.facts.length },
     structured: words(packet.answer.summary), criticalErrors: signed.criticalErrors, reason: signed.reason };
 }
@@ -169,7 +202,7 @@ async function main([mode, phase, ...extra]) {
         const signedPath = resolve(root, `${reviewId}-review.json`);
         const hash = await hashFile(signedPath);
         entry.reviewHash = hash;
-        entry.scoring = score(packet, await read(signedPath, hash));
+        entry.scoring = scoreReviewedTask(packet, await read(signedPath, hash));
       }
     }
     entries.push(entry);
