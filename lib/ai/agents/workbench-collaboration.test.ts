@@ -283,6 +283,41 @@ describe("workbench specialist result boundary", () => {
     expect(result.results[0]).toMatchObject({ status: "complete", evidence: [authorizedPolicy] });
   });
 
+  it("keeps two requested Wiki documents as separate searches through the Pi tools", async () => {
+    const { input } = policyFixture([]);
+    input.root.task = "请分别核对《标准方案》和《服务限制》，再给销售建议。";
+    const read = vi.fn(async (args: Record<string, unknown>) => {
+      const response = knowledge(String(args.pergunta), "complete", [authorizedPolicy]);
+      return JSON.parse(response.content as string);
+    });
+    mocks.buildTools.mockResolvedValue({
+      tools: { crm_search_knowledge: { ...recordTool("pergunta"), execute: read } }, cleanup: mocks.cleanup,
+    });
+    useRealPi([
+      fauxAssistantMessage(fauxToolCall("crm_search_knowledge", { pergunta: "查标准方案的条款" }), { stopReason: "toolUse" }),
+      fauxAssistantMessage(fauxToolCall("crm_search_knowledge", { pergunta: "服务限制说明" }), { stopReason: "toolUse" }),
+      fauxAssistantMessage("已分别取得两项资料。"),
+    ]);
+
+    const outcome = await runWorkbenchCollaboration(input);
+
+    expect(read.mock.calls.map(([args]) => args.pergunta)).toEqual(["标准方案", "服务限制"]);
+    expect(outcome.results[0]).toMatchObject({ status: "complete", toolCalls: 2, missingMaterial: [] });
+  });
+
+  it("adds a verified absence to the positive policy summary without declaring a missing specialist", async () => {
+    const { input } = policyFixture([
+      knowledge("标准方案", "complete", [authorizedPolicy]),
+      knowledge("特别区域保障", "empty"),
+    ]);
+    input.root.task = "请核对《标准方案》，并查“特别区域保障”是否有授权依据；如果查不到，请说明待确认事项。";
+    const outcome = await runWorkbenchCollaboration(input);
+
+    expect(outcome.results[0]).toMatchObject({ status: "complete", evidence: [authorizedPolicy], missingMaterial: [] });
+    expect(outcome.results[0]?.summary).toContain("已报告政策工具当前结果");
+    expect(outcome.results[0]?.summary).toContain("正常检索无匹配：特别区域保障");
+  });
+
   it("does not force a query or permit empty results based on a prohibited or quoted phrase", async () => {
     const prohibited = policyFixture([knowledge("审批", "empty")], true);
     prohibited.input.root.task = "禁止使用企业知识搜索词“审批”。若正常检索没有匹配，按缺证项留空。";
