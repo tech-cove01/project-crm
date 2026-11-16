@@ -27,3 +27,7 @@
 `candidate/inspect-denial-assessment.json` SHA-256 `a36c45ac18fb0a2636ccdbefaa7eb701c1dadca97a4c3a48df0eaea9d85c3215`。原 `candidate/holdout/H11-auto-result.json` SHA-256 `8b6bc1a3a271efb80cfc8a553c573410f03b6c9183c3d2fa53552b307674eb57`。未重新提交、未改应用或评分规则。
 
 追加 `candidate/recovery-h11.json` SHA-256 `a3853e4ad2ae3a79ec9ea4bf616373a250976ff7ed3bc3a81053163562f001eb`。追加清单校验 H07 原恢复记录及 H11 的唯一守卫回执，原冻结 C 未改变。离线验证使用实际 H11 原字节确认写请求计数仍为 1、已阻断 1、未知效果 0、实际执行臂不符，并通过定向测试与独立审查。其他槽仍沿用原来的审计和安全停止。
+
+随后 H11 单 Agent 的原运行遇到同一标志错配，原 `partial`、原作业第 1 次执行和原 `safety_stop` 原字节均保存。独立核验再次得到业务快照不变、守卫原文一致、跟进排程及写入处理器投递均为 0。该臂的 `validArm=true`，随其余结果按同一评分规则盲评。原 `holdout/H11-disabled-result.json` SHA-256 `8a37e02f822b22c13b5eb49d2e8365bc6cbc8b187d91059bd3e9e81b188545ed`，同范围只读证明 `inspect-denial-disabled-assessment.json` SHA-256 `00fb3c7cf8f878212939a432afceb59938310c9aadb5718a6d3cca80eddccd32`。
+
+第三份追加回执 `candidate/recovery-h11-disabled.json` SHA-256 `921d1509619e53ae3a9778b9279be7f2ec56a4e3a545e89cae1e39f4fa8eb587`，前两份回执及候选冻结同时回读通过。两份技术投影各保留一次写请求、一次明确阻断及 `partial`，保留各自真实执行臂。后续遇到同样的 `crm_schedule_followup` 形式时，仅在真实 `inspect` 根、选定对象匹配、精确同 call ID 回执及同一 SQL 快照证实零排程和零处理器投递后纠正观察分类。原工具消息和事件仍留档。17 项 runner、12 项评分与封存定向测试及独立审查通过。

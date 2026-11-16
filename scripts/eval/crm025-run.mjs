@@ -8,17 +8,19 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { at, business, digest, idle, one, optional, read, seal, sha, uuid } from './crm024-fixtures.mjs';
 import { crm025Context, crm025Transaction, crm025Transport, makeScopeTask, RECOVERED_FIXTURE_FILE, RECOVERED_PREFLIGHT_FILE,
   RECOVERED_RUNTIME_FILE } from './crm025-materials-context.mjs';
-import { BASE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, MODEL, PHASES, SAFETY_FREEZE_FILE, SCOPE_REPLAY_FILE,
-  SPLITS, TERMINAL, advanceLedgerSlot, candidateRecoveryScriptHashes, candidateRecoveryScripts, isRecoveredCandidateIncident, payloadHash,
-  planSlots, product, read025BaselineSegments, read025OriginalFreeze, read025OriginalMeters, readFrozenDataset, reserveSlot, safetySlots,
-  verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
+import { BASE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_INSPECT_DENIAL_DISABLED, CANDIDATE_WORKER_LOSS, FOLLOWUP_TOOL,
+  MODEL, PHASES, SAFETY_FREEZE_FILE, SCOPE_REPLAY_FILE, SPLITS, TERMINAL, advanceLedgerSlot, candidateRecoveryScriptHashes,
+  candidateRecoveryScripts, isRecoveredCandidateIncident, payloadHash, planSlots, product, read025BaselineSegments, read025OriginalFreeze,
+  read025OriginalMeters, readFrozenDataset, reconcileInspectFollowupDenial, reserveSlot, safetySlots, verifyRecoveredMaterials, verifyScopeReplay,
+  verifySlotMap } from './crm025-run-core.mjs';
 import { findRoots, mountedTools, protectionFor, snapshot, summarizeUsage } from './crm025-run-capture.mjs';
 
 const freezePath = phase => phase === 'baseline' ? SAFETY_FREEZE_FILE : resolve(BASE, 'candidate', 'freeze.json');
 const pathFor = (slot, kind) => resolve(BASE, slot.phase, slot.split, `${slot.label}-${kind}.json`);
 const candidateRecoveryPath = resolve(BASE, 'candidate', 'recovery.json');
 const candidateH11RecoveryPath = resolve(BASE, 'candidate', 'recovery-h11.json');
-const recoveryFor = (recovery, key) => recovery?.h11?.value.key === key ? recovery.h11.value : recovery?.value;
+const candidateH11DisabledRecoveryPath = resolve(BASE, 'candidate', 'recovery-h11-disabled.json');
+const recoveryFor = (recovery, key) => [recovery?.value, recovery?.h11?.value, recovery?.h11Disabled?.value].find(row => row?.key === key);
 const wellKnownFiles = ['crm024-fixtures.mjs', 'crm024-scope-audit.mjs', 'crm022-sales.mjs'];
 const pathExists = path => access(path).then(() => true, error => {
   if (error.code === 'ENOENT') return false;
@@ -78,28 +80,28 @@ async function readWorkerRecovery(freezeHash) {
   return { hash, value };
 }
 
-async function candidateH11RecoveryRecord(freezeHash, previousRecoveryHash, proofHash) {
-  const incident = CANDIDATE_INSPECT_DENIAL;
+async function inspectDenialRecoveryRecord(incident, freezeHash, previousRecoveryHash, proofHash, archivedScriptHashes) {
   assert(freezeHash === incident.freezeHash && previousRecoveryHash === incident.previousRecoveryHash && proofHash === incident.proofHash,
     'crm025_candidate_h11_identity_required');
-  const [frozen, proof, scripts, guard] = await Promise.all([read(freezePath('candidate'), freezeHash),
-    read(resolve(BASE, 'candidate', 'inspect-denial-assessment.json'), proofHash), scriptHashes(),
+  const [frozen, proof, guard] = await Promise.all([read(freezePath('candidate'), freezeHash),
+    read(resolve(BASE, 'candidate', incident.proofFile), proofHash),
     readFile(resolve(import.meta.dirname, '../../lib/ai/agents/workbench-start-job.ts'))]);
   const { key, runId, jobId, toolName, callId, controlText, archive } = incident;
-  const slot = frozen.slots?.holdout?.[20];
+  const slot = frozen.slots?.holdout?.[incident.holdoutIndex];
   assert(frozen.phase === 'candidate' && frozen.segment === 'candidate' && frozen.productCommit === incident.productCommit &&
-    slot?.key === key && slot.phase === 'candidate' && slot.split === 'holdout' && slot.label === 'H11-auto' &&
+    slot?.key === key && slot.phase === 'candidate' && slot.split === 'holdout' && key === `candidate.${slot.caseId}.${slot.arm}` &&
+    slot.label === `${slot.caseId}-${slot.arm}` &&
     proof.version === 1 && proof.candidateFreezeHash === freezeHash && proof.previousRecoveryHash === previousRecoveryHash &&
     proof.productCommit === incident.productCommit && proof.key === key && proof.runId === runId && same(proof.archive, archive) &&
     proof.disposition === 'observed_inspect_block' && proof.noReplacement === true && proof.toolName === toolName &&
     proof.callId === callId && proof.controlText === controlText && proof.rawErrorFlag === false && proof.rawEventStatus === 'success' &&
-    proof.validArm === false && proof.guardBeforeDispatch === true && proof.guardSourceHash === digest(guard) &&
+    proof.validArm === incident.validArm && proof.guardBeforeDispatch === true && proof.guardSourceHash === digest(guard) &&
     same(proof.status?.root, { id: runId, status: 'partial', mode: 'inspect' }) &&
     same(proof.status?.job, { id: jobId, status: 'done', attempts: 1 }) && proof.status?.unchanged === true &&
     same(proof.status?.counts, { scheduled_followups: 0, mcp_dispatch: 0, proposals: 0, effects: 0, outbox: 0, active: 0 }),
   'crm025_candidate_h11_proof_unbound');
   const recovery = { version: 1, freezeHash, previousRecoveryHash, key, runId, jobId, ...archive, proofHash,
-    scriptHashes: candidateRecoveryScripts(frozen.scriptHashes, scripts), toolName, callId, controlText,
+    scriptHashes: archivedScriptHashes ?? candidateRecoveryScripts(frozen.scriptHashes, await scriptHashes()), toolName, callId, controlText,
     rawErrorFlag: proof.rawErrorFlag, rawEventStatus: proof.rawEventStatus, validArm: proof.validArm };
   const [intent, receipt, raw, meter] = await Promise.all([
     read(pathFor(slot, 'intent'), archive.intentHash), read(pathFor(slot, 'receipt'), archive.receiptHash),
@@ -112,15 +114,29 @@ async function candidateH11RecoveryRecord(freezeHash, previousRecoveryHash, proo
   return recovery;
 }
 
+async function readInspectRecovery(incident, raw, freezeHash, previousRecoveryHash, archiveHash) {
+  const hash = digest(raw);
+  assert(!archiveHash || hash === archiveHash, 'crm025_candidate_h11_recovery_changed');
+  const value = JSON.parse(raw);
+  const scripts = archiveHash ? value.scriptHashes : undefined;
+  const expected = await inspectDenialRecoveryRecord(incident, freezeHash, previousRecoveryHash, value?.proofHash, scripts);
+  assert(same(value, expected), 'crm025_candidate_h11_recovery_changed');
+  return { hash, value };
+}
+
 /** Reads sealed technical evidence. Original answers and the initial observation stay opaque. */
 export async function read025CandidateRecovery(freezeHash) {
-  const [worker, raw] = await Promise.all([readWorkerRecovery(freezeHash),
-    readFile(candidateH11RecoveryPath).catch(error => { if (error.code === 'ENOENT') return null; throw error; })]);
+  const readOptional = file => readFile(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  const [worker, raw, disabledRaw] = await Promise.all([readWorkerRecovery(freezeHash),
+    readOptional(candidateH11RecoveryPath), readOptional(candidateH11DisabledRecoveryPath)]);
+  assert(!disabledRaw || raw, 'crm025_candidate_h11_disabled_requires_auto_recovery');
   if (raw) {
     assert(worker, 'crm025_candidate_h11_requires_worker_recovery');
-    const value = JSON.parse(raw);
-    assert(same(value, await candidateH11RecoveryRecord(freezeHash, worker.hash, value?.proofHash)), 'crm025_candidate_h11_recovery_changed');
-    return { ...worker, h11: { hash: digest(raw), value } };
+    const h11 = await readInspectRecovery(CANDIDATE_INSPECT_DENIAL, raw, freezeHash, worker.hash,
+      disabledRaw ? CANDIDATE_INSPECT_DENIAL_DISABLED.previousRecoveryHash : undefined);
+    if (!disabledRaw) return { ...worker, h11 };
+    const h11Disabled = await readInspectRecovery(CANDIDATE_INSPECT_DENIAL_DISABLED, disabledRaw, freezeHash, h11.hash);
+    return { ...worker, h11, h11Disabled };
   }
   if (worker) {
     const frozen = await read(freezePath('candidate'), freezeHash);
@@ -147,7 +163,20 @@ async function recoverCandidateH11(freezeHash, previousRecoveryHash, proofHash) 
   const worker = await readWorkerRecovery(freezeHash);
   assert(worker?.hash === previousRecoveryHash, 'crm025_candidate_h11_requires_worker_recovery');
   verifyCandidateRecoveryProduct(await read(freezePath('candidate'), freezeHash));
-  return seal(candidateH11RecoveryPath, await candidateH11RecoveryRecord(freezeHash, previousRecoveryHash, proofHash));
+  const recovery = await inspectDenialRecoveryRecord(CANDIDATE_INSPECT_DENIAL, freezeHash, previousRecoveryHash, proofHash);
+  assert.equal(payloadHash(recovery), CANDIDATE_INSPECT_DENIAL_DISABLED.previousRecoveryHash, 'crm025_candidate_h11_recovery_changed');
+  return seal(candidateH11RecoveryPath, recovery);
+}
+
+async function recoverCandidateH11Disabled(freezeHash, previousRecoveryHash, proofHash) {
+  const worker = await readWorkerRecovery(freezeHash);
+  assert(worker, 'crm025_candidate_h11_requires_worker_recovery');
+  const h11 = await readInspectRecovery(CANDIDATE_INSPECT_DENIAL, await readFile(candidateH11RecoveryPath), freezeHash, worker.hash,
+    CANDIDATE_INSPECT_DENIAL_DISABLED.previousRecoveryHash);
+  assert(h11.hash === previousRecoveryHash, 'crm025_candidate_h11_disabled_requires_auto_recovery');
+  verifyCandidateRecoveryProduct(await read(freezePath('candidate'), freezeHash));
+  return seal(candidateH11DisabledRecoveryPath, await inspectDenialRecoveryRecord(CANDIDATE_INSPECT_DENIAL_DISABLED,
+    freezeHash, previousRecoveryHash, proofHash));
 }
 
 async function inputs(fixtureHash, preflightHash) {
@@ -352,9 +381,20 @@ async function observe(run, slot) {
       httpStatus: receipt?.httpStatus ?? null, reason: 'read_only_reconciliation_required', noReplacement: true }, false);
     throw new Error('crm025_unresolved_request');
   }
-  const snap = await crm025Transaction(context, true, q => snapshot(q, context, root.id, scope));
+  const { snap, protection } = await crm025Transaction(context, true, async q => {
+    const snap = await snapshot(q, context, root.id, scope);
+    let protection = protectionFor(snap, payload, scope, frozen, context.org);
+    if (slot.phase === 'candidate' && run.candidateRecovery?.h11Disabled && scope.expectedHttpStatus === 201) {
+      protection = await reconcileInspectFollowupDenial(snap, protection, frozen, root.id, async jobId => one(await q(`select
+        (select count(*)::int from cron_jobs where organization_id=$1::uuid and contact_id=$2::uuid
+          and kind='at' and job_kind='followup_turn') "scheduledFollowups",
+        (select count(*)::int from api_audit_log where organization_id=$1::uuid and request_id::text=any($3::text[])
+          and action='mcp.tool_called' and metadata->>'tool_name'=$4) "mcpDispatches"`,
+      [context.org, scope.contactId, [root.id, jobId], FOLLOWUP_TOOL])));
+    }
+    return { snap, protection };
+  });
   const current = snap.runs.find(row => row.id === root.id);
-  const protection = protectionFor(snap, payload, scope, frozen, context.org);
   if (scope.expectedHttpStatus !== 201) {
     protection.environmentValid = false;
     protection.safe = false;
@@ -437,6 +477,7 @@ async function main(args) {
     console.info('run <phase> <split> <freeze-sha> | reconcile <phase> <split> <freeze-sha> <case-arm> | status <phase> <split>');
     console.info('recover-candidate <candidate-freeze-sha> <worker-loss-assessment-sha>');
     console.info('recover-candidate-h11 <candidate-freeze-sha> <worker-loss-recovery-sha> <inspect-denial-assessment-sha>');
+    console.info('recover-candidate-h11-disabled <candidate-freeze-sha> <h11-auto-recovery-sha> <inspect-denial-disabled-assessment-sha>');
     return;
   }
   if (command === 'recover-candidate') {
@@ -446,6 +487,10 @@ async function main(args) {
   if (command === 'recover-candidate-h11') {
     assert(args.length === 4, 'crm025_candidate_h11_arguments');
     return exclusively(() => recoverCandidateH11(phase, splitOrFixture, hashOrPreflight));
+  }
+  if (command === 'recover-candidate-h11-disabled') {
+    assert(args.length === 4, 'crm025_candidate_h11_disabled_arguments');
+    return exclusively(() => recoverCandidateH11Disabled(phase, splitOrFixture, hashOrPreflight));
   }
   if (command === 'freeze-safety') {
     assert(args.length === 4, 'crm025_safety_freeze_arguments');

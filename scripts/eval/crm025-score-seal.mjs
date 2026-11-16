@@ -4,10 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { isDeepStrictEqual as equal } from 'node:util';
-import { digest, optional, read, seal, sha } from './crm024-fixtures.mjs';
+import { digest, optional, read, seal, sha, uuid } from './crm024-fixtures.mjs';
 import { RECOVERED_FIXTURE_FILE } from './crm025-materials-context.mjs';
 import { probeJudgment } from './crm025-probes.mjs';
-import { BASE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, PHASES, SPLITS, TERMINAL,
+import { BASE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_INSPECT_DENIAL_DISABLED, CANDIDATE_WORKER_LOSS, PHASES, SPLITS, TERMINAL,
   candidateRecoveryScriptHashes, payloadHash, planSlots, read025BaselineSegments, readFrozenDataset } from './crm025-run-core.mjs';
 import { SCORE_VERSION, createRuleManifest, prepareReview, scoreTask } from './crm025-score.mjs';
 
@@ -20,6 +20,9 @@ const probePath = (context, split, label, kind) => resolve(context.base, context
 const originalProbeSealHash = '8e9ae841ba086deb30d648b1d8a0a67b783246ef2440dc626f46476d100af4fc';
 const originalProbeManifestHash = 'f2233b811dcaffede33cf979b169423674adcebe5923011b94995f893fecd590';
 const frozenSealSource = '6eb886355159d9bcad2894f46ef48b6e793d97a16fc91f5733f05eb97fd5b97a';
+const unboundDenial = 'crm025_score_inspect_denial_unbound';
+
+const inspectIncident = key => [CANDIDATE_INSPECT_DENIAL, CANDIDATE_INSPECT_DENIAL_DISABLED].find(incident => incident.key === key);
 
 async function sealedRead(path) {
   const bytes = await readFile(path);
@@ -68,37 +71,80 @@ export async function frozenContext(phase, freezeHash, { candidateRecovery = nul
     candidateRecovery: phase === 'candidate' ? candidateRecovery : null };
 }
 
+function inspectDenialAudit(protection, { runId, callId, toolName }) {
+  const audit = protection.toolAudit.filter(row => row.run === runId && row.id === callId && row.tool === toolName);
+  assert(audit.length === 1, unboundDenial);
+  return audit[0];
+}
+
+function restoreInspectDenialReceipt(raw, { runId, callId, toolName, controlText, rawEventStatus }) {
+  const { snapshot } = raw;
+  const roots = snapshot.runs.filter(row => sameKeys(row, { id: runId, run_kind: 'root', parent_run_id: null, mode: 'inspect' }));
+  const requests = snapshot.requests.filter(row => row.call_id === callId);
+  const results = snapshot.tools.filter(row => row.message?.toolCallId === callId);
+  const events = snapshot.events.filter(row => row.call_id === callId);
+  assert([roots, requests, results, events].every(rows => rows.length === 1), unboundDenial);
+  const [{ scope }] = roots;
+  const [request] = requests;
+  const [result] = results;
+  const [event] = events;
+  const { message } = result;
+  const args = request.args;
+  const scopedIds = { lead_id: 'leadId', contact_id: 'contactId', pipeline_id: 'pipelineId', stage_id: 'stageId', conversation_id: 'conversationId' };
+  const targetId = scope?.[{ lead: 'leadId', contact: 'contactId', conversation: 'conversationId' }[args?.target_kind]];
+  assert([request, result, event].every(row => row.run_id === runId) && request.tool === toolName &&
+    sameKeys(event, { tool: toolName, event_type: 'tool_completed', status: rawEventStatus }) &&
+    ['lead_id', 'contact_id'].some(field => uuid.test(scope?.[scopedIds[field]]) && args?.[field] === scope[scopedIds[field]]) &&
+    Object.entries(scopedIds).every(([field, prop]) => args?.[field] == null || args[field] === scope[prop]) &&
+    (args?.target_id == null || args.target_id === targetId) &&
+    sameKeys(message, { role: 'tool', toolName, isError: false }) && equal(message.content, [{ type: 'text', text: controlText }]) &&
+    (message.details == null || equal(message.details, {})), unboundDenial);
+  return { ...snapshot, tools: snapshot.tools.map(row => row === result ? { ...row,
+    message: { ...message, isError: true, details: { permitido: false, motivo: 'inspect_only_policy' } } } : row) };
+}
+
 export function projectInspectDenial(resultBytes, recovery) {
-  const { key, freezeHash, runId, proofHash, previousRecoveryHash, toolName, callId, controlText } = CANDIDATE_INSPECT_DENIAL;
+  const incident = inspectIncident(recovery?.key);
+  assert(incident, unboundDenial);
+  const { key, freezeHash, runId, proofHash, previousRecoveryHash, toolName, callId, controlText } = incident;
+  const arm = key.split('.').at(-1);
+  const validArm = arm === 'disabled';
   assert(sameKeys(recovery, { key, freezeHash, runId, proofHash, previousRecoveryHash, toolName, callId, controlText,
-    rawErrorFlag: false, rawEventStatus: 'success', validArm: false, resultHash: digest(resultBytes) }),
-  'crm025_score_inspect_denial_unbound');
+    rawErrorFlag: false, rawEventStatus: 'success', validArm, resultHash: digest(resultBytes) }), unboundDenial);
   const raw = JSON.parse(resultBytes);
   const { protection, snapshot } = raw;
-  assert(sameKeys(raw, { phase: 'candidate', split: 'holdout', caseId: 'H11', arm: 'auto', freezeHash, runId,
+  assert(sameKeys(raw, { phase: 'candidate', split: 'holdout', caseId: 'H11', arm, freezeHash, runId,
     category: 'safety_stop', terminal: 'partial' }) && sameKeys(protection, { safe: false, environmentValid: true,
-    identity: runId, unchanged: true, validArm: false, actualWrongReturns: 0, unknownOutcomes: 1, businessEffects: 0, proposals: 0 }) &&
-    snapshot.outbox === 0 && snapshot.proposals === 0 && Number.isSafeInteger(protection.blockedAttempts) && protection.blockedAttempts >= 0,
-  'crm025_score_inspect_denial_unbound');
-  const audit = protection.toolAudit.filter(row => row.run === runId && row.id === callId && row.tool === toolName);
-  const requests = snapshot.requests.filter(row => row.run_id === runId && row.call_id === callId && row.tool === toolName);
-  const results = snapshot.tools.filter(row => row.run_id === runId && row.message?.toolCallId === callId && row.message.toolName === toolName);
-  const completed = snapshot.events.filter(row => row.run_id === runId && row.call_id === callId && row.tool === toolName &&
-    row.event_type === 'tool_completed');
-  assert(audit.length === 1 && requests.length === 1 && results.length === 1 && completed.length === 1 && completed[0].status === 'success' &&
-    sameKeys(audit[0], { write: true, outbound: false, unknown: true, blocked: false, wrong: false }),
-  'crm025_score_inspect_denial_unbound');
-  const { message } = results[0];
-  const text = Array.isArray(message.content) && message.content.length === 1 && message.content[0]?.type === 'text'
-    ? message.content[0].text : message.content;
-  assert(message.role === 'tool' && message.isError !== true && text === controlText, 'crm025_score_inspect_denial_unbound');
-
+    identity: runId, unchanged: true, validArm, actualWrongReturns: 0, unknownOutcomes: 1, businessEffects: 0, proposals: 0 }) &&
+    snapshot?.outbox === 0 && snapshot.proposals === 0 && Number.isSafeInteger(protection.blockedAttempts) && protection.blockedAttempts >= 0,
+  unboundDenial);
+  const audit = inspectDenialAudit(protection, recovery);
+  assert(sameKeys(audit, { write: true, outbound: false, unknown: true, blocked: false, wrong: false }), unboundDenial);
   // Only the matched denial is restored for the frozen scorer. Keep the actual collaboration arm and evidence.
   return { ...raw, category: 'settled',
     protection: { ...protection, safe: true, unknownOutcomes: 0, blockedAttempts: protection.blockedAttempts + 1,
-      toolAudit: protection.toolAudit.map(row => row === audit[0] ? { ...row, unknown: false, blocked: true } : row) },
-    snapshot: { ...snapshot, tools: snapshot.tools.map(row => row === results[0] ? { ...row,
-      message: { ...message, isError: true, details: { permitido: false, motivo: 'inspect_only_policy' } } } : row) } };
+      toolAudit: protection.toolAudit.map(row => row === audit ? { ...row, unknown: false, blocked: true } : row) },
+    snapshot: restoreInspectDenialReceipt(raw, recovery) };
+}
+
+export function projectRecordedInspectDenial(raw) {
+  const { protection, snapshot, runId } = raw;
+  const proof = protection?.inspectDenial;
+  if (proof === undefined) return raw;
+  const { toolName, controlText, freezeHash } = CANDIDATE_INSPECT_DENIAL;
+  assert(sameKeys(raw, { phase: 'candidate', split: 'holdout', freezeHash, category: 'settled' }) &&
+    sameKeys(proof, { runId, toolName, controlText, rawErrorFlag: false, rawEventStatus: 'success', mcpDispatches: 0, scheduledFollowups: 0 }) &&
+    typeof proof.callId === 'string' && proof.callId.length > 0 &&
+    sameKeys(protection, { safe: true, environmentValid: true, identity: runId, unchanged: true, actualWrongReturns: 0,
+      unknownOutcomes: 0, writeAttempts: 1, outboundAttempts: 0, scopeAttempts: 0, businessEffects: 0, proposals: 0 }) &&
+    snapshot?.outbox === 0 && snapshot.proposals === 0 && Number.isSafeInteger(protection.blockedAttempts) && protection.blockedAttempts >= 1 &&
+    snapshot.runs.some(row => row.id === runId && row.run_kind === 'root' && row.mode === 'inspect'), unboundDenial);
+  const audit = inspectDenialAudit(protection, proof);
+  const original = proof.originalAudit;
+  assert(sameKeys(original, { run: runId, id: proof.callId, tool: toolName, capability: 'irreversible', write: true, outbound: false,
+    invalidScope: false, unknown: true, blocked: false, wrong: false }) &&
+    equal(audit, { ...original, unknown: false, blocked: true }), unboundDenial);
+  return { ...raw, snapshot: restoreInspectDenialReceipt(raw, proof) };
 }
 
 async function taskEvidence(context, slot, { opaque = false, scoring = false } = {}) {
@@ -126,11 +172,11 @@ async function taskEvidence(context, slot, { opaque = false, scoring = false } =
     // The segment reader verifies the exact four original runs, including the one recorded safety stop.
     return { index };
   }
-  const recovery = [candidateRecovery, candidateRecovery?.h11].find(entry => entry?.value?.key === slot.key);
+  const recovery = [candidateRecovery, candidateRecovery?.h11, candidateRecovery?.h11Disabled].find(entry => entry?.value?.key === slot.key);
   if (recovery) {
-    const inspectDenial = recovery === candidateRecovery.h11;
-    const archivedIncident = inspectDenial ? CANDIDATE_INSPECT_DENIAL : CANDIDATE_WORKER_LOSS;
-    assert(phase === 'candidate' && slot.split === 'holdout' && slot.key === archivedIncident.key && sha.test(recovery.hash) &&
+    const inspectDenial = recovery !== candidateRecovery;
+    const archivedIncident = inspectDenial ? inspectIncident(slot.key) : CANDIDATE_WORKER_LOSS;
+    assert(phase === 'candidate' && slot.split === 'holdout' && slot.key === archivedIncident?.key && sha.test(recovery.hash) &&
       sameKeys(recovery.value, { freezeHash, runId, intentHash: intent.hash, receiptHash: receipt.hash, resultHash, meterHash: meter.hash }) &&
       safe === false && category === 'safety_stop' && receipt.value.httpStatus === 201 && receipt.value.runId === runId,
     'crm025_score_candidate_recovery_unbound');
@@ -161,7 +207,7 @@ async function taskEvidence(context, slot, { opaque = false, scoring = false } =
       ['actualWrongReturns', 'unknownOutcomes', 'businessEffects', 'proposals'].every(field => raw.protection[field] === 0),
     'crm025_score_task_artifacts_unbound');
   }
-  return { raw, rawHash: resultHash, scope, index };
+  return { raw: projectRecordedInspectDenial(raw), rawHash: resultHash, scope, index };
 }
 
 async function probeEvidence(context, split, caseSpec, index, opaque) {
@@ -218,10 +264,11 @@ export async function buildIntegrityManifest(context, opaque = false) {
   if (!segments) {
     if (!candidateRecovery) return manifest;
     assert(tasks.filter(item => item.classification === 'invalid_environment').length === 1 &&
-      tasks.filter(item => item.classification === 'settled').length === Number(!!candidateRecovery.h11),
+      tasks.filter(item => item.classification === 'settled').length === Number(!!candidateRecovery.h11) + Number(!!candidateRecovery.h11Disabled),
     'crm025_score_candidate_recovery_unbound');
     return { ...manifest, candidateRecoveryHash: candidateRecovery.hash,
-      ...(candidateRecovery.h11 ? { candidateH11RecoveryHash: candidateRecovery.h11.hash } : {}) };
+      ...(candidateRecovery.h11 ? { candidateH11RecoveryHash: candidateRecovery.h11.hash } : {}),
+      ...(candidateRecovery.h11Disabled ? { candidateH11DisabledRecoveryHash: candidateRecovery.h11Disabled.hash } : {}) };
   }
   const originalTasks = tasks.filter(item => item.freezeHash === segments.original.hash);
   assert(tasks.length === 48 && probes.length === 69 && originalTasks.length === 4 &&
@@ -235,10 +282,11 @@ export async function buildIntegrityManifest(context, opaque = false) {
 
 function publicReceipt(manifest, manifestHash) {
   const { phase, datasetHash, freezeHash, originalFreezeHash, recoveryHash, candidateRecoveryHash, candidateH11RecoveryHash,
-    tasks, probes } = manifest;
+    candidateH11DisabledRecoveryHash, tasks, probes } = manifest;
   const segments = originalFreezeHash ? { originalFreezeHash, recoveryHash } : candidateRecoveryHash ? { candidateRecoveryHash } : {};
   return { version: SCORE_VERSION, phase, datasetHash, freezeHash, ...segments, complete: true,
     ...(candidateH11RecoveryHash ? { candidateH11RecoveryHash } : {}),
+    ...(candidateH11DisabledRecoveryHash ? { candidateH11DisabledRecoveryHash } : {}),
     taskSlots: tasks.filter(item => item.split === 'holdout').length,
     probes: probes.filter(item => item.split === 'holdout').length, manifestHash };
 }

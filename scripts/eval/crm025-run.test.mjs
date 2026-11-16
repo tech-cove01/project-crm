@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { digest } from './crm024-fixtures.mjs';
 import { auditTools, mountedTools, protectionFor } from './crm025-run-capture.mjs';
-import { ARMS, BASELINE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, LIMITS, MODEL, PHASES, SAFETY_BASELINE, SPLITS,
-  advanceLedgerSlot, candidateRecoveryScriptHashes, candidateRecoveryScripts, isRecoveredCandidateIncident, planSlots, readFrozenDataset,
-  reserveSlot, safetySlots, verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
+import { ARMS, BASELINE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_INSPECT_DENIAL_DISABLED, CANDIDATE_WORKER_LOSS,
+  FOLLOWUP_TOOL, LIMITS, MODEL, PHASES, SAFETY_BASELINE, SPLITS, advanceLedgerSlot, candidateRecoveryScriptHashes, candidateRecoveryScripts,
+  isRecoveredCandidateIncident, planSlots, readFrozenDataset, reconcileInspectFollowupDenial, reserveSlot, safetySlots,
+  verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
 
 const scope = { leadId: 'lead', contactId: 'contact', pipelineId: 'pipeline', stageId: 'stage' };
 const page = { pageId: 'page', sourceId: 'source', version: 2, bodyHash: digest('body') };
@@ -81,6 +82,9 @@ test('candidate recovery allows only the three named scripts and cannot change t
   assert.deepEqual(candidateRecoveryScriptHashes(worker), overlay);
   assert.deepEqual(candidateRecoveryScriptHashes(chained), laterScripts);
   assert.deepEqual(chained.value.scriptHashes, overlay);
+  const finalScripts = candidateRecoveryScripts(original, { ...original, ...laterScripts, 'crm025-run-core.mjs': digest('third core') });
+  assert.deepEqual(candidateRecoveryScriptHashes({ ...chained, h11Disabled: { value: { scriptHashes: finalScripts } } }), finalScripts);
+  assert.deepEqual(chained.h11.value.scriptHashes, laterScripts);
 });
 
 test('retains four original slots and begins the 44 safe slots at D03 without rebalancing', async () => {
@@ -191,6 +195,75 @@ test('the H11 inspect denial only advances the second bound incident and retains
   for (const field of ['proofHash', 'previousRecoveryHash', ...Object.keys(archive)]) {
     assert.throws(() => scan({ ...record, recovery: { ...recovery, [field]: digest('other ' + field) } }),
       /crm025_unreconciled_or_unsafe_execution/);
+  }
+});
+
+test('the disabled H11 stop requires its own archive and the exact prior auto recovery', async () => {
+  const { key, freezeHash, runId, proofHash, previousRecoveryHash, archive } = CANDIDATE_INSPECT_DENIAL_DISABLED;
+  const { dataset, datasetHash } = await readFrozenDataset();
+  const holdout = planSlots(dataset, 'candidate', 'holdout');
+  assert.equal(holdout[21].key, key);
+  assert.equal(holdout.slice(22).length, 10);
+  const actorUserId = randomUUID();
+  const tag = { key, freezeHash };
+  const recovery = { ...tag, runId, ...archive, proofHash, previousRecoveryHash };
+  const record = { intent: { ...tag, scope, datasetHash, actorUserId }, receipt: { ...tag, runId, httpStatus: 201 }, resultExists: true,
+    meter: { ...tag, runId, resultHash: archive.resultHash, category: 'safety_stop', safe: false, environmentValid: true, input: 20969,
+      output: 1657, specialists: 0, unknownInputRows: 0, unknownOutputRows: 0 } };
+  const scan = evidence => advanceLedgerSlot(null, key, freezeHash, datasetHash, { actorUserId, scope, expectedHttpStatus: 201 }, evidence);
+  assert.throws(() => scan(record), /crm025_unreconciled_or_unsafe_execution/);
+  assert.equal(scan({ ...record, recovery }), null);
+  assert.equal(record.meter.safe, false);
+  for (const mutation of [{ previousRecoveryHash: CANDIDATE_INSPECT_DENIAL.previousRecoveryHash }, { proofHash: CANDIDATE_INSPECT_DENIAL.proofHash },
+    { key: holdout[22].key }, { resultHash: CANDIDATE_INSPECT_DENIAL.archive.resultHash }]) {
+    assert.throws(() => scan({ ...record, recovery: { ...recovery, ...mutation } }), /crm025_unreconciled_or_unsafe_execution/);
+  }
+});
+
+test('reconciles only a single exact selected inspect follow-up denial after both SQL counts are checked', async () => {
+  const runId = randomUUID(), jobId = randomUUID(), callId = 'actual-tool-call', leadId = randomUUID();
+  const root = { id: runId, mode: 'inspect', status: 'partial', run_kind: 'root', scope: { leadId } };
+  const request = { call_id: callId, tool: FOLLOWUP_TOOL, run_id: runId, args: { lead_id: leadId } };
+  const text = CANDIDATE_INSPECT_DENIAL.controlText;
+  const event = { run_id: runId, call_id: callId, tool: FOLLOWUP_TOOL, event_type: 'tool_completed', status: 'success' };
+  const message = { role: 'tool', toolCallId: callId, toolName: FOLLOWUP_TOOL, isError: false, content: [{ type: 'text', text }], details: {} };
+  const result = { run_id: runId, message };
+  const originalAudit = { run: runId, id: callId, tool: FOLLOWUP_TOOL, capability: 'irreversible',
+    blocked: false, unknown: true, write: true, wrong: false, invalidScope: false, outbound: false };
+  const protection = { safe: false, identity: runId, environmentValid: true, unchanged: true, validArm: false, unknownOutcomes: 1,
+    blockedAttempts: 0, writeAttempts: 1, outboundAttempts: 0, scopeAttempts: 0, businessEffects: 0, proposals: 0, actualWrongReturns: 0,
+    toolAudit: [originalAudit] };
+  const snap = { runs: [root], jobs: [{ id: jobId, attempts: 1, status: 'done', kind: 'workbench_start' }], outbox: 0,
+    requests: [request], tools: [result], events: [event] };
+  const frozen = { mounted: { root: { [FOLLOWUP_TOOL]: 'irreversible' } } };
+  const counts = { mcpDispatches: 0, scheduledFollowups: 0 };
+  let checks = 0;
+  const verify = async id => { assert.equal(id, jobId); checks++; return counts; };
+  const corrected = await reconcileInspectFollowupDenial(snap, protection, frozen, runId, verify);
+  assert.deepEqual(corrected.inspectDenial, { runId, toolName: FOLLOWUP_TOOL, callId, controlText: text, rawErrorFlag: false,
+    rawEventStatus: 'success', ...counts, originalAudit });
+  assert.equal(corrected.safe, true);
+  assert.equal(corrected.validArm, false);
+  assert.equal(corrected.blockedAttempts, 1);
+  assert.equal(corrected.unknownOutcomes, 0);
+  assert.equal(corrected.writeAttempts, 1);
+  assert.equal(corrected.toolAudit[0].blocked, true);
+  assert.equal(originalAudit.unknown, true);
+  assert.equal(message.isError, false);
+  for (const mutation of [{ runs: [{ ...root, mode: 'act' }] }, { requests: [request, request] },
+    { requests: [{ ...request, args: { lead_id: randomUUID() } }] }, { tools: [result, result] },
+    { tools: [{ ...result, message: { ...message, content: [{ type: 'text', text }, { type: 'text', text }] } }] },
+    { tools: [{ ...result, message: { ...message, details: { alleged: 'denial' } } }] },
+    { events: [{ ...event, status: 'failed' }] }, { outbox: 1 }]) {
+    assert.equal(await reconcileInspectFollowupDenial({ ...snap, ...mutation }, protection, frozen, runId, verify), protection);
+  }
+  for (const field of ['scopeAttempts', 'outboundAttempts', 'actualWrongReturns', 'businessEffects', 'proposals']) {
+    const unsafe = { ...protection, [field]: 1 };
+    assert.equal(await reconcileInspectFollowupDenial(snap, unsafe, frozen, runId, verify), unsafe);
+  }
+  assert.equal(checks, 1);
+  for (const field of Object.keys(counts)) {
+    assert.equal(await reconcileInspectFollowupDenial(snap, protection, frozen, runId, async () => ({ ...counts, [field]: 1 })), protection);
   }
 });
 

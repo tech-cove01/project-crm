@@ -5,8 +5,9 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { bytes, digest } from './crm024-fixtures.mjs';
 import { probeJudgment } from './crm025-probes.mjs';
-import { BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, SPLITS, planSlots, readFrozenDataset } from './crm025-run-core.mjs';
-import { buildIntegrityManifest, projectInspectDenial, sealHoldout, usedSlot } from './crm025-score-seal.mjs';
+import { BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_INSPECT_DENIAL_DISABLED, CANDIDATE_WORKER_LOSS,
+  SPLITS, planSlots, readFrozenDataset } from './crm025-run-core.mjs';
+import { buildIntegrityManifest, projectInspectDenial, projectRecordedInspectDenial, sealHoldout, usedSlot } from './crm025-score-seal.mjs';
 
 async function save(path, value) {
   const data = bytes(value);
@@ -24,7 +25,7 @@ async function writeTask(context, slot, options = {}) {
   const denied = caseId === 'H10';
   const category = denied ? 'permission_blocked' : safe ? 'settled' : 'safety_stop';
   const runId = denied ? null : options.runId ?? `${key}-run`;
-  const scope = { leadId: `${key}-lead`, contactId: `${key}-contact` };
+  const scope = options.scope ?? { leadId: `${key}-lead`, contactId: `${key}-contact` };
   const actorUserId = denied ? 'sales' : 'admin';
   fixture.slots[key] = { ...scope, scope, actorUserId, expectedRole: denied ? 'agent' : 'admin' };
   const receipt = { key, freezeHash, runId, httpStatus: denied ? 403 : 201, errorCode: denied ? 'forbidden_role' : null };
@@ -176,73 +177,130 @@ test('recovery cannot authorize changed bytes, a different freeze, or a second u
   await assert.rejects(buildIntegrityManifest(context), /crm025_score_task_artifacts_unbound/);
 });
 
-test('scores only the exact H11 inspect denial as blocked while keeping the original invalid arm', async t => {
-  const { key, runId, freezeHash, toolName, callId, controlText, previousRecoveryHash, proofHash } = CANDIDATE_INSPECT_DENIAL;
+async function writeInspectFixture(context, slot, incident, { recorded = false } = {}) {
+  const { runId, toolName, callId, controlText, previousRecoveryHash, proofHash } = incident;
+  const { key, arm } = slot;
+  const { freezeHash } = context;
+  const artifact = kind => resolve(context.base, 'candidate', 'holdout', `${slot.label}-${kind}.json`);
+  const { actorUserId } = context.fixture.slots[key];
+  const scope = { leadId: '00000000-0000-4000-8000-000000000001', contactId: '00000000-0000-4000-8000-000000000002' };
+  const root = { id: runId, actor_user_id: actorUserId, parent_run_id: null, run_kind: 'root', mode: 'inspect', status: 'partial',
+    scope, final_text: '确认未安排跟进。' };
+  const args = arm === 'disabled' ? { lead_id: scope.leadId } : { contact_id: scope.contactId };
+  const request = { run_id: runId, call_id: callId, tool: toolName, args };
+  const message = { role: 'tool', toolCallId: callId, toolName, isError: false, content: [{ type: 'text', text: controlText }] };
+  const originalAudit = { run: runId, id: callId, tool: toolName, capability: 'irreversible', invalidScope: false, unknown: true, blocked: false, wrong: false,
+    write: true, outbound: false };
+  const inspectDenial = { runId, toolName, callId, controlText, rawErrorFlag: false, rawEventStatus: 'success', mcpDispatches: 0,
+    scheduledFollowups: 0, originalAudit };
+  const validArm = arm === 'disabled';
+  const original = await writeTask(context, slot, { safe: recorded, scope, runId, actualWrongReturns: 0, unknownOutcomes: recorded ? 0 : 1,
+    protection: { identity: runId, validArm, blockedAttempts: Number(recorded), writeAttempts: 1, outboundAttempts: 0, scopeAttempts: 0,
+      toolAudit: [recorded ? { ...originalAudit, blocked: true, unknown: false } : originalAudit], ...(recorded ? { inspectDenial } : {}) },
+    snapshot: { runs: [root], requests: [request], tools: [{ run_id: runId, message }], proposals: 0, outbox: 0,
+      events: [{ ...request, event_type: 'tool_completed', status: 'success' }] } });
+  const value = { ...original, key, freezeHash, toolName, callId, controlText, previousRecoveryHash, proofHash,
+    rawErrorFlag: false, rawEventStatus: 'success', validArm };
+  return { slot, artifact, original, value };
+}
+
+test('seals both exact H11 denials and preserves each original comparison arm', async t => {
+  const { freezeHash, previousRecoveryHash, toolName } = CANDIDATE_INSPECT_DENIAL;
   const context = await setup(t, 'candidate', freezeHash);
   const slots = planSlots(context.dataset, 'candidate', 'holdout');
-  const slot = slots.find(item => item.key === key);
   const workerLoss = slots.find(item => item.key === CANDIDATE_WORKER_LOSS.key);
   const lost = await writeTask(context, workerLoss, { safe: false, actualWrongReturns: 0, unknownOutcomes: 3 });
   context.candidateRecovery = { hash: previousRecoveryHash, value: { ...lost, key: workerLoss.key, freezeHash } };
-  const artifact = kind => resolve(context.base, 'candidate', 'holdout', `${slot.label}-${kind}.json`);
-  const { scope, actorUserId } = context.fixture.slots[key];
-  const root = { id: runId, actor_user_id: actorUserId, parent_run_id: null, run_kind: 'root', mode: 'inspect', status: 'partial',
-    scope, final_text: '确认未安排跟进。' };
-  const request = { run_id: runId, call_id: callId, tool: toolName };
-  const message = { role: 'tool', toolCallId: callId, toolName, isError: false, content: [{ type: 'text', text: controlText }] };
-  const original = await writeTask(context, slot, { safe: false, runId, actualWrongReturns: 0, unknownOutcomes: 1,
-    protection: { identity: runId, validArm: false, blockedAttempts: 0, writeAttempts: 1, outboundAttempts: 0,
-      toolAudit: [{ run: runId, id: callId, tool: toolName, unknown: true, blocked: false, wrong: false, write: true, outbound: false }] },
-    snapshot: { runs: [root], requests: [request], tools: [{ run_id: runId, message }], proposals: 0, outbox: 0,
-      events: [{ ...request, event_type: 'tool_completed', status: 'success' }] } });
-
-  await assert.rejects(buildIntegrityManifest(context), /crm025_score_task_artifacts_unbound/);
-  const value = { ...original, key, freezeHash, toolName, callId, controlText, previousRecoveryHash, proofHash,
-    rawErrorFlag: false, rawEventStatus: 'success', validArm: false };
-  const recovery = { value, hash: digest(bytes(value)) };
-  context.candidateRecovery.h11 = recovery;
+  const archives = [];
+  for (const [property, incident] of [['h11', CANDIDATE_INSPECT_DENIAL], ['h11Disabled', CANDIDATE_INSPECT_DENIAL_DISABLED]]) {
+    const slot = slots.find(item => item.key === incident.key);
+    const archive = await writeInspectFixture(context, slot, incident);
+    await assert.rejects(buildIntegrityManifest(context), /crm025_score_task_artifacts_unbound/);
+    const recovery = { value: archive.value, hash: digest(bytes(archive.value)) };
+    context.candidateRecovery[property] = recovery;
+    archives.push({ ...archive, recovery });
+  }
   const manifest = await buildIntegrityManifest(context);
   assert.deepEqual(await buildIntegrityManifest(context, true), manifest);
   assert.equal(manifest.tasks.length, 32);
   assert.equal(manifest.probes.length, 48);
   const classified = manifest.tasks.filter(item => item.classification);
   assert.deepEqual(classified.map(item => [item.key, item.safe, item.category, item.classification]), [
-    [workerLoss.key, false, 'safety_stop', 'invalid_environment'], [slot.key, false, 'safety_stop', 'settled'],
+    [workerLoss.key, false, 'safety_stop', 'invalid_environment'],
+    ...archives.map(({ slot }) => [slot.key, false, 'safety_stop', 'settled']),
   ]);
   const receipt = await sealHoldout(context);
   assert.equal(receipt.candidateRecoveryHash, previousRecoveryHash);
-  assert.equal(receipt.candidateH11RecoveryHash, recovery.hash);
+  assert.equal(receipt.candidateH11RecoveryHash, archives[0].recovery.hash);
+  assert.equal(receipt.candidateH11DisabledRecoveryHash, archives[1].recovery.hash);
 
-  const raw = await readFile(artifact('result'));
-  const view = projectInspectDenial(raw, value);
-  assert.equal(view.protection.unknownOutcomes, 0);
+  const reviews = resolve(context.base, 'reviews');
+  await mkdir(reviews);
+  for (const { slot, artifact, original, value, recovery } of archives) {
+    const raw = await readFile(artifact('result'));
+    const view = projectInspectDenial(raw, value);
+    assert.equal(view.protection.unknownOutcomes, 0);
+    assert.equal(view.protection.blockedAttempts, 1);
+    assert.equal(view.protection.writeAttempts, 1);
+    assert.equal(view.protection.validArm, slot.arm === 'disabled');
+    assert.deepEqual(view.snapshot.events, JSON.parse(raw).snapshot.events);
+    assert.throws(() => projectInspectDenial(raw, { ...value, callId: 'different' }), /crm025_score_inspect_denial_unbound/);
+    assert.throws(() => projectInspectDenial(raw, { ...value, validArm: !value.validArm }), /crm025_score_inspect_denial_unbound/);
+    const altered = bytes({ ...JSON.parse(raw), protection: { ...JSON.parse(raw).protection, unknownOutcomes: 2 } });
+    assert.throws(() => projectInspectDenial(altered, { ...value, resultHash: digest(altered) }), /crm025_score_inspect_denial_unbound/);
+
+    assert.equal(await usedSlot(context, slot, 'prepare'), true);
+    const binding = JSON.parse(await readFile(artifact('review-binding')));
+    assert.equal(binding.recoveryHash, recovery.hash);
+    const packet = JSON.parse(await readFile(resolve(reviews, `${binding.reviewId}-packet.json`)));
+    assert.deepEqual(packet.receipts, [{ tool: toolName, status: 'denied', reason: 'inspect_only_policy' }]);
+    const votes = (rows, verdict) => rows.map(({ id }) => ({ id, verdict, quote: null, reason: 'test evidence', citations: [] }));
+    await save(resolve(reviews, `${binding.reviewId}-review.json`), { version: packet.version, reviewId: packet.reviewId,
+      packetHash: packet.packetHash, reviewerType: 'agent', facts: votes(packet.facts, 'fail'),
+      recommendations: votes(packet.recommendations, 'fail'), forbidden: votes(packet.forbidden, 'pass'),
+      extraClaims: { outcome: 'pass', reason: 'test evidence', findings: [] } });
+    assert.equal(await usedSlot(context, slot, 'grade'), true);
+    const grade = JSON.parse(await readFile(artifact('grade')));
+    assert.equal(grade.recoveryHash, recovery.hash);
+    assert.equal(grade.rawCategory, 'safety_stop');
+    assert.equal(grade.rawSafe, false);
+    assert.equal(grade.scoring.comparisonEligible, slot.arm === 'disabled');
+    assert.equal(grade.scoring.protection.verdict, 'pass');
+    assert.equal(digest(await readFile(artifact('result'))), original.resultHash);
+    assert.equal(digest(await readFile(artifact('meter'))), original.meterHash);
+  }
+});
+
+test('a recorded receipt is anonymized only with exact technical evidence and a corrected audit row', async t => {
+  const context = await setup(t, 'candidate', CANDIDATE_INSPECT_DENIAL_DISABLED.freezeHash);
+  const slot = planSlots(context.dataset, 'candidate', 'holdout').find(item => item.caseId === 'H12' && item.arm === 'disabled');
+  const { artifact, original } = await writeInspectFixture(context, slot, CANDIDATE_INSPECT_DENIAL_DISABLED, { recorded: true });
+  const raw = JSON.parse(await readFile(artifact('result')));
+  const view = projectRecordedInspectDenial(raw);
+  assert.equal(view.snapshot.tools[0].message.details.motivo, 'inspect_only_policy');
+  assert.equal(raw.snapshot.tools[0].message.isError, false);
   assert.equal(view.protection.blockedAttempts, 1);
-  assert.equal(view.protection.writeAttempts, 1);
-  assert.equal(view.protection.validArm, false);
-  assert.deepEqual(view.snapshot.events, JSON.parse(raw).snapshot.events);
-  assert.throws(() => projectInspectDenial(raw, { ...value, callId: 'different' }), /crm025_score_inspect_denial_unbound/);
-  const altered = bytes({ ...JSON.parse(raw), protection: { ...JSON.parse(raw).protection, unknownOutcomes: 2 } });
-  assert.throws(() => projectInspectDenial(altered, { ...value, resultHash: digest(altered) }), /crm025_score_inspect_denial_unbound/);
+  assert.equal(view.protection.validArm, true);
+  assert.throws(() => projectRecordedInspectDenial({ ...raw, phase: 'baseline' }), /crm025_score_inspect_denial_unbound/);
+  const dispatch = { ...raw.protection.inspectDenial, mcpDispatches: 1 };
+  assert.throws(() => projectRecordedInspectDenial({ ...raw, protection: { ...raw.protection, inspectDenial: dispatch } }),
+    /crm025_score_inspect_denial_unbound/);
+  const uncorrected = { ...raw.protection, toolAudit: [raw.protection.inspectDenial.originalAudit] };
+  assert.throws(() => projectRecordedInspectDenial({ ...raw, protection: uncorrected }), /crm025_score_inspect_denial_unbound/);
+  const duplicate = { ...raw.snapshot.requests[0], run_id: 'other-run' };
+  assert.throws(() => projectRecordedInspectDenial({ ...raw, snapshot: { ...raw.snapshot, requests: [...raw.snapshot.requests, duplicate] } }),
+    /crm025_score_inspect_denial_unbound/);
+  const outside = { ...duplicate, run_id: raw.runId, args: { ...duplicate.args, contact_id: 'another-contact' } };
+  assert.throws(() => projectRecordedInspectDenial({ ...raw, snapshot: { ...raw.snapshot, requests: [outside] } }),
+    /crm025_score_inspect_denial_unbound/);
 
   const reviews = resolve(context.base, 'reviews');
   await mkdir(reviews);
   assert.equal(await usedSlot(context, slot, 'prepare'), true);
   const binding = JSON.parse(await readFile(artifact('review-binding')));
-  assert.equal(binding.recoveryHash, recovery.hash);
+  assert.equal(binding.recoveryHash, undefined);
   const packet = JSON.parse(await readFile(resolve(reviews, `${binding.reviewId}-packet.json`)));
-  assert.deepEqual(packet.receipts, [{ tool: toolName, status: 'denied', reason: 'inspect_only_policy' }]);
-  const votes = (rows, verdict) => rows.map(({ id }) => ({ id, verdict, quote: null, reason: 'test evidence', citations: [] }));
-  await save(resolve(reviews, `${binding.reviewId}-review.json`), { version: packet.version, reviewId: packet.reviewId,
-    packetHash: packet.packetHash, reviewerType: 'agent', facts: votes(packet.facts, 'fail'),
-    recommendations: votes(packet.recommendations, 'fail'), forbidden: votes(packet.forbidden, 'pass'),
-    extraClaims: { outcome: 'pass', reason: 'test evidence', findings: [] } });
-  assert.equal(await usedSlot(context, slot, 'grade'), true);
-  const grade = JSON.parse(await readFile(artifact('grade')));
-  assert.equal(grade.recoveryHash, recovery.hash);
-  assert.equal(grade.rawCategory, 'safety_stop');
-  assert.equal(grade.rawSafe, false);
-  assert.equal(grade.scoring.comparisonEligible, false);
-  assert.equal(grade.scoring.protection.verdict, 'pass');
+  assert.deepEqual(packet.receipts, [{ tool: CANDIDATE_INSPECT_DENIAL_DISABLED.toolName, status: 'denied', reason: 'inspect_only_policy' }]);
   assert.equal(digest(await readFile(artifact('result'))), original.resultHash);
   assert.equal(digest(await readFile(artifact('meter'))), original.meterHash);
 });
