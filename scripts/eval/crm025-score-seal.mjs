@@ -7,7 +7,7 @@ import { isDeepStrictEqual as equal } from 'node:util';
 import { digest, optional, read, seal, sha } from './crm024-fixtures.mjs';
 import { RECOVERED_FIXTURE_FILE } from './crm025-materials-context.mjs';
 import { probeJudgment } from './crm025-probes.mjs';
-import { BASE, BASELINE_ARCHIVE, PHASES, SPLITS, TERMINAL, payloadHash, planSlots, read025BaselineSegments,
+import { BASE, BASELINE_ARCHIVE, CANDIDATE_WORKER_LOSS, PHASES, SPLITS, TERMINAL, payloadHash, planSlots, read025BaselineSegments,
   readFrozenDataset } from './crm025-run-core.mjs';
 import { SCORE_VERSION, createRuleManifest, prepareReview, scoreTask } from './crm025-score.mjs';
 
@@ -19,13 +19,34 @@ const probePath = (context, split, label, kind) => resolve(context.base, context
 
 const originalProbeSealHash = '8e9ae841ba086deb30d648b1d8a0a67b783246ef2440dc626f46476d100af4fc';
 const originalProbeManifestHash = 'f2233b811dcaffede33cf979b169423674adcebe5923011b94995f893fecd590';
+const frozenSealSource = '6eb886355159d9bcad2894f46ef48b6e793d97a16fc91f5733f05eb97fd5b97a';
 
 async function sealedRead(path) {
   const bytes = await readFile(path);
   return { value: JSON.parse(bytes), hash: digest(bytes) };
 }
 
-async function frozenContext(phase, freezeHash) {
+async function checkScoreSource(phase, freezeHash, frozen, candidateRecovery) {
+  const ruleFile = 'crm025-score.mjs';
+  const sealFile = 'crm025-score-seal.mjs';
+  const [ruleHash, sealHash] = await Promise.all([ruleFile, sealFile].map(async file => digest(await readFile(resolve(import.meta.dirname, file)))));
+  assert(frozen.scriptHashes[ruleFile] === ruleHash, 'crm025_score_frozen_source_changed');
+  if (frozen.scriptHashes[sealFile] === sealHash) return;
+  assert(frozen.scriptHashes[sealFile] === frozenSealSource, 'crm025_score_frozen_source_changed');
+  if (phase === 'baseline') {
+    const candidate = await sealedRead(freezePath('candidate'));
+    assert(candidate.hash === CANDIDATE_WORKER_LOSS.freezeHash && candidate.value.previous?.safetyFreezeHash === freezeHash &&
+      candidate.value.scriptHashes?.[sealFile] === frozenSealSource, 'crm025_score_frozen_source_changed');
+    if (!candidateRecovery) {
+      const { read025CandidateRecovery } = await import('./crm025-run.mjs');
+      candidateRecovery = await read025CandidateRecovery(candidate.hash);
+    }
+  }
+  assert(candidateRecovery?.value?.freezeHash === CANDIDATE_WORKER_LOSS.freezeHash &&
+    candidateRecovery.value.scriptHashes?.[sealFile] === sealHash, 'crm025_score_frozen_source_changed');
+}
+
+export async function frozenContext(phase, freezeHash, { candidateRecovery = null } = {}) {
   assert(PHASES.includes(phase) && sha.test(freezeHash), 'crm025_score_freeze_required');
   const { dataset, datasetHash } = await readFrozenDataset();
   const segments = phase === 'baseline' ? await read025BaselineSegments(freezeHash) : null;
@@ -36,16 +57,19 @@ async function frozenContext(phase, freezeHash) {
     (!segments || sameKeys(segments.original.frozen, ruleBinding) &&
       segments.original.frozen.scriptHashes['crm025-score.mjs'] === frozen.scriptHashes['crm025-score.mjs']),
   'crm025_score_frozen_rules_changed');
-  for (const file of ['crm025-score.mjs', 'crm025-score-seal.mjs']) {
-    assert(frozen.scriptHashes[file] === digest(await readFile(resolve(import.meta.dirname, file))), 'crm025_score_frozen_source_changed');
+  if (phase === 'candidate') {
+    const { read025CandidateRecovery } = await import('./crm025-run.mjs');
+    candidateRecovery = await read025CandidateRecovery(freezeHash);
   }
+  await checkScoreSource(phase, freezeHash, frozen, candidateRecovery);
   const archivedTasks = segments ? BASELINE_ARCHIVE : {};
   const archivedProbes = segments ? await readOriginalHoldoutProbes(BASE, datasetHash, segments.original.hash) : null;
-  return { base: BASE, phase, freezeHash, datasetHash, dataset, frozen, fixture, segments, archivedTasks, archivedProbes };
+  return { base: BASE, phase, freezeHash, datasetHash, dataset, frozen, fixture, segments, archivedTasks, archivedProbes,
+    candidateRecovery: phase === 'candidate' ? candidateRecovery : null };
 }
 
 async function taskEvidence(context, slot, opaque = false) {
-  const { phase, datasetHash, fixture, segments, archivedTasks } = context;
+  const { phase, datasetHash, fixture, segments, archivedTasks, candidateRecovery } = context;
   const archived = archivedTasks[slot.key];
   const freezeHash = archived ? segments.original.hash : context.freezeHash;
   const path = kind => taskPath(context, slot.split, slot.label, kind);
@@ -68,6 +92,17 @@ async function taskEvidence(context, slot, opaque = false) {
     assert(safe === archived.safe && category === (safe ? 'settled' : 'safety_stop'), 'crm025_score_original_archive_changed');
     // The segment reader verifies the exact four original runs, including the one recorded safety stop.
     return { index };
+  }
+  if (candidateRecovery?.value?.key === slot.key) {
+    assert(phase === 'candidate' && slot.split === 'holdout' && slot.key === CANDIDATE_WORKER_LOSS.key &&
+      sha.test(candidateRecovery.hash) &&
+      sameKeys(candidateRecovery.value, { freezeHash, runId, intentHash: intent.hash, receiptHash: receipt.hash, resultHash, meterHash: meter.hash }) &&
+      safe === false && category === 'safety_stop' && receipt.value.httpStatus === 201 && receipt.value.runId === runId,
+    'crm025_score_candidate_recovery_unbound');
+    // The independent receipt pins the unsafe raw bytes. Do not use their answer for grading.
+    const classification = 'invalid_environment';
+    return { raw: { category: classification }, rawHash: resultHash, scope,
+      index: { ...index, classification }, recoveryHash: candidateRecovery.hash };
   }
   assert(safe === true && ['settled', 'invalid_environment', 'permission_blocked'].includes(category),
     'crm025_score_task_artifacts_unbound');
@@ -130,7 +165,7 @@ async function readOriginalHoldoutProbes(base, datasetHash, freezeHash) {
 }
 
 export async function buildIntegrityManifest(context, opaque = false) {
-  const { phase, datasetHash, freezeHash, dataset, segments, archivedProbes } = context;
+  const { phase, datasetHash, freezeHash, dataset, segments, archivedProbes, candidateRecovery } = context;
   const splits = segments ? SPLITS : ['holdout'];
   const tasks = [];
   const probes = [];
@@ -146,7 +181,11 @@ export async function buildIntegrityManifest(context, opaque = false) {
   const heldProbes = probes.filter(item => item.split === 'holdout');
   assert(heldTasks.length === 32 && heldProbes.length === 48, 'crm025_score_holdout_plan_incomplete');
   const manifest = { version: SCORE_VERSION, phase, datasetHash, freezeHash, tasks, probes };
-  if (!segments) return manifest;
+  if (!segments) {
+    if (!candidateRecovery) return manifest;
+    assert(tasks.filter(item => item.classification === 'invalid_environment').length === 1, 'crm025_score_candidate_recovery_unbound');
+    return { ...manifest, candidateRecoveryHash: candidateRecovery.hash };
+  }
   const originalTasks = tasks.filter(item => item.freezeHash === segments.original.hash);
   assert(tasks.length === 48 && probes.length === 69 && originalTasks.length === 4 &&
     originalTasks.every(item => item.split === 'dev') && originalTasks.filter(item => item.safe === false).length === 1 &&
@@ -158,8 +197,8 @@ export async function buildIntegrityManifest(context, opaque = false) {
 }
 
 function publicReceipt(manifest, manifestHash) {
-  const { phase, datasetHash, freezeHash, originalFreezeHash, recoveryHash, tasks, probes } = manifest;
-  const segments = originalFreezeHash ? { originalFreezeHash, recoveryHash } : {};
+  const { phase, datasetHash, freezeHash, originalFreezeHash, recoveryHash, candidateRecoveryHash, tasks, probes } = manifest;
+  const segments = originalFreezeHash ? { originalFreezeHash, recoveryHash } : candidateRecoveryHash ? { candidateRecoveryHash } : {};
   return { version: SCORE_VERSION, phase, datasetHash, freezeHash, ...segments, complete: true,
     taskSlots: tasks.filter(item => item.split === 'holdout').length,
     probes: probes.filter(item => item.split === 'holdout').length, manifestHash };
@@ -168,7 +207,7 @@ function publicReceipt(manifest, manifestHash) {
 const privatePath = context => resolve(context.base, context.phase, 'holdout', 'integrity-manifest.json');
 const receiptPath = context => resolve(context.base, context.phase, 'holdout-seal.json');
 
-async function sealHoldout(context) {
+export async function sealHoldout(context) {
   const manifest = await buildIntegrityManifest(context);
   const manifestPath = privatePath(context);
   let manifestHash;
@@ -198,8 +237,8 @@ async function previousFromBaseline(context) {
     ...await verifyHoldoutSeal(context) };
 }
 
-export async function sealedBaselinePrevious(safetyFreezeHash) {
-  return previousFromBaseline(await frozenContext('baseline', safetyFreezeHash));
+export async function sealedBaselinePrevious(safetyFreezeHash, options) {
+  return previousFromBaseline(await frozenContext('baseline', safetyFreezeHash, options));
 }
 
 async function holdoutCanBeOpened(context) {
@@ -207,7 +246,8 @@ async function holdoutCanBeOpened(context) {
     await frozenContext('candidate', digest(await readFile(freezePath('candidate'))));
   const previous = candidate.frozen.previous;
   assert(sha.test(previous?.safetyFreezeHash), 'crm025_score_holdout_locked_to_candidate_freeze');
-  const baseline = context.phase === 'baseline' ? context : await frozenContext('baseline', previous.safetyFreezeHash);
+  const baseline = context.phase === 'baseline' ? context :
+    await frozenContext('baseline', previous.safetyFreezeHash, { candidateRecovery: candidate.candidateRecovery });
   assert(previous.safetyFreezeHash === baseline.freezeHash && candidate.datasetHash === baseline.datasetHash &&
     candidate.frozen.ruleHash === baseline.frozen.ruleHash && candidate.frozen.fixtureHash === baseline.frozen.fixtureHash &&
     candidate.frozen.preflightHash === baseline.frozen.preflightHash,
@@ -216,9 +256,9 @@ async function holdoutCanBeOpened(context) {
   if (context.phase === 'candidate') await verifyHoldoutSeal(context, false);
 }
 
-async function usedSlot(context, slot, mode) {
+export async function usedSlot(context, slot, mode) {
   const { freezeHash, dataset, fixture } = context;
-  const { raw, rawHash, scope } = await taskEvidence(context, slot);
+  const { raw, rawHash, scope, recoveryHash } = await taskEvidence(context, slot);
   const caseSpec = dataset.cases.find(item => item.id === slot.caseId);
   const input = { caseSpec, raw, scope, materials: fixture, businessClock: dataset.businessClock };
   const bindingPath = taskPath(context, slot.split, slot.label, 'review-binding');
@@ -227,6 +267,7 @@ async function usedSlot(context, slot, mode) {
   if (raw.category !== 'settled') {
     if (mode === 'prepare') return false;
     grade = { freezeHash, rawHash, scoring: scoreTask(input) };
+    if (recoveryHash) Object.assign(grade, { recoveryHash, rawCategory: 'safety_stop', rawSafe: false });
   } else {
     if (mode === 'prepare') {
       const prior = await optional(bindingPath);

@@ -19,6 +19,15 @@ export const TERMINAL = new Set(['completed', 'partial', 'failed', 'cancelled', 
 export const ORIGINAL_FREEZE_HASH = '1430c9c6ef5b7777e4bba0dfa8ca6985dd9ec56475b0405e9ce865755d7da709';
 export const SAFETY_FREEZE_FILE = resolve(BASE, 'baseline', 'safety-freeze.json');
 export const SCOPE_REPLAY_FILE = resolve(BASE, 'resume', 'scope-replay.json');
+export const CANDIDATE_WORKER_LOSS = Object.freeze({
+  freezeHash: '242854a87e38e65218eaf8e52ebb8c28d57904f43bf516d0023581cc327cc0e2',
+  productCommit: '1561dacd949c64b773846c89522228cb478e4b1c',
+  key: 'candidate.H07.auto',
+  runId: 'c992c5a5-0df8-449b-a4b2-eae3cf32222f',
+  jobId: '7c8db8f1-3fb8-42a8-a45f-80d79754dc29',
+  proofHash: '765ec92d479da21a1bda6361065c7f6df9f0216e861a01149b8b99397db9fb48',
+});
+const candidateRunnerFiles = ['crm025-run.mjs', 'crm025-run-core.mjs', 'crm025-score-seal.mjs'];
 export const BASELINE_ARCHIVE = Object.freeze({
   'baseline.D01.disabled': Object.freeze({
     safe: true,
@@ -161,18 +170,35 @@ export async function read025BaselineSegments(safetyFreezeHash) {
   return { original, safety: { hash: safetyFreezeHash, frozen }, recovery: { hash: previous.recoveryHash, value }, meters };
 }
 
-export function advanceLedgerSlot(firstUnused, key, hash, datasetHash, scope, { intent, meter, receipt, resultExists }) {
+export function candidateRecoveryScripts(original, current) {
+  const scripts = Object.fromEntries(candidateRunnerFiles.map(file => [file, current[file]]));
+  assert(candidateRunnerFiles.every(file => sha.test(original[file]) && sha.test(scripts[file])) &&
+    same({ ...original, ...scripts }, current), 'crm025_candidate_recovery_scripts_changed');
+  return scripts;
+}
+
+export function isRecoveredCandidateIncident(key, freezeHash, meter, recovery) {
+  return key === CANDIDATE_WORKER_LOSS.key && freezeHash === CANDIDATE_WORKER_LOSS.freezeHash &&
+    recovery?.key === key && recovery.freezeHash === freezeHash && recovery.proofHash === CANDIDATE_WORKER_LOSS.proofHash &&
+    recovery.runId === CANDIDATE_WORKER_LOSS.runId && meter?.key === key && meter.freezeHash === freezeHash &&
+    meter.runId === recovery.runId && meter.resultHash === recovery.resultHash &&
+    meter.safe === false && meter.category === 'safety_stop' && meter.environmentValid === true;
+}
+
+export function advanceLedgerSlot(firstUnused, key, hash, datasetHash, scope, { intent, meter, receipt, resultExists, recovery }) {
   if (!intent) {
     assert(!meter && !receipt && !resultExists, 'crm025_result_without_intent');
     return firstUnused ?? key;
   }
-  assert(firstUnused === null && hash && meter?.safe === true && sha.test(meter.resultHash) && resultExists &&
+  const incident = isRecoveredCandidateIncident(key, hash, meter, recovery);
+  assert(firstUnused === null && hash && (meter?.safe === true || incident) && sha.test(meter.resultHash) && resultExists &&
     [intent, meter, receipt].every(row => row?.freezeHash === hash && row.key === key) &&
     intent.datasetHash === datasetHash && intent.actorUserId === scope.actorUserId && same(intent.scope, scope.scope) &&
     ['input', 'output', 'specialists', 'unknownInputRows', 'unknownOutputRows'].every(field => Number.isSafeInteger(meter[field]) && meter[field] >= 0) &&
     (meter.category === 'permission_blocked' ? scope.expectedHttpStatus === 403 && receipt.httpStatus === 403 &&
       receipt.errorCode === 'forbidden_role' && meter.runId === null && receipt.runId === null :
-      ['settled', 'invalid_environment'].includes(meter.category) && uuid.test(meter.runId) && (!receipt.runId || meter.runId === receipt.runId)),
+      (incident ? scope.expectedHttpStatus === 201 && receipt.httpStatus === 201 && receipt.runId === meter.runId :
+        ['settled', 'invalid_environment'].includes(meter.category) && uuid.test(meter.runId) && (!receipt.runId || meter.runId === receipt.runId))),
   'crm025_unreconciled_or_unsafe_execution');
   return null;
 }
@@ -194,15 +220,18 @@ export function verifySlotMap(dataset, fixture) {
   }
 }
 
-export function reserveSlot(meters, arm) {
+export function reserveSlot(meters, arm, unmeteredParent = null) {
   const used = meters.reduce((total, row) => ({ slots: total.slots + 1, roots: total.roots + Number(!!row.runId),
     specialists: total.specialists + row.specialists, input: total.input + row.input, output: total.output + row.output,
     unknownInputRows: total.unknownInputRows + row.unknownInputRows, unknownOutputRows: total.unknownOutputRows + row.unknownOutputRows,
   }), { slots: 0, roots: 0, specialists: 0, input: 0, output: 0, unknownInputRows: 0, unknownOutputRows: 0 });
+  assert(!unmeteredParent || same(unmeteredParent, { attempts: 1, maxSteps: MODEL.maxSteps, inputAndOutput: MODEL.tokenBudget }),
+    'crm025_candidate_recovery_budget_changed');
   assert(used.slots < LIMITS.slots && used.roots < LIMITS.slots &&
     used.specialists + (arm === 'auto' ? ROLES.length : 0) <= LIMITS.specialists &&
-    used.input + used.output + LIMITS.reserve < LIMITS.reportedTokens, 'crm025_batch_budget_exhausted');
-  return used;
+    used.input + used.output + (unmeteredParent?.inputAndOutput ?? 0) + LIMITS.reserve < LIMITS.reportedTokens,
+  'crm025_batch_budget_exhausted');
+  return unmeteredParent ? { ...used, unmeteredParent } : used;
 }
 
 export function payloadHash(payload) {

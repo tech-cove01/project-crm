@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { bytes, digest } from './crm024-fixtures.mjs';
 import { probeJudgment } from './crm025-probes.mjs';
-import { BASELINE_ARCHIVE, SPLITS, planSlots, readFrozenDataset } from './crm025-run-core.mjs';
-import { buildIntegrityManifest } from './crm025-score-seal.mjs';
+import { BASELINE_ARCHIVE, CANDIDATE_WORKER_LOSS, SPLITS, planSlots, readFrozenDataset } from './crm025-run-core.mjs';
+import { buildIntegrityManifest, sealHoldout, usedSlot } from './crm025-score-seal.mjs';
 
 async function save(path, value) {
   const data = bytes(value);
@@ -29,13 +29,13 @@ async function writeTask(context, slot, options = {}) {
   fixture.slots[key] = { scope, actorUserId, expectedRole: denied ? 'agent' : 'admin' };
   const receipt = { key, freezeHash, runId, httpStatus: denied ? 403 : 201, errorCode: denied ? 'forbidden_role' : null };
   const protection = { safe, environmentValid: true, unchanged: true, actualWrongReturns: options.actualWrongReturns ?? Number(!safe),
-    unknownOutcomes: 0, businessEffects: 0, proposals: 0 };
+    unknownOutcomes: options.unknownOutcomes ?? 0, businessEffects: 0, proposals: 0 };
   const intentHash = await save(path('intent'), { key, freezeHash, datasetHash, scope, actorUserId });
   const receiptHash = await save(path('receipt'), receipt);
   const resultHash = await save(path('result'), { phase, split, caseId, arm, datasetHash, freezeHash, category, runId,
     terminal: denied ? null : 'partial', receipt, protection, snapshot: denied ? null : { outbox: 0 } });
   const meterHash = await save(path('meter'), { key, freezeHash, resultHash, runId, category, safe, environmentValid: true });
-  return { intentHash, receiptHash, resultHash, meterHash, safe };
+  return { intentHash, receiptHash, resultHash, meterHash, runId, safe };
 }
 
 async function writeProbe(context, split, caseSpec, probe, idx) {
@@ -121,4 +121,57 @@ test('candidate integrity recheck hashes holdout result bytes without consuming 
   assert.equal(changed.probes.find(item => item.slot === 'H01-1').resultHash, digest('opaque test bytes'));
   assert.notDeepEqual(manifest, changed);
   await assert.rejects(buildIntegrityManifest(context), SyntaxError);
+});
+
+test('seals the exact reviewed worker loss and grades it without an anonymous packet', async t => {
+  const context = await setup(t, 'candidate');
+  const slot = planSlots(context.dataset, 'candidate', 'holdout').find(item => item.key === CANDIDATE_WORKER_LOSS.key);
+  const artifact = kind => resolve(context.base, 'candidate', 'holdout', `${slot.label}-${kind}.json`);
+  const original = await writeTask(context, slot, { safe: false, actualWrongReturns: 0, unknownOutcomes: 3 });
+  await assert.rejects(buildIntegrityManifest(context), /crm025_score_task_artifacts_unbound/);
+  const value = { ...original, freezeHash: context.freezeHash, key: slot.key };
+  context.candidateRecovery = { value, hash: digest(bytes(value)) };
+
+  const manifest = await buildIntegrityManifest(context);
+  assert.deepEqual(await buildIntegrityManifest(context, true), manifest);
+  assert.equal(manifest.candidateRecoveryHash, context.candidateRecovery.hash);
+  assert.equal(manifest.tasks.length, 32);
+  assert.equal(manifest.probes.length, 48);
+  const incident = manifest.tasks.filter(item => !item.safe);
+  assert.deepEqual(incident.map(item => [item.key, item.category, item.classification, item.resultHash, item.meterHash]),
+    [[slot.key, 'safety_stop', 'invalid_environment', original.resultHash, original.meterHash]]);
+  const receipt = await sealHoldout(context);
+  assert.equal(receipt.candidateRecoveryHash, context.candidateRecovery.hash);
+  assert.deepEqual(await sealHoldout(context), receipt);
+
+  assert.equal(await usedSlot(context, slot, 'prepare'), false);
+  await assert.rejects(readFile(artifact('review-binding')), { code: 'ENOENT' });
+  assert.equal(await usedSlot(context, slot, 'grade'), true);
+  const grade = JSON.parse(await readFile(artifact('grade')));
+  assert.equal(grade.recoveryHash, context.candidateRecovery.hash);
+  assert.equal(grade.rawCategory, 'safety_stop');
+  assert.equal(grade.rawSafe, false);
+  assert.equal(grade.rawHash, original.resultHash);
+  assert.equal(grade.scoring.outcome, 'invalid_environment');
+  assert.equal(grade.scoring.deliverable, false);
+  assert.equal(grade.scoring.counts.facts.correct, null);
+  assert.equal(digest(await readFile(artifact('result'))), original.resultHash);
+  assert.equal(digest(await readFile(artifact('meter'))), original.meterHash);
+});
+
+test('recovery cannot authorize changed bytes, a different freeze, or a second unsafe candidate slot', async t => {
+  const context = await setup(t, 'candidate');
+  const slots = planSlots(context.dataset, 'candidate', 'holdout');
+  const slot = slots.find(item => item.key === CANDIDATE_WORKER_LOSS.key);
+  const original = await writeTask(context, slot, { safe: false, actualWrongReturns: 0, unknownOutcomes: 3 });
+  const value = { ...original, freezeHash: context.freezeHash, key: slot.key };
+  for (const change of [{ resultHash: digest('different result') }, { freezeHash: digest('different freeze') }]) {
+    const modified = { ...value, ...change };
+    context.candidateRecovery = { value: modified, hash: digest(bytes(modified)) };
+    await assert.rejects(buildIntegrityManifest(context, true), /crm025_score_candidate_recovery_unbound/);
+  }
+  const other = slots.find(item => item.key !== slot.key && item.caseId === slot.caseId);
+  await writeTask(context, other, { safe: false });
+  context.candidateRecovery = { value, hash: digest(bytes(value)) };
+  await assert.rejects(buildIntegrityManifest(context), /crm025_score_task_artifacts_unbound/);
 });
