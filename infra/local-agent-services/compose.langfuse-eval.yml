@@ -1,0 +1,6 @@
+# Explicit opt-in for bounded local trace/score evaluation. Keep the base compose file first.
+services:
+  clickhouse:
+    mem_limit: 3072m
+    volumes:
+      - ./clickhouse-eval-capacity.xml:/etc/clickhouse-server/config.d/z-crm-eval-capacity.xml:ro

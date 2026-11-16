@@ -1,0 +1,4 @@
+<clickhouse>
+  <!-- Local opt-in: 2.25 GiB tracked server memory inside the 3 GiB cgroup. -->
+  <max_server_memory_usage replace="replace">2415919104</max_server_memory_usage>
+</clickhouse>
