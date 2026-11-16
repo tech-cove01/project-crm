@@ -394,6 +394,8 @@ export async function runWorkbenchStartJob(
       ? `${run.task}\n\n已校验的当前 CRM 目标范围（由工作台选择；请先用只读工具读取这些精确对象，不要猜选其他记录）：\n${selectedScopeLines.join("\n")}`
       : run.task;
     if (collaboration) taskWithScope += formatCollaborationContext(collaboration);
+    if (run.mode === "inspect")
+      taskWithScope += "\n\n若用户明确要求 summary 为纯 JSON，只提交一个符合所需键的 JSON 对象，从 { 开始、到 } 结束，前后不加 Markdown 或说明。事实依据和真实缺口分别放在结构化 evidence 和 missingInformation。用户允许核验无匹配后留空，且授权搜索已确认无匹配时，政策项和该项引用填 null，evidence 不为该政策项加入不存在的知识回执。已读取的 CRM 字段即使为 null，也仍可引用其实际 CRM 来源。";
     const remainingMaxSteps = Math.max(
       1,
       (budget.maxSteps ?? modelAgentConfig.maxSteps) - (collaboration?.usage.modelTurns ?? 0),
@@ -441,7 +443,7 @@ export async function runWorkbenchStartJob(
           inputTokens: collaboration?.usage.inputTokens ?? 0,
           outputTokens: collaboration?.usage.outputTokens ?? 0,
           costCents: collaboration?.usage.costCents ?? null,
-          calls: collaboration?.results.length ?? 0,
+          calls: collaboration?.results.filter(result => result.usage.modelTurns > 0).length ?? 0,
         },
       });
       return;
