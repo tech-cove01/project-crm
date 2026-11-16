@@ -394,6 +394,20 @@ describe("crm_get_lead / crm_list_leads — governança + shape", () => {
     expect(res.lead.status).toBe("open");
     expect(res.lead.pipeline_id).toBeDefined();
     expect(res.lead.title).toBe("Pedido #1");
+    expect(res.lead.value_display).toBeNull();
+  });
+
+  it.each([
+    { value_cents: 1_234_567, currency: "CNY", major: 12_345.67, locale: "zh-CN" },
+    { value_cents: 1_234, currency: "JPY", major: 1_234, locale: "ja-JP" },
+    { value_cents: 0, currency: "USD", major: 0, locale: "en-US" },
+  ])("get: exposes $currency in its major unit while preserving the raw stored value", async ({ value_cents, currency, major, locale }) => {
+    const row = leadRow({ value_cents, currency });
+    const result = (await crmGetLead.handler({ lead_id: row.id as string }, makeCtx(leadResolver([row])))) as {
+      lead: Record<string, unknown>;
+    };
+    const expected = new Intl.NumberFormat(locale, { style: "currency", currency }).format(major);
+    expect(result.lead).toMatchObject({ value_cents, currency, value_display: expected });
   });
 
   it("list: sem owner (fila) ⇒ owner_user_name=null, stage ainda resolvido", async () => {
@@ -406,6 +420,7 @@ describe("crm_get_lead / crm_list_leads — governança + shape", () => {
     const lead = res.leads[0]!;
     expect(lead.owner_user_id).toBeNull();
     expect(lead.owner_user_name).toBeNull();
+    expect(lead.value_display).toBeNull();
     expect(lead.stage).toEqual({ id: STAGE_1, name: "Qualificação" });
     // LGPD: nenhum campo de PII do owner além do nome.
     const keys = Object.keys(lead);

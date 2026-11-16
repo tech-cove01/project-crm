@@ -21,6 +21,7 @@ import {
   moveLeadHandler,
 } from "@/app/api/v1/leads/_handler";
 import { createLeadSchema, updateLeadSchema } from "@/lib/schemas/leads";
+import { formatCents } from "@/lib/money";
 import { resolveUserNames } from "./_users";
 import type { McpContext, McpToolDefinition } from "../types";
 
@@ -57,13 +58,21 @@ async function enrichLeads(
     }
   }
 
-  return leads.map((l) => ({
-    ...l,
-    owner_user_name: l.owner_user_id
-      ? (names.get(l.owner_user_id as string) ?? null)
-      : null,
-    stage: l.stage_id ? (stageById.get(l.stage_id as string) ?? null) : null,
-  }));
+  return leads.map((lead) => {
+    const amount = lead.value_cents;
+    const currency = lead.currency;
+    return {
+      ...lead,
+      owner_user_name: lead.owner_user_id
+        ? (names.get(lead.owner_user_id as string) ?? null)
+        : null,
+      stage: lead.stage_id ? (stageById.get(lead.stage_id as string) ?? null) : null,
+      value_display: typeof amount === "number" && Number.isSafeInteger(amount) &&
+        typeof currency === "string" && /^[a-z]{3}$/i.test(currency)
+        ? formatCents(amount, currency.toUpperCase())
+        : null,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -83,6 +92,7 @@ export const crmListLeads: McpToolDefinition<typeof listInputShape> = {
   name: "crm_list_leads",
   description:
     "Lista leads do CRM filtrando por pipeline, stage, status e owner. Cursor base64 para paginação. " +
+    "value_cents contém subunidades da moeda; para apresentar o montante, use value_display com o código currency. " +
     "Governança por lead: owner_user_id + owner_user_name (só o nome do dono, sem email/telefone), stage ({ id, name } legível além do stage_id) e tags[].",
   inputSchema: listInputShape,
   category: "read",
@@ -125,6 +135,8 @@ export const crmGetLead: McpToolDefinition<typeof getInputShape> = {
   name: "crm_get_lead",
   description:
     "Retorna um lead pelo UUID. Inclui pipeline_id, stage_id, status, owner. " +
+    "value_cents contém subunidades da moeda; para apresentar o montante, use value_display com o código currency. " +
+    "expected_close_date é a previsão registrada no CRM; confirme separadamente a data informada ou prometida pelo cliente. " +
     "Governança: owner_user_id + owner_user_name (só o nome, sem email/telefone), stage ({ id, name } legível) e tags[].",
   inputSchema: getInputShape,
   category: "read",
