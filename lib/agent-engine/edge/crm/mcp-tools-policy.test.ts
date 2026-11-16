@@ -33,4 +33,18 @@ describe("MCP harness-action mount policy", () => {
     expect(resolveMcpTurnToolIds(ids, { readOnly: true }).allowed).toEqual(ids);
     expect(resolveMcpTurnToolIds(ids, { targetScope: {} }).allowed).toEqual(ids);
   });
+
+  it("excludes broad CRM reads only when exact workbench objects were selected", () => {
+    const broad = ["crm_list_leads", "crm_list_conversations", "crm_search_contacts"];
+    const exact = ["crm_get_lead", "crm_get_contact", "crm_list_followups", ...CONVERSATION_READS];
+    const ids = [...broad, ...exact];
+    for (const readOnly of [true, false]) {
+      expect(resolveMcpTurnToolIds(ids, {
+        readOnly, targetScope: { leadId: "lead", contactId: "contact", conversationId: "conversation" },
+      }).allowed).toEqual(exact);
+    }
+    expect(resolveMcpTurnToolIds(ids).allowed).toEqual(ids);
+    expect(resolveMcpTurnToolIds(ids, { targetScope: {} }).allowed).toEqual(ids);
+    expect(resolveMcpTurnToolIds(ids, { targetScope: { leadId: null } }).allowed).toEqual(ids);
+  });
 });

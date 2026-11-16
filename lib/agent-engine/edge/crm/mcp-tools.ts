@@ -20,7 +20,7 @@ import { claimOfJob } from "@/lib/agent-engine/queue/claim";
 import type { Tool } from "ai";
 
 import { pickToolsFromMcp, type RuntimeHandoffSignal } from "@/lib/ai/runtime/tools";
-import type { WorkbenchTargetScope } from "@/lib/ai/runtime/workbench-target-scope";
+import { allowsWorkbenchTool, type WorkbenchTargetScope } from "@/lib/ai/runtime/workbench-target-scope";
 import { mintEphemeralToken, revokeEphemeralToken } from "@/lib/ai/runtime/mcp_token";
 import { IDS_DO_HARNESS, motivoDoHarness } from "@/lib/mcp/tools/ferramentas-do-harness";
 import type { McpAuthResult } from "@/lib/mcp/auth";
@@ -75,6 +75,7 @@ export function resolveMcpTurnToolIds(toolIds: readonly string[], options?: McpT
   return {
     allowed: toolIds.filter((id) =>
       (!BLOCKED_TOOL_IDS.has(id) || proposalTools.has(id)) &&
+      allowsWorkbenchTool(options?.targetScope, id) &&
       !(withoutSelectedConversation && (id === "crm_get_conversation" || id === "crm_get_conversation_history")),
     ),
     blocked: toolIds.filter((id) => BLOCKED_TOOL_IDS.has(id) && !proposalTools.has(id)),

@@ -28,7 +28,7 @@ import { recusaDeCapacidadeParaOModelo } from "@/lib/mcp/recusa-para-o-modelo";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { podeChamarFerramenta, recusaParaOModelo } from "@/lib/leads/escopo-de-funil";
-import { allowsWorkbenchTarget, type WorkbenchTargetScope } from "./workbench-target-scope";
+import { allowsWorkbenchTarget, allowsWorkbenchTool, type WorkbenchTargetScope } from "./workbench-target-scope";
 
 export interface RuntimeHandoffSignal {
   triggered: boolean;
@@ -92,7 +92,7 @@ function wrapMcpTool(
         def.inputSchema as Record<string, z.ZodTypeAny>,
         (args ?? {}) as Record<string, unknown>,
       );
-      const argsRecord = higiene.limpos;
+      let argsRecord = higiene.limpos;
       if (higiene.descartados.length > 0) {
         // Não é cosmético: sem esta linha o defeito passa a se curar em
         // silêncio e ninguém descobre que um modelo faz isso o tempo todo.
@@ -105,7 +105,8 @@ function wrapMcpTool(
         ensureScope(input.auth.scopes, def.requiresScope);
         ensureRole(input.auth.role, def.requiresRole);
 
-        if (!allowsWorkbenchTarget(input.targetScope, argsRecord)) {
+        if (!allowsWorkbenchTool(input.targetScope, def.name) ||
+            !allowsWorkbenchTarget(input.targetScope, argsRecord)) {
           void auditMcpToolCall({
             ctx: input.ctx,
             toolName: def.name,
@@ -116,6 +117,15 @@ function wrapMcpTool(
           });
           return { permitido: false, motivo: "workbench_target_out_of_scope",
             mensagem: "工具目标不在当前工作台选定的对象范围内；没有读取或修改该对象。" };
+        }
+
+        if (def.name === "crm_list_followups" && input.targetScope?.leadId) {
+          // The shared follow-up resolver may pick a contact's active lead, or
+          // fall back to that contact when an explicit lead no longer exists.
+          // A selected workbench lead is exact: fill it after validating the
+          // caller's IDs, and remove the fallback without mutating their input.
+          argsRecord = { ...argsRecord, lead_id: input.targetScope.leadId };
+          delete argsRecord.contact_id;
         }
 
         // ── ESCOPO DE FUNIL (spec 17 passo 3) ────────────────────────────────
