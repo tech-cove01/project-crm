@@ -11,7 +11,7 @@ const path = local('source-isolation-plan.json');
 const triggerName = 'trg_ai_knowledge_sources_updated_at';
 const originalAuditor = 'trg_ai_knowledge_sources_audit';
 
-async function triggers(q) {
+export async function triggers(q) {
   const rows = await q(`select tgname,tgenabled,pg_get_triggerdef(oid) definition,
     encode(sha256(convert_to(pg_get_functiondef(tgfoid),'utf8')),'hex') body_hash
     from pg_trigger where tgrelid='public.ai_knowledge_sources'::regclass and not tgisinternal order by tgname`);
@@ -21,18 +21,18 @@ async function triggers(q) {
   return rows;
 }
 
-async function source(q, c) {
+export async function source(q, c) {
   return one(await q(`select id,organization_id,is_active,status,updated_at::text,
     encode(sha256(convert_to(to_jsonb(s)::text,'utf8')),'hex') hash,
     encode(sha256(convert_to((to_jsonb(s)-'is_active')::text,'utf8')),'hex') preserved_hash,
     source_metadata from ai_knowledge_sources s where organization_id=$1::uuid and id=$2::uuid`, [c.org, c.oldFixture.sourceId]));
 }
 
-async function activeIds(q, c) {
+export async function activeIds(q, c) {
   return (await q(`select id from ai_knowledge_sources where organization_id=$1::uuid and is_active order by id`, [c.org])).map(row => row.id);
 }
 
-async function latestDrafts(q, c) {
+export async function latestDrafts(q, c) {
   return q(`select a.id agent_id,a.builtin_key,a.origin,a.published_version_id,
     encode(sha256(convert_to(to_jsonb(a)::text,'utf8')),'hex') agent_hash,
     v.id version_id,v.version_number,v.status,v.knowledge_source_ids,
@@ -42,7 +42,7 @@ async function latestDrafts(q, c) {
     where a.organization_id=$1::uuid and a.archived_at is null and a.is_active order by a.id`, [c.org]);
 }
 
-async function withoutPending(q, c) {
+export async function withoutPending(q, c) {
   await idle(q, c);
   const total = one(await q(`select count(*)::int rows from job_queue where status in ('pending','running')`, [])).rows;
   assert(total === 0, 'crm025_scope_requires_idle_isolated_stack');
@@ -83,7 +83,7 @@ async function planIsolation(fixtureHash) {
 }
 
 /** Keep the existing evidence revision stable while the exact original lab source is temporarily excluded. */
-async function setOldSourceActive(q, c, state, active) {
+export async function setOldSourceActive(q, c, state, active) {
   const expected = state.before.old;
   assert(same(await triggers(q), state.before.triggerState), 'crm025_source_trigger_identity_mismatch');
   const current = await source(q, c);
@@ -102,7 +102,7 @@ async function setOldSourceActive(q, c, state, active) {
   return after;
 }
 
-async function appendDraft(q, c, before, id, number, sourceIds) {
+export async function appendDraft(q, c, before, id, number, sourceIds) {
   return one(await q(`insert into ai_agent_versions select (jsonb_populate_record(null::ai_agent_versions,to_jsonb(v)||jsonb_build_object(
       'id',$4::uuid,'version_number',$5::int,'knowledge_source_ids',$6::uuid[],'created_at',clock_timestamp(),'created_by',$7::uuid,
       'status','draft','published_at',null,'superseded_at',null))).* from ai_agent_versions v
@@ -143,7 +143,7 @@ async function readIsolation(c, fixtureHash) {
   return { result, plan };
 }
 
-async function originalsMatch(q, c, plan) {
+export async function originalsMatch(q, c, plan) {
   const originals = [...plan.before.others.map(row => ({ id: row.version_id, hash: row.version_hash })),
     { id: c.plan.before.agent.versionId, hash: c.plan.before.agent.profileHash }];
   const saved = await q(`select id,encode(sha256(convert_to(to_jsonb(v)::text,'utf8')),'hex') hash from ai_agent_versions v
@@ -154,14 +154,18 @@ async function originalsMatch(q, c, plan) {
 /** Exercise the exact native built-in reseeder the Workbench will call before model admission. */
 export async function verifyIsolatedReseed(c, fixtureHash) {
   const scope = await readIsolation(c, fixtureHash);
+  return verifyNativeIsolatedReseed(c, scope.result.oldSource, scope.result.drafts, scope.plan, scope.result.planHash);
+}
+
+export async function verifyNativeIsolatedReseed(c, oldSource, drafts, originalPlan, isolationPlanHash) {
   const before = await crm025Transaction(c, true, async q => {
     await withoutPending(q, c);
-    assert(same(await activeIds(q, c), c.materials.sourceIds) && same(await source(q, c), scope.result.oldSource),
+    assert(same(await activeIds(q, c), c.materials.sourceIds) && same(await source(q, c), oldSource),
       'crm025_effective_candidate_pool_not_isolated');
-    await originalsMatch(q, c, scope.plan);
-    const drafts = await latestDrafts(q, c);
-    assert(same(drafts, scope.result.drafts), 'crm025_lab_drafts_changed_before_reseed');
-    return drafts;
+    await originalsMatch(q, c, originalPlan);
+    const current = await latestDrafts(q, c);
+    assert(same(current, drafts), 'crm025_lab_drafts_changed_before_reseed');
+    return current;
   });
   const needed = Object.keys(c.env);
   const previous = Object.fromEntries(needed.map(name => [name, process.env[name]]));
@@ -176,14 +180,14 @@ export async function verifyIsolatedReseed(c, fixtureHash) {
     }
   }
   return crm025Transaction(c, true, async q => {
-    await originalsMatch(q, c, scope.plan);
+    await originalsMatch(q, c, originalPlan);
     const after = await latestDrafts(q, c);
     assert(same(after, before) && same(await activeIds(q, c), c.materials.sourceIds) &&
       after.filter(row => row.origin === 'builtin').every(row => same(row.knowledge_source_ids, c.materials.sourceIds)),
     'crm025_native_reseed_would_mutate_frozen_profiles');
-    return { isolationPlanHash: scope.result.planHash, activeSourceIds: c.materials.sourceIds,
-      nativeReseedKeptFrozenProfiles: true, originalProfilesPreserved: 4, oldSourceRevision: scope.result.oldSource.updated_at,
-      oldSourceInactive: true, triggersUnchanged: same(await triggers(q), scope.plan.before.triggerState) };
+    return { isolationPlanHash, activeSourceIds: c.materials.sourceIds,
+      nativeReseedKeptFrozenProfiles: true, originalProfilesPreserved: 4, oldSourceRevision: oldSource.updated_at,
+      oldSourceInactive: true, triggersUnchanged: same(await triggers(q), originalPlan.before.triggerState) };
   });
 }
 

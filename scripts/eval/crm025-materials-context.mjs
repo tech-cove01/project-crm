@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { parseEnv, isDeepStrictEqual as same } from 'node:util';
 import { createServerClient } from '@supabase/ssr';
 import pg from 'pg';
-import { ROOT, context as priorContext, digest, optional, read, uuid } from './crm024-fixtures.mjs';
+import { ROOT, context as priorContext, digest, optional, read, sha, uuid } from './crm024-fixtures.mjs';
 
 export const MATERIAL_ROOT = resolve(ROOT, '.local/crm025');
 export const DATASET_HASH = '590763cfffe722245effda31516e880e617fc0cf10351d98c28c89d18690f5ac';
@@ -12,6 +12,9 @@ export const BASELINE = '2d5d411223e68fef47a41c064040baf6d7c4056d';
 export const RUNTIME_FILE = resolve(MATERIAL_ROOT, 'runtime.env');
 export const FIXTURE_FILE = resolve(MATERIAL_ROOT, 'fixtures.json');
 export const PREFLIGHT_FILE = resolve(MATERIAL_ROOT, 'preflight.json');
+export const RECOVERED_RUNTIME_FILE = resolve(MATERIAL_ROOT, 'runtime-recovered.env');
+export const RECOVERED_FIXTURE_FILE = resolve(MATERIAL_ROOT, 'fixtures-recovered.json');
+export const RECOVERED_PREFLIGHT_FILE = resolve(MATERIAL_ROOT, 'preflight-recovered.json');
 export const PLAN_FILE = resolve(MATERIAL_ROOT, 'materials-plan.json');
 export const OLD_ACTORS = resolve(ROOT, '.local/crm022/actors.private.json');
 export const SALES_ACTOR = resolve(MATERIAL_ROOT, 'sales-actor.private.json');
@@ -58,11 +61,12 @@ export async function scopedTransaction(options, readOnly, action) {
   }
 }
 
-export async function crm025Context({ prepare = false } = {}) {
+export async function crm025Context({ prepare = false, recovered = false } = {}) {
+  assert(!prepare || !recovered, 'crm025_incompatible_environment_mode');
   const prior = await priorContext();
   const plan = await optional(PLAN_FILE);
-  const fixture = await optional(FIXTURE_FILE);
-  const raw = prepare ? null : await readFile(RUNTIME_FILE, 'utf8');
+  const fixture = await optional(recovered ? RECOVERED_FIXTURE_FILE : FIXTURE_FILE);
+  const raw = prepare ? null : await readFile(recovered ? RECOVERED_RUNTIME_FILE : RUNTIME_FILE, 'utf8');
   const env = raw === null ? prior.env : parseEnv(raw);
   const environmentHash = raw === null ? null : digest(raw);
   assert(new URL(env.SUPABASE_DB_URL).host === '127.0.0.1:55522' &&
@@ -77,13 +81,21 @@ export async function crm025Context({ prepare = false } = {}) {
       bind.length === 1 && bind[0].organization_id === prior.org && bind[0].provider === 'weknora' &&
       new URL(bind[0].base_url).origin === WIKI_ORIGIN && bind[0].visibility === 'organization' &&
       typeof bind[0].api_key === 'string' && same(bind[0].knowledge_base_ids, [plan.kb.current]), 'crm025_exact_private_binding_required');
+    if (recovered) {
+      assert(sha.test(fixture.recovery?.originalFixtureHash ?? ''), 'crm025_recovered_fixture_identity_required');
+      const original = await read(FIXTURE_FILE, fixture.recovery.originalFixtureHash);
+      assert(fixture.keyId !== original.keyId && fixture.agent.versionId !== original.agent.versionId &&
+        fixture.planHash === original.planHash && ['slots', 'pages', 'sourceIds', 'actorScopes', 'businessClock'].every(field =>
+          same(fixture[field], original[field])), 'crm025_recovered_environment_drift');
+    }
   }
   return { ...prior, env, environmentHash, envHash: environmentHash, organizationId: prior.org,
-    betaOrg: plan?.betaOrg ?? null, plan, fixture };
+    betaOrg: plan?.betaOrg ?? null, plan, fixture, recovered };
 }
 
-export async function loadMaterials(fixtureHash) {
-  const [c, data, materials] = await Promise.all([crm025Context(), read025Dataset(), read(FIXTURE_FILE, fixtureHash)]);
+export async function loadMaterials(fixtureHash, { recovered = false } = {}) {
+  const [c, data, materials] = await Promise.all([crm025Context({ recovered }), read025Dataset(),
+    read(recovered ? RECOVERED_FIXTURE_FILE : FIXTURE_FILE, fixtureHash)]);
   assert.equal(materials.environmentHash, c.environmentHash);
   return { ...c, ...data, materials, slots: materials.slots, agent: materials.agent };
 }

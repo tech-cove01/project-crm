@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isDeepStrictEqual as same } from 'node:util';
 import { resolve } from 'node:path';
-import { at, digest, one, optional, seal } from './crm024-fixtures.mjs';
-import { MATERIAL_ROOT, PREFLIGHT_FILE, WORKBENCH, crm025Transaction, crm025Transport, loadMaterials } from './crm025-materials-context.mjs';
+import { at, digest, one, optional, read, seal } from './crm024-fixtures.mjs';
+import { MATERIAL_ROOT, PREFLIGHT_FILE, RECOVERED_PREFLIGHT_FILE, WORKBENCH, crm025Transaction, crm025Transport,
+  loadMaterials } from './crm025-materials-context.mjs';
 import { documentPath, inspectWiki, pagePath, retrieve, wikiAccessProof } from './crm025-materials-wiki.mjs';
 import { inspectCrm } from './crm025-materials.mjs';
 import { verifyIsolatedReseed } from './crm025-materials-source-scope.mjs';
@@ -139,11 +140,12 @@ async function archiveWithdrawal(c, fixture, fixtureHash, managerSlot) {
 }
 
 /** Preflight evidence rows are derived only from exact authorised by-ID reads and the owned historical fixtures. */
-async function installReadbackReceipts(c, fixture, data, observations, sourceRows) {
+async function installReadbackReceipts(c, fixture, data, observations, sourceRows, ids) {
   return crm025Transaction(c, false, async q => {
     const rows = {};
     for (const entry of data.corpus) {
       const row = fixture.pages[entry.id];
+      const receiptId = ids?.[entry.id] ?? row.evidenceId;
       const observation = observations[entry.id];
       const manifest = {
         provider: 'weknora', ...pageDto(row, entry, observation),
@@ -155,26 +157,41 @@ async function installReadbackReceipts(c, fixture, data, observations, sourceRow
       const revision = digest(JSON.stringify(manifest));
       await q(`insert into ai_wiki_evidence(id,organization_id,source_id,manifest_hash,manifest,content)
         values($1::uuid,$2::uuid,$3::uuid,$4,$5::jsonb,$6) on conflict(organization_id,source_id,manifest_hash) do nothing`,
-      [row.evidenceId, row.orgId, row.sourceId, revision, JSON.stringify(manifest), entry.content]);
+      [receiptId, row.orgId, row.sourceId, revision, JSON.stringify(manifest), entry.content]);
       const saved = one(await q(`select id,manifest_hash from ai_wiki_evidence
         where organization_id=$1::uuid and source_id=$2::uuid and manifest_hash=$3`, [row.orgId, row.sourceId, revision]));
-      assert(saved.id === row.evidenceId && saved.manifest_hash === revision, 'crm025_preflight_evidence_receipt_collision');
-      rows[entry.id] = { id: row.evidenceId, revision };
+      assert(saved.id === receiptId && saved.manifest_hash === revision, 'crm025_preflight_evidence_receipt_collision');
+      rows[entry.id] = { id: receiptId, revision };
     }
     return rows;
   });
 }
 
-export async function preflight(fixtureHash) {
-  assert(!(await optional(PREFLIGHT_FILE)), 'crm025_environment_already_frozen');
-  const c = await loadMaterials(fixtureHash);
+async function verifyRestoredWithdrawal(c, fixture, managerSlot) {
+  const old = await read(PREFLIGHT_FILE, fixture.recovery.originalPreflightHash);
+  const { withdrawal, fixtureHash } = old;
+  assert(fixtureHash === fixture.recovery.originalFixtureHash && withdrawal.sourceId === c.plan.source.withdrawn &&
+    withdrawal.status === 'archived', 'crm025_recovered_withdrawal_not_same');
+  const response = await crm025Transport(c, managerSlot, request => request(sourceEndpoint(withdrawal.sourceId), 'GET'));
+  assert(response.httpStatus === 200 && response.data?.id === withdrawal.sourceId && response.data.organization_id === c.org &&
+    response.data.status === 'archived' && response.data.is_active === false &&
+    response.data.source_metadata.knowledge_base_id === c.plan.kb.withdrawn, 'crm025_recovered_withdrawal_not_same');
+  return { originalPreflightHash: fixture.recovery.originalPreflightHash, sourceId: withdrawal.sourceId,
+    status: 'archived', confirmedByGet: true, requestId: response.requestId };
+}
+
+export async function preflight(fixtureHash, { recovered = false } = {}) {
+  const preflightFile = recovered ? RECOVERED_PREFLIGHT_FILE : PREFLIGHT_FILE;
+  assert(!(await optional(preflightFile)), 'crm025_environment_already_frozen');
+  const c = await loadMaterials(fixtureHash, { recovered });
   const fixture = c.materials, data = c.dataset, plan = c.plan;
   const betaAndWithdrawn = data.corpus.filter(entry => entry.organizationId === 'org_beta' || entry.state === 'withdrawn');
   const published = data.corpus.filter(entry => entry.organizationId === 'org_alpha' && entry.state === 'published');
   const token = JSON.parse(c.env.AI_INTEGRATION_BINDINGS)[0].api_key;
   const managerSlot = Object.values(fixture.slots).find(slot => slot.actor === 'initiator');
+  const grantPlan = recovered ? { ...plan, batch: fixture.recovery.grantBatch } : plan;
   const [wiki, grant, observations, customerFacts, actorScope] = await Promise.all([
-    inspectWiki(plan, fixture.pages), wikiAccessProof(plan, fixture.keyId, false),
+    inspectWiki(plan, fixture.pages), wikiAccessProof(grantPlan, fixture.keyId, false),
     limitedMap(published, async entry => [entry.id, await retrieveCurrent(token, fixture.pages[entry.id], entry)]).then(Object.fromEntries),
     verifyCustomerFacts(c, fixture), verifyCrmSubjects(c, fixture, data),
   ]);
@@ -189,10 +206,12 @@ export async function preflight(fixtureHash) {
   const historicalFile = await retrieve(token, documentPath(fixture.pages[old.id]));
   assert(denied(historicalFile.status), 'crm025_historical_document_still_accessible');
   providerDenials[old.id] = { historyExists: true, currentVersion: 2, documentStatus: historicalFile.status };
-  const withdrawal = await archiveWithdrawal(c, fixture, fixtureHash, managerSlot);
-  const sourceIsolation = await verifyIsolatedReseed(c, fixtureHash);
+  const withdrawal = recovered ? await verifyRestoredWithdrawal(c, fixture, managerSlot) :
+    await archiveWithdrawal(c, fixture, fixtureHash, managerSlot);
+  const sourceIsolation = recovered ? await (await import('./crm025-materials-recovery.mjs')).verifyRecoveredReseed(c) :
+    await verifyIsolatedReseed(c, fixtureHash);
   const crm = await inspectCrm(c, fixture, data, true);
-  const readbacks = await installReadbackReceipts(c, fixture, data, observations, crm.sources);
+  const readbacks = await installReadbackReceipts(c, fixture, data, observations, crm.sources, fixture.recovery?.evidenceIds);
   const scopedSlot = { ...managerSlot, evidenceIds: Object.values(readbacks).map(row => row.id) };
   const receipts = await crm025Transport(c, scopedSlot, async request => {
     const records = await limitedMap(data.corpus, async entry => {
@@ -222,9 +241,9 @@ export async function preflight(fixtureHash) {
     logicalId: entry.id, state: entry.organizationId === 'org_beta' ? 'foreign' : entry.state,
     provider: providerDenials[entry.id] ?? { historyExists: true, currentVersion: 2 }, evidence: receipts.entries[entry.id],
   }));
-  return seal(PREFLIGHT_FILE, { version: 1, at: at(), datasetHash: c.datasetHash, fixtureHash, environmentHash: c.environmentHash,
+  return seal(preflightFile, { version: 1, at: at(), datasetHash: c.datasetHash, fixtureHash, environmentHash: c.environmentHash,
     preflightSourceHash: digest(await readFile(import.meta.filename)),
     ready: true, noModel: true, usedSearchForPreflight: false, sourceIds: fixture.sourceIds, wiki, grant, positiveReads,
     negativeReads, actorScope, customerFacts, withdrawal, sourceIsolation, foreignSourceHttpStatus: receipts.foreignSourceStatus,
-    scopedObjects: crm.scopedObjects });
+    scopedObjects: crm.scopedObjects, ...(recovered ? { recovery: fixture.recovery } : {}) });
 }
