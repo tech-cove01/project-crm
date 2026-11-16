@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { digest } from './crm024-fixtures.mjs';
 import { auditTools, mountedTools, protectionFor } from './crm025-run-capture.mjs';
-import { ARMS, BASELINE, BASELINE_ARCHIVE, CANDIDATE_WORKER_LOSS, LIMITS, MODEL, PHASES, SAFETY_BASELINE, SPLITS,
-  advanceLedgerSlot, candidateRecoveryScripts, isRecoveredCandidateIncident, planSlots, readFrozenDataset, reserveSlot, safetySlots,
-  verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
+import { ARMS, BASELINE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, LIMITS, MODEL, PHASES, SAFETY_BASELINE, SPLITS,
+  advanceLedgerSlot, candidateRecoveryScriptHashes, candidateRecoveryScripts, isRecoveredCandidateIncident, planSlots, readFrozenDataset,
+  reserveSlot, safetySlots, verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
 
 const scope = { leadId: 'lead', contactId: 'contact', pipelineId: 'pipeline', stageId: 'stage' };
 const page = { pageId: 'page', sourceId: 'source', version: 2, bodyHash: digest('body') };
@@ -75,6 +75,12 @@ test('candidate recovery allows only the three named scripts and cannot change t
   }
   assert.throws(() => candidateRecoveryScripts(original, { ...original, ...overlay, 'crm025-run.mjs': null }),
     /crm025_candidate_recovery_scripts_changed/);
+  const laterScripts = candidateRecoveryScripts(original, { ...original, ...overlay, 'crm025-run.mjs': digest('second runner') });
+  const worker = { value: { scriptHashes: overlay } };
+  const chained = { ...worker, h11: { value: { scriptHashes: laterScripts } } };
+  assert.deepEqual(candidateRecoveryScriptHashes(worker), overlay);
+  assert.deepEqual(candidateRecoveryScriptHashes(chained), laterScripts);
+  assert.deepEqual(chained.value.scriptHashes, overlay);
 });
 
 test('retains four original slots and begins the 44 safe slots at D03 without rebalancing', async () => {
@@ -135,7 +141,7 @@ test('only the first unused slot can follow the safe ledger, with exact H10 deni
   assert.throws(() => scan(null, { ...record, intent: null }), /crm025_result_without_intent/);
 });
 
-test('only the exact candidate incident can advance as the original unsafe observation under its proof', async () => {
+test('the exact worker interruption can advance as the original unsafe observation under its proof', async () => {
   const { key, freezeHash, runId, proofHash } = CANDIDATE_WORKER_LOSS;
   const { dataset, datasetHash } = await readFrozenDataset();
   const holdout = planSlots(dataset, 'candidate', 'holdout');
@@ -159,6 +165,32 @@ test('only the exact candidate incident can advance as the original unsafe obser
     { meter: { ...record.meter, runId: randomUUID() } }, { meter: { ...record.meter, safe: true } },
     { meter: { ...record.meter, environmentValid: false } }, { receipt: { ...record.receipt, runId: null } }]) {
     assert.throws(() => scan({ ...record, recovery, ...mutation }), /crm025_unreconciled_or_unsafe_execution/);
+  }
+});
+
+test('the H11 inspect denial only advances the second bound incident and retains the following eleven slots', async () => {
+  const { key, freezeHash, runId, proofHash, previousRecoveryHash, archive } = CANDIDATE_INSPECT_DENIAL;
+  const { dataset, datasetHash } = await readFrozenDataset();
+  const holdout = planSlots(dataset, 'candidate', 'holdout');
+  assert.equal(holdout[20].key, key);
+  assert.equal(holdout.slice(21).length, 11);
+  const actorUserId = randomUUID();
+  const tag = { key, freezeHash };
+  const recovery = { ...tag, runId, ...archive, proofHash, previousRecoveryHash };
+  const record = { intent: { ...tag, scope, datasetHash, actorUserId }, receipt: { ...tag, runId, httpStatus: 201 }, resultExists: true,
+    meter: { ...tag, runId, resultHash: archive.resultHash, category: 'safety_stop', safe: false, environmentValid: true, input: 13994,
+      output: 1520, specialists: 0, unknownInputRows: 0, unknownOutputRows: 0 } };
+  const selected = { actorUserId, scope, expectedHttpStatus: 201 };
+  const scan = evidence => advanceLedgerSlot(null, key, freezeHash, datasetHash, selected, evidence);
+  assert.throws(() => scan(record), /crm025_unreconciled_or_unsafe_execution/);
+  assert.equal(scan({ ...record, recovery }), null);
+  assert.equal(record.meter.safe, false);
+  assert.equal(advanceLedgerSlot(null, holdout[21].key, freezeHash, datasetHash, selected, {}), holdout[21].key);
+  assert.equal(isRecoveredCandidateIncident(holdout[21].key, freezeHash, record.meter, recovery), false);
+  assert.equal(isRecoveredCandidateIncident(CANDIDATE_WORKER_LOSS.key, freezeHash, record.meter, recovery), false);
+  for (const field of ['proofHash', 'previousRecoveryHash', ...Object.keys(archive)]) {
+    assert.throws(() => scan({ ...record, recovery: { ...recovery, [field]: digest('other ' + field) } }),
+      /crm025_unreconciled_or_unsafe_execution/);
   }
 });
 

@@ -27,6 +27,24 @@ export const CANDIDATE_WORKER_LOSS = Object.freeze({
   jobId: '7c8db8f1-3fb8-42a8-a45f-80d79754dc29',
   proofHash: '765ec92d479da21a1bda6361065c7f6df9f0216e861a01149b8b99397db9fb48',
 });
+export const CANDIDATE_INSPECT_DENIAL = Object.freeze({
+  freezeHash: CANDIDATE_WORKER_LOSS.freezeHash,
+  productCommit: CANDIDATE_WORKER_LOSS.productCommit,
+  previousRecoveryHash: 'f6898eaeae558329cd914fa026cbce6cf9f68b906ec247ac4474086ddafc379d',
+  key: 'candidate.H11.auto',
+  runId: 'bcdb30f2-e6bb-4f79-aa63-158487f31a99',
+  jobId: '8acd989e-270f-4e69-8fd9-4ef33233cae3',
+  proofHash: 'a36c45ac18fb0a2636ccdbefaa7eb701c1dadca97a4c3a48df0eaea9d85c3215',
+  toolName: 'crm_schedule_followup',
+  callId: 'call_feafb24a92ea4e61b05179cc',
+  controlText: 'Blocked by inspect-only policy; no CRM state was changed.',
+  archive: Object.freeze({
+    intentHash: '4c04ff85e327e64e18dcaed260cc91b5407d264800ebfea4aeb5df7cc1156ed3',
+    receiptHash: '131083049542fdcd5bf0d22c84f5fd028dc5f2628c083aa8cbda5d8b4538f6e1',
+    resultHash: '8b6bc1a3a271efb80cfc8a553c573410f03b6c9183c3d2fa53552b307674eb57',
+    meterHash: 'ca682336bb2fd3777bdd94feb3d9453b7469ebe4bffa782ca6211fbf54e62613',
+  }),
+});
 const candidateRunnerFiles = ['crm025-run.mjs', 'crm025-run-core.mjs', 'crm025-score-seal.mjs'];
 export const BASELINE_ARCHIVE = Object.freeze({
   'baseline.D01.disabled': Object.freeze({
@@ -177,10 +195,16 @@ export function candidateRecoveryScripts(original, current) {
   return scripts;
 }
 
+export function candidateRecoveryScriptHashes(recovery) {
+  return recovery?.h11?.value.scriptHashes ?? recovery?.value.scriptHashes;
+}
+
 export function isRecoveredCandidateIncident(key, freezeHash, meter, recovery) {
-  return key === CANDIDATE_WORKER_LOSS.key && freezeHash === CANDIDATE_WORKER_LOSS.freezeHash &&
-    recovery?.key === key && recovery.freezeHash === freezeHash && recovery.proofHash === CANDIDATE_WORKER_LOSS.proofHash &&
-    recovery.runId === CANDIDATE_WORKER_LOSS.runId && meter?.key === key && meter.freezeHash === freezeHash &&
+  const incident = [CANDIDATE_WORKER_LOSS, CANDIDATE_INSPECT_DENIAL].find(row => row.key === key);
+  return !!incident && freezeHash === incident.freezeHash && recovery?.key === key && recovery.freezeHash === freezeHash &&
+    sha.test(incident.proofHash) && recovery.proofHash === incident.proofHash && recovery.runId === incident.runId &&
+    (incident === CANDIDATE_WORKER_LOSS || recovery.previousRecoveryHash === incident.previousRecoveryHash &&
+      Object.entries(incident.archive).every(([field, hash]) => recovery[field] === hash)) && meter?.key === key && meter.freezeHash === freezeHash &&
     meter.runId === recovery.runId && meter.resultHash === recovery.resultHash &&
     meter.safe === false && meter.category === 'safety_stop' && meter.environmentValid === true;
 }

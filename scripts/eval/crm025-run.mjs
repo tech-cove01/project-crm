@@ -8,15 +8,17 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { at, business, digest, idle, one, optional, read, seal, sha, uuid } from './crm024-fixtures.mjs';
 import { crm025Context, crm025Transaction, crm025Transport, makeScopeTask, RECOVERED_FIXTURE_FILE, RECOVERED_PREFLIGHT_FILE,
   RECOVERED_RUNTIME_FILE } from './crm025-materials-context.mjs';
-import { BASE, BASELINE_ARCHIVE, CANDIDATE_WORKER_LOSS, MODEL, PHASES, SAFETY_FREEZE_FILE, SCOPE_REPLAY_FILE, SPLITS, TERMINAL,
-  advanceLedgerSlot, candidateRecoveryScripts, isRecoveredCandidateIncident, payloadHash, planSlots, product, read025BaselineSegments,
-  read025OriginalFreeze, read025OriginalMeters, readFrozenDataset, reserveSlot, safetySlots, verifyRecoveredMaterials, verifyScopeReplay,
-  verifySlotMap } from './crm025-run-core.mjs';
+import { BASE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, MODEL, PHASES, SAFETY_FREEZE_FILE, SCOPE_REPLAY_FILE,
+  SPLITS, TERMINAL, advanceLedgerSlot, candidateRecoveryScriptHashes, candidateRecoveryScripts, isRecoveredCandidateIncident, payloadHash,
+  planSlots, product, read025BaselineSegments, read025OriginalFreeze, read025OriginalMeters, readFrozenDataset, reserveSlot, safetySlots,
+  verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
 import { findRoots, mountedTools, protectionFor, snapshot, summarizeUsage } from './crm025-run-capture.mjs';
 
 const freezePath = phase => phase === 'baseline' ? SAFETY_FREEZE_FILE : resolve(BASE, 'candidate', 'freeze.json');
 const pathFor = (slot, kind) => resolve(BASE, slot.phase, slot.split, `${slot.label}-${kind}.json`);
 const candidateRecoveryPath = resolve(BASE, 'candidate', 'recovery.json');
+const candidateH11RecoveryPath = resolve(BASE, 'candidate', 'recovery-h11.json');
+const recoveryFor = (recovery, key) => recovery?.h11?.value.key === key ? recovery.h11.value : recovery?.value;
 const wellKnownFiles = ['crm024-fixtures.mjs', 'crm024-scope-audit.mjs', 'crm022-sales.mjs'];
 const pathExists = path => access(path).then(() => true, error => {
   if (error.code === 'ENOENT') return false;
@@ -29,11 +31,11 @@ async function scriptHashes() {
     [file, digest(await readFile(resolve(import.meta.dirname, file)))])));
 }
 
-async function candidateRecoveryRecord(freezeHash, proofHash) {
+async function candidateRecoveryRecord(freezeHash, proofHash, archivedScriptHashes) {
   const incident = CANDIDATE_WORKER_LOSS;
   assert(freezeHash === incident.freezeHash && proofHash === incident.proofHash, 'crm025_candidate_recovery_identity_required');
-  const [frozen, proof, scripts] = await Promise.all([read(freezePath('candidate'), freezeHash),
-    read(resolve(BASE, 'candidate', 'worker-loss-assessment.json'), proofHash), scriptHashes()]);
+  const [frozen, proof] = await Promise.all([read(freezePath('candidate'), freezeHash),
+    read(resolve(BASE, 'candidate', 'worker-loss-assessment.json'), proofHash)]);
   const { key, runId, jobId } = incident;
   const slot = frozen.slots?.holdout?.[12];
   const archive = proof.archive;
@@ -51,7 +53,7 @@ async function candidateRecoveryRecord(freezeHash, proofHash) {
       .every(kind => sha.test(archive[`${kind}Hash`])), 'crm025_candidate_recovery_proof_unbound');
   const { intentHash, receiptHash, resultHash, meterHash, lossHash, unresolvedHash } = archive;
   const recovery = { version: 1, freezeHash, key, runId, jobId, intentHash, receiptHash, resultHash, meterHash, lossHash, unresolvedHash,
-    proofHash, scriptHashes: candidateRecoveryScripts(frozen.scriptHashes, scripts), unmeteredParent };
+    proofHash, scriptHashes: archivedScriptHashes ?? candidateRecoveryScripts(frozen.scriptHashes, await scriptHashes()), unmeteredParent };
   const [intent, receipt, raw, meter, loss, unresolved] = await Promise.all([
     read(pathFor(slot, 'intent'), intentHash), read(pathFor(slot, 'receipt'), receiptHash), readFile(pathFor(slot, 'result')),
     read(pathFor(slot, 'meter'), meterHash), read(resolve(BASE, 'candidate', 'worker-loss.json'), lossHash),
@@ -66,21 +68,86 @@ async function candidateRecoveryRecord(freezeHash, proofHash) {
   return recovery;
 }
 
-/** Technical receipts only. The original result and initial observation remain opaque. */
-export async function read025CandidateRecovery(freezeHash) {
+async function readWorkerRecovery(freezeHash) {
   const raw = await readFile(candidateRecoveryPath).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   if (!raw) return null;
+  const hash = digest(raw);
+  assert.equal(hash, CANDIDATE_INSPECT_DENIAL.previousRecoveryHash, 'crm025_candidate_worker_recovery_changed');
   const value = JSON.parse(raw);
-  assert(same(value, await candidateRecoveryRecord(freezeHash, value?.proofHash)), 'crm025_candidate_recovery_changed');
-  return { hash: digest(raw), value };
+  assert(same(value, await candidateRecoveryRecord(freezeHash, value?.proofHash, value.scriptHashes)), 'crm025_candidate_recovery_changed');
+  return { hash, value };
+}
+
+async function candidateH11RecoveryRecord(freezeHash, previousRecoveryHash, proofHash) {
+  const incident = CANDIDATE_INSPECT_DENIAL;
+  assert(freezeHash === incident.freezeHash && previousRecoveryHash === incident.previousRecoveryHash && proofHash === incident.proofHash,
+    'crm025_candidate_h11_identity_required');
+  const [frozen, proof, scripts, guard] = await Promise.all([read(freezePath('candidate'), freezeHash),
+    read(resolve(BASE, 'candidate', 'inspect-denial-assessment.json'), proofHash), scriptHashes(),
+    readFile(resolve(import.meta.dirname, '../../lib/ai/agents/workbench-start-job.ts'))]);
+  const { key, runId, jobId, toolName, callId, controlText, archive } = incident;
+  const slot = frozen.slots?.holdout?.[20];
+  assert(frozen.phase === 'candidate' && frozen.segment === 'candidate' && frozen.productCommit === incident.productCommit &&
+    slot?.key === key && slot.phase === 'candidate' && slot.split === 'holdout' && slot.label === 'H11-auto' &&
+    proof.version === 1 && proof.candidateFreezeHash === freezeHash && proof.previousRecoveryHash === previousRecoveryHash &&
+    proof.productCommit === incident.productCommit && proof.key === key && proof.runId === runId && same(proof.archive, archive) &&
+    proof.disposition === 'observed_inspect_block' && proof.noReplacement === true && proof.toolName === toolName &&
+    proof.callId === callId && proof.controlText === controlText && proof.rawErrorFlag === false && proof.rawEventStatus === 'success' &&
+    proof.validArm === false && proof.guardBeforeDispatch === true && proof.guardSourceHash === digest(guard) &&
+    same(proof.status?.root, { id: runId, status: 'partial', mode: 'inspect' }) &&
+    same(proof.status?.job, { id: jobId, status: 'done', attempts: 1 }) && proof.status?.unchanged === true &&
+    same(proof.status?.counts, { scheduled_followups: 0, mcp_dispatch: 0, proposals: 0, effects: 0, outbox: 0, active: 0 }),
+  'crm025_candidate_h11_proof_unbound');
+  const recovery = { version: 1, freezeHash, previousRecoveryHash, key, runId, jobId, ...archive, proofHash,
+    scriptHashes: candidateRecoveryScripts(frozen.scriptHashes, scripts), toolName, callId, controlText,
+    rawErrorFlag: proof.rawErrorFlag, rawEventStatus: proof.rawEventStatus, validArm: proof.validArm };
+  const [intent, receipt, raw, meter] = await Promise.all([
+    read(pathFor(slot, 'intent'), archive.intentHash), read(pathFor(slot, 'receipt'), archive.receiptHash),
+    readFile(pathFor(slot, 'result')), read(pathFor(slot, 'meter'), archive.meterHash),
+  ]);
+  assert(digest(raw) === archive.resultHash && [intent, receipt].every(row => row.key === key && row.freezeHash === freezeHash) &&
+    intent.datasetHash === frozen.datasetHash && receipt.httpStatus === 201 && receipt.runId === runId &&
+    isRecoveredCandidateIncident(key, freezeHash, meter, recovery) && meter.specialists === 0 && same(meter, proof.reportedUsage),
+  'crm025_candidate_h11_archive_changed');
+  return recovery;
+}
+
+/** Reads sealed technical evidence. Original answers and the initial observation stay opaque. */
+export async function read025CandidateRecovery(freezeHash) {
+  const [worker, raw] = await Promise.all([readWorkerRecovery(freezeHash),
+    readFile(candidateH11RecoveryPath).catch(error => { if (error.code === 'ENOENT') return null; throw error; })]);
+  if (raw) {
+    assert(worker, 'crm025_candidate_h11_requires_worker_recovery');
+    const value = JSON.parse(raw);
+    assert(same(value, await candidateH11RecoveryRecord(freezeHash, worker.hash, value?.proofHash)), 'crm025_candidate_h11_recovery_changed');
+    return { ...worker, h11: { hash: digest(raw), value } };
+  }
+  if (worker) {
+    const frozen = await read(freezePath('candidate'), freezeHash);
+    assert(same(worker.value.scriptHashes, candidateRecoveryScripts(frozen.scriptHashes, await scriptHashes())),
+      'crm025_candidate_recovery_changed');
+  }
+  return worker;
+}
+
+function verifyCandidateRecoveryProduct(frozen) {
+  assert(product('candidate', CANDIDATE_WORKER_LOSS.productCommit).hash === frozen.productHash,
+    'crm025_candidate_recovery_product_changed');
 }
 
 async function recoverCandidate(freezeHash, proofHash) {
-  const recovery = await candidateRecoveryRecord(freezeHash, proofHash);
   const frozen = await read(freezePath('candidate'), freezeHash);
-  assert(product('candidate', CANDIDATE_WORKER_LOSS.productCommit).hash === frozen.productHash,
-    'crm025_candidate_recovery_product_changed');
+  verifyCandidateRecoveryProduct(frozen);
+  const recovery = await candidateRecoveryRecord(freezeHash, proofHash);
+  assert.equal(payloadHash(recovery), CANDIDATE_INSPECT_DENIAL.previousRecoveryHash, 'crm025_candidate_worker_recovery_changed');
   return seal(candidateRecoveryPath, recovery);
+}
+
+async function recoverCandidateH11(freezeHash, previousRecoveryHash, proofHash) {
+  const worker = await readWorkerRecovery(freezeHash);
+  assert(worker?.hash === previousRecoveryHash, 'crm025_candidate_h11_requires_worker_recovery');
+  verifyCandidateRecoveryProduct(await read(freezePath('candidate'), freezeHash));
+  return seal(candidateH11RecoveryPath, await candidateH11RecoveryRecord(freezeHash, previousRecoveryHash, proofHash));
 }
 
 async function inputs(fixtureHash, preflightHash) {
@@ -195,7 +262,7 @@ export async function read025Freeze(phase, freezeHash) {
   const candidateRecovery = phase === 'candidate' ? await read025CandidateRecovery(freezeHash) : null;
   assert(frozen.phase === phase && frozen.productCommit === live.productCommit && frozen.productHash === live.hash && frozen.datasetHash === data.datasetHash &&
     frozen.ruleHash === payloadHash(createRuleManifest(data.dataset)) && frozen.environmentHash === data.context.environmentHash &&
-    same({ ...frozen.scriptHashes, ...candidateRecovery?.value.scriptHashes }, await scriptHashes()), 'crm025_execution_freeze_changed');
+    same({ ...frozen.scriptHashes, ...candidateRecoveryScriptHashes(candidateRecovery) }, await scriptHashes()), 'crm025_execution_freeze_changed');
   const safetyHash = phase === 'baseline' ? freezeHash : frozen.previous?.safetyFreezeHash;
   const segments = await read025BaselineSegments(safetyHash);
   if (phase === 'candidate') {
@@ -217,7 +284,7 @@ async function ledger(run) {
         optional(pathFor(slot, 'intent')), optional(pathFor(slot, 'meter')), optional(pathFor(slot, 'receipt')), pathExists(pathFor(slot, 'result')),
       ]);
       firstUnused = advanceLedgerSlot(firstUnused, slot.key, hash, run.datasetHash, run.fixture.slots[slot.key],
-        { intent, meter, receipt, resultExists, recovery: run.candidateRecovery?.value });
+        { intent, meter, receipt, resultExists, recovery: recoveryFor(run.candidateRecovery, slot.key) });
       if (!intent) continue;
       // Hash opaque bytes here so development execution never consumes holdout answers or scores.
       assert(digest(await readFile(pathFor(slot, 'result'))) === meter.resultHash, 'crm025_result_changed');
@@ -310,7 +377,7 @@ async function submit(run, slot) {
   const scope = run.fixture.slots[slot.key];
   const payload = payloadFor(run, slot, scope);
   assert(product(slot.phase, run.frozen.productCommit).hash === run.frozen.productHash &&
-    same(await scriptHashes(), { ...run.frozen.scriptHashes, ...run.candidateRecovery?.value.scriptHashes }) &&
+    same(await scriptHashes(), { ...run.frozen.scriptHashes, ...candidateRecoveryScriptHashes(run.candidateRecovery) }) &&
     (slot.phase !== 'candidate' || same(run.candidateRecovery, await read025CandidateRecovery(run.freezeHash))) &&
     digest(await readFile(RECOVERED_RUNTIME_FILE)) === run.frozen.environmentHash, 'crm025_pre_submit_source_changed');
   const ledgerState = await ledger(run);
@@ -355,7 +422,7 @@ async function status(phase, split, segments = null, recovery = null) {
   const slots = planSlots(dataset, phase, split);
   const meter = await Promise.all(slots.map(slot => optional(pathFor(slot, 'meter'))));
   const intent = await Promise.all(slots.map(slot => optional(pathFor(slot, 'intent'))));
-  const archived = row => row && (isRecoveredCandidateIncident(row.key, row.freezeHash, row, recovery?.value) ||
+  const archived = row => row && (isRecoveredCandidateIncident(row.key, row.freezeHash, row, recoveryFor(recovery, row.key)) ||
     (segments && BASELINE_ARCHIVE[row.key]?.safe === false && segments.meters.some(original => same(original, row))));
   console.info(JSON.stringify({ phase, split, planned: slots.length, submitted: intent.filter(Boolean).length,
     settled: meter.filter(Boolean).length, roots: meter.filter(row => row?.runId).length,
@@ -369,11 +436,16 @@ async function main(args) {
     console.info('freeze-safety <fixture-sha> <preflight-sha> <scope-replay-sha> | freeze candidate <fixture-sha> <preflight-sha>');
     console.info('run <phase> <split> <freeze-sha> | reconcile <phase> <split> <freeze-sha> <case-arm> | status <phase> <split>');
     console.info('recover-candidate <candidate-freeze-sha> <worker-loss-assessment-sha>');
+    console.info('recover-candidate-h11 <candidate-freeze-sha> <worker-loss-recovery-sha> <inspect-denial-assessment-sha>');
     return;
   }
   if (command === 'recover-candidate') {
     assert(args.length === 3, 'crm025_candidate_recovery_arguments');
     return exclusively(() => recoverCandidate(phase, splitOrFixture));
+  }
+  if (command === 'recover-candidate-h11') {
+    assert(args.length === 4, 'crm025_candidate_h11_arguments');
+    return exclusively(() => recoverCandidateH11(phase, splitOrFixture, hashOrPreflight));
   }
   if (command === 'freeze-safety') {
     assert(args.length === 4, 'crm025_safety_freeze_arguments');
@@ -404,7 +476,7 @@ async function main(args) {
       return observe(run, slot);
     });
     await status(phase, split, run.segments, run.candidateRecovery);
-    assert(meter.safe || isRecoveredCandidateIncident(slot.key, run.freezeHash, meter, run.candidateRecovery?.value),
+    assert(meter.safe || isRecoveredCandidateIncident(slot.key, run.freezeHash, meter, recoveryFor(run.candidateRecovery, slot.key)),
       'crm025_result_requires_review');
   }
 }

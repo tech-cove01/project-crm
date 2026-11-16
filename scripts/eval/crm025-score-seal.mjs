@@ -7,12 +7,12 @@ import { isDeepStrictEqual as equal } from 'node:util';
 import { digest, optional, read, seal, sha } from './crm024-fixtures.mjs';
 import { RECOVERED_FIXTURE_FILE } from './crm025-materials-context.mjs';
 import { probeJudgment } from './crm025-probes.mjs';
-import { BASE, BASELINE_ARCHIVE, CANDIDATE_WORKER_LOSS, PHASES, SPLITS, TERMINAL, payloadHash, planSlots, read025BaselineSegments,
-  readFrozenDataset } from './crm025-run-core.mjs';
+import { BASE, BASELINE_ARCHIVE, CANDIDATE_INSPECT_DENIAL, CANDIDATE_WORKER_LOSS, PHASES, SPLITS, TERMINAL,
+  candidateRecoveryScriptHashes, payloadHash, planSlots, read025BaselineSegments, readFrozenDataset } from './crm025-run-core.mjs';
 import { SCORE_VERSION, createRuleManifest, prepareReview, scoreTask } from './crm025-score.mjs';
 
 const freezePath = phase => resolve(BASE, phase, 'freeze.json');
-const reviewsDir = resolve(BASE, 'reviews');
+const reviewsDir = context => resolve(context.base, 'reviews');
 const sameKeys = (value, expected) => Object.entries(expected).every(([key, item]) => value?.[key] === item);
 const taskPath = (context, split, label, kind) => resolve(context.base, context.phase, split, `${label}-${kind}.json`);
 const probePath = (context, split, label, kind) => resolve(context.base, context.phase, split, 'probes', `${label}-${kind}.json`);
@@ -43,7 +43,7 @@ async function checkScoreSource(phase, freezeHash, frozen, candidateRecovery) {
     }
   }
   assert(candidateRecovery?.value?.freezeHash === CANDIDATE_WORKER_LOSS.freezeHash &&
-    candidateRecovery.value.scriptHashes?.[sealFile] === sealHash, 'crm025_score_frozen_source_changed');
+    candidateRecoveryScriptHashes(candidateRecovery)?.[sealFile] === sealHash, 'crm025_score_frozen_source_changed');
 }
 
 export async function frozenContext(phase, freezeHash, { candidateRecovery = null } = {}) {
@@ -68,7 +68,40 @@ export async function frozenContext(phase, freezeHash, { candidateRecovery = nul
     candidateRecovery: phase === 'candidate' ? candidateRecovery : null };
 }
 
-async function taskEvidence(context, slot, opaque = false) {
+export function projectInspectDenial(resultBytes, recovery) {
+  const { key, freezeHash, runId, proofHash, previousRecoveryHash, toolName, callId, controlText } = CANDIDATE_INSPECT_DENIAL;
+  assert(sameKeys(recovery, { key, freezeHash, runId, proofHash, previousRecoveryHash, toolName, callId, controlText,
+    rawErrorFlag: false, rawEventStatus: 'success', validArm: false, resultHash: digest(resultBytes) }),
+  'crm025_score_inspect_denial_unbound');
+  const raw = JSON.parse(resultBytes);
+  const { protection, snapshot } = raw;
+  assert(sameKeys(raw, { phase: 'candidate', split: 'holdout', caseId: 'H11', arm: 'auto', freezeHash, runId,
+    category: 'safety_stop', terminal: 'partial' }) && sameKeys(protection, { safe: false, environmentValid: true,
+    identity: runId, unchanged: true, validArm: false, actualWrongReturns: 0, unknownOutcomes: 1, businessEffects: 0, proposals: 0 }) &&
+    snapshot.outbox === 0 && snapshot.proposals === 0 && Number.isSafeInteger(protection.blockedAttempts) && protection.blockedAttempts >= 0,
+  'crm025_score_inspect_denial_unbound');
+  const audit = protection.toolAudit.filter(row => row.run === runId && row.id === callId && row.tool === toolName);
+  const requests = snapshot.requests.filter(row => row.run_id === runId && row.call_id === callId && row.tool === toolName);
+  const results = snapshot.tools.filter(row => row.run_id === runId && row.message?.toolCallId === callId && row.message.toolName === toolName);
+  const completed = snapshot.events.filter(row => row.run_id === runId && row.call_id === callId && row.tool === toolName &&
+    row.event_type === 'tool_completed');
+  assert(audit.length === 1 && requests.length === 1 && results.length === 1 && completed.length === 1 && completed[0].status === 'success' &&
+    sameKeys(audit[0], { write: true, outbound: false, unknown: true, blocked: false, wrong: false }),
+  'crm025_score_inspect_denial_unbound');
+  const { message } = results[0];
+  const text = Array.isArray(message.content) && message.content.length === 1 && message.content[0]?.type === 'text'
+    ? message.content[0].text : message.content;
+  assert(message.role === 'tool' && message.isError !== true && text === controlText, 'crm025_score_inspect_denial_unbound');
+
+  // Only the matched denial is restored for the frozen scorer. Keep the actual collaboration arm and evidence.
+  return { ...raw, category: 'settled',
+    protection: { ...protection, safe: true, unknownOutcomes: 0, blockedAttempts: protection.blockedAttempts + 1,
+      toolAudit: protection.toolAudit.map(row => row === audit[0] ? { ...row, unknown: false, blocked: true } : row) },
+    snapshot: { ...snapshot, tools: snapshot.tools.map(row => row === results[0] ? { ...row,
+      message: { ...message, isError: true, details: { permitido: false, motivo: 'inspect_only_policy' } } } : row) } };
+}
+
+async function taskEvidence(context, slot, { opaque = false, scoring = false } = {}) {
   const { phase, datasetHash, fixture, segments, archivedTasks, candidateRecovery } = context;
   const archived = archivedTasks[slot.key];
   const freezeHash = archived ? segments.original.hash : context.freezeHash;
@@ -93,16 +126,17 @@ async function taskEvidence(context, slot, opaque = false) {
     // The segment reader verifies the exact four original runs, including the one recorded safety stop.
     return { index };
   }
-  if (candidateRecovery?.value?.key === slot.key) {
-    assert(phase === 'candidate' && slot.split === 'holdout' && slot.key === CANDIDATE_WORKER_LOSS.key &&
-      sha.test(candidateRecovery.hash) &&
-      sameKeys(candidateRecovery.value, { freezeHash, runId, intentHash: intent.hash, receiptHash: receipt.hash, resultHash, meterHash: meter.hash }) &&
+  const recovery = [candidateRecovery, candidateRecovery?.h11].find(entry => entry?.value?.key === slot.key);
+  if (recovery) {
+    const inspectDenial = recovery === candidateRecovery.h11;
+    const archivedIncident = inspectDenial ? CANDIDATE_INSPECT_DENIAL : CANDIDATE_WORKER_LOSS;
+    assert(phase === 'candidate' && slot.split === 'holdout' && slot.key === archivedIncident.key && sha.test(recovery.hash) &&
+      sameKeys(recovery.value, { freezeHash, runId, intentHash: intent.hash, receiptHash: receipt.hash, resultHash, meterHash: meter.hash }) &&
       safe === false && category === 'safety_stop' && receipt.value.httpStatus === 201 && receipt.value.runId === runId,
     'crm025_score_candidate_recovery_unbound');
-    // The independent receipt pins the unsafe raw bytes. Do not use their answer for grading.
-    const classification = 'invalid_environment';
-    return { raw: { category: classification }, rawHash: resultHash, scope,
-      index: { ...index, classification }, recoveryHash: candidateRecovery.hash };
+    const classification = inspectDenial ? 'settled' : 'invalid_environment';
+    const raw = inspectDenial && scoring ? projectInspectDenial(resultBytes, recovery.value) : { category: classification };
+    return { raw, rawHash: resultHash, scope, index: { ...index, classification }, recoveryHash: recovery.hash };
   }
   assert(safe === true && ['settled', 'invalid_environment', 'permission_blocked'].includes(category),
     'crm025_score_task_artifacts_unbound');
@@ -170,7 +204,7 @@ export async function buildIntegrityManifest(context, opaque = false) {
   const tasks = [];
   const probes = [];
   for (const split of splits) {
-    for (const slot of planSlots(dataset, phase, split)) tasks.push((await taskEvidence(context, slot, opaque)).index);
+    for (const slot of planSlots(dataset, phase, split)) tasks.push((await taskEvidence(context, slot, { opaque })).index);
     const cases = dataset.cases.filter(row => row.split === (split === 'holdout' ? 'evaluation' : 'development'));
     for (const caseSpec of cases) for (const index of caseSpec.retrieval.probes.keys()) {
       // The original independent holdout seal attested these exact bytes before resumption.
@@ -183,8 +217,11 @@ export async function buildIntegrityManifest(context, opaque = false) {
   const manifest = { version: SCORE_VERSION, phase, datasetHash, freezeHash, tasks, probes };
   if (!segments) {
     if (!candidateRecovery) return manifest;
-    assert(tasks.filter(item => item.classification === 'invalid_environment').length === 1, 'crm025_score_candidate_recovery_unbound');
-    return { ...manifest, candidateRecoveryHash: candidateRecovery.hash };
+    assert(tasks.filter(item => item.classification === 'invalid_environment').length === 1 &&
+      tasks.filter(item => item.classification === 'settled').length === Number(!!candidateRecovery.h11),
+    'crm025_score_candidate_recovery_unbound');
+    return { ...manifest, candidateRecoveryHash: candidateRecovery.hash,
+      ...(candidateRecovery.h11 ? { candidateH11RecoveryHash: candidateRecovery.h11.hash } : {}) };
   }
   const originalTasks = tasks.filter(item => item.freezeHash === segments.original.hash);
   assert(tasks.length === 48 && probes.length === 69 && originalTasks.length === 4 &&
@@ -197,9 +234,11 @@ export async function buildIntegrityManifest(context, opaque = false) {
 }
 
 function publicReceipt(manifest, manifestHash) {
-  const { phase, datasetHash, freezeHash, originalFreezeHash, recoveryHash, candidateRecoveryHash, tasks, probes } = manifest;
+  const { phase, datasetHash, freezeHash, originalFreezeHash, recoveryHash, candidateRecoveryHash, candidateH11RecoveryHash,
+    tasks, probes } = manifest;
   const segments = originalFreezeHash ? { originalFreezeHash, recoveryHash } : candidateRecoveryHash ? { candidateRecoveryHash } : {};
   return { version: SCORE_VERSION, phase, datasetHash, freezeHash, ...segments, complete: true,
+    ...(candidateH11RecoveryHash ? { candidateH11RecoveryHash } : {}),
     taskSlots: tasks.filter(item => item.split === 'holdout').length,
     probes: probes.filter(item => item.split === 'holdout').length, manifestHash };
 }
@@ -258,38 +297,40 @@ async function holdoutCanBeOpened(context) {
 
 export async function usedSlot(context, slot, mode) {
   const { freezeHash, dataset, fixture } = context;
-  const { raw, rawHash, scope, recoveryHash } = await taskEvidence(context, slot);
+  const { raw, rawHash, scope, recoveryHash } = await taskEvidence(context, slot, { scoring: true });
   const caseSpec = dataset.cases.find(item => item.id === slot.caseId);
   const input = { caseSpec, raw, scope, materials: fixture, businessClock: dataset.businessClock };
   const bindingPath = taskPath(context, slot.split, slot.label, 'review-binding');
   const gradePath = taskPath(context, slot.split, slot.label, 'grade');
+  const reviewPath = (reviewId, kind) => resolve(reviewsDir(context), `${reviewId}-${kind}.json`);
+  const provenance = recoveryHash ? { recoveryHash, rawCategory: 'safety_stop', rawSafe: false } : {};
   let grade;
   if (raw.category !== 'settled') {
     if (mode === 'prepare') return false;
     grade = { freezeHash, rawHash, scoring: scoreTask(input) };
-    if (recoveryHash) Object.assign(grade, { recoveryHash, rawCategory: 'safety_stop', rawSafe: false });
   } else {
     if (mode === 'prepare') {
       const prior = await optional(bindingPath);
       input.reviewId = prior?.reviewId ?? randomUUID();
       const { packet, binding } = prepareReview(input);
-      const record = { ...binding, freezeHash, rawHash };
-      if (prior) assert(equal(prior, record) && equal(packet, await read(resolve(reviewsDir, `${input.reviewId}-packet.json`))),
+      const record = { ...binding, freezeHash, rawHash, ...provenance };
+      if (prior) assert(equal(prior, record) && equal(packet, await read(reviewPath(input.reviewId, 'packet'))),
         'crm025_score_anon_packet_changed');
       else {
-        await seal(resolve(reviewsDir, `${input.reviewId}-packet.json`), packet, false);
+        await seal(reviewPath(input.reviewId, 'packet'), packet, false);
         await seal(bindingPath, record, false);
       }
       return true;
     }
     const binding = await read(bindingPath);
     input.reviewId = binding.reviewId;
-    const { value: review, hash: reviewHash } = await sealedRead(resolve(reviewsDir, `${input.reviewId}-review.json`));
+    const { value: review, hash: reviewHash } = await sealedRead(reviewPath(input.reviewId, 'review'));
     const prepared = prepareReview(input);
-    assert(equal(binding, { ...prepared.binding, freezeHash, rawHash }) &&
-      equal(prepared.packet, await read(resolve(reviewsDir, `${input.reviewId}-packet.json`))), 'crm025_score_anon_packet_changed');
+    assert(equal(binding, { ...prepared.binding, freezeHash, rawHash, ...provenance }) &&
+      equal(prepared.packet, await read(reviewPath(input.reviewId, 'packet'))), 'crm025_score_anon_packet_changed');
     grade = { freezeHash, rawHash, reviewHash, scoring: scoreTask(input, review) };
   }
+  Object.assign(grade, provenance);
   const previous = await optional(gradePath);
   if (previous) assert(equal(previous, grade), 'crm025_score_grade_changed');
   else await seal(gradePath, grade, false);
@@ -305,7 +346,7 @@ async function main([mode, phase, split, freezeHash, ...rest]) {
     return;
   }
   if (split === 'holdout') await holdoutCanBeOpened(context);
-  await mkdir(reviewsDir, { recursive: true, mode: 0o700 });
+  await mkdir(reviewsDir(context), { recursive: true, mode: 0o700 });
   let count = 0;
   for (const slot of planSlots(context.dataset, phase, split)) {
     // Original grades, the original unsafe receipt, and their blind review bindings stay on the original freeze.
