@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { digest } from './crm024-fixtures.mjs';
 import { auditTools, mountedTools, protectionFor } from './crm025-run-capture.mjs';
-import { ARMS, LIMITS, MODEL, PHASES, SPLITS, planSlots, readFrozenDataset, reserveSlot, verifySlotMap } from './crm025-run-core.mjs';
+import { ARMS, BASELINE, BASELINE_ARCHIVE, LIMITS, MODEL, PHASES, SAFETY_BASELINE, SPLITS, advanceLedgerSlot, planSlots,
+  readFrozenDataset, reserveSlot, safetySlots, verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
 
 const scope = { leadId: 'lead', contactId: 'contact', pipelineId: 'pipeline', stageId: 'stage' };
 const page = { pageId: 'page', sourceId: 'source', version: 2, bodyHash: digest('body') };
@@ -51,6 +52,64 @@ test('accounts for prior denials, known tokens and unknown ledger cells before r
   assert.throws(() => reserveSlot([{ ...root, specialists: 142 }], 'auto'), /crm025_batch_budget_exhausted/);
 });
 
+test('retains four original slots and begins the 44 safe slots at D03 without rebalancing', async () => {
+  const { dataset } = await readFrozenDataset();
+  const dev = planSlots(dataset, 'baseline', 'dev');
+  assert.deepEqual(Object.keys(BASELINE_ARCHIVE), dev.slice(0, 4).map(slot => slot.key));
+  assert.deepEqual(Object.keys(BASELINE_ARCHIVE).filter(key => !BASELINE_ARCHIVE[key].safe), ['baseline.D02.disabled']);
+  assert.deepEqual(safetySlots(dataset, 'dev'), dev.slice(4));
+  assert.equal(safetySlots(dataset, 'dev')[0].key, 'baseline.D03.disabled');
+  assert.deepEqual(safetySlots(dataset, 'holdout'), planSlots(dataset, 'baseline', 'holdout'));
+  assert.equal(safetySlots(dataset, 'dev').length + safetySlots(dataset, 'holdout').length, 44);
+});
+
+test('recovery requires exact safety commit, fixture identity and every no-model replay assertion', () => {
+  const expected = { databaseId: 'instance', fixtureHash: digest('recovered'), originalFixtureHash: digest('original') };
+  const counts = { roots_and_children: 10, jobs: 4, models: 12, proposals: 0, outbox: 0 };
+  const proof = { ...expected, version: 1, productCommit: SAFETY_BASELINE, fixtureVerified: true, scopeVerified: true, noModel: true,
+    requestId: randomUUID(), auditHash: digest('audits'), blockedAuditCount: 5, replayTokenRevoked: true, countBefore: counts, countAfter: counts,
+    checks: { broadNotMounted: true, broadDirectDenied: true, otherObjectDenied: true, selectedReadable: true,
+      followupExact: true, followupNoFallback: true, unscopedReadable: true } };
+  assert.doesNotThrow(() => verifyScopeReplay(proof, expected));
+  for (const mutation of [{ productCommit: BASELINE }, { databaseId: 'other-instance' }, { fixtureHash: digest('other') },
+    { originalFixtureHash: digest('other-original') }, { noModel: false }, { checks: { ...proof.checks, followupNoFallback: false } },
+    { auditHash: null }, { blockedAuditCount: 4 }, { replayTokenRevoked: false }, { countAfter: { ...counts, models: counts.models + 1 } }]) {
+    assert.throws(() => verifyScopeReplay({ ...proof, ...mutation }, expected), /crm025_scope_replay_not_verified/);
+  }
+});
+
+test('recovery can replace a key and version but cannot change selected objects, knowledge or model inputs', () => {
+  const before = { slots: { slot: { scope } }, pages: { p: page }, sourceIds: [page.sourceId], keyId: 5,
+    agent: { versionId: 'before', promptHash: digest('prompt'), toolIds: ['crm_get_lead'], modelParameters: { temperature: 0 } } };
+  const after = structuredClone(before);
+  after.keyId = 6;
+  after.agent.versionId = 'after';
+  assert.doesNotThrow(() => verifyRecoveredMaterials(before, after));
+  for (const mutation of [{ slots: { slot: { scope: { ...scope, leadId: 'other' } } } }, { pages: { p: { ...page, version: 3 } } },
+    { agent: { ...after.agent, modelParameters: { temperature: 1 } } }]) {
+    assert.throws(() => verifyRecoveredMaterials(before, { ...after, ...mutation }), /crm025_recovery_changed_original_materials/);
+  }
+});
+
+test('only the first unused slot can follow the safe ledger, with exact H10 denial and no missing receipt', () => {
+  const key = 'baseline.H10.auto', freezeHash = digest('safety freeze'), datasetHash = digest('dataset');
+  const deniedScope = { actorUserId: randomUUID(), scope, expectedHttpStatus: 403 };
+  const tag = { key, freezeHash };
+  const record = { intent: { ...tag, datasetHash, actorUserId: deniedScope.actorUserId, scope }, resultExists: true,
+    receipt: { ...tag, httpStatus: 403, errorCode: 'forbidden_role', runId: null }, meter: { ...tag, resultHash: digest('result'),
+      category: 'permission_blocked', safe: true, runId: null, input: 0, output: 0, specialists: 0, unknownInputRows: 0, unknownOutputRows: 0 } };
+  const scan = (firstUnused, evidence) => advanceLedgerSlot(firstUnused, key, freezeHash, datasetHash, deniedScope, evidence);
+  assert.equal(scan(null, record), null);
+  assert.equal(scan(null, {}), key);
+  assert.equal(scan('baseline.D03.disabled', {}), 'baseline.D03.disabled');
+  assert.throws(() => scan('baseline.D03.disabled', record), /crm025_unreconciled_or_unsafe_execution/);
+  for (const mutation of [{ meter: null }, { receipt: null }, { resultExists: false }, { meter: { ...record.meter, safe: false } },
+    { receipt: { ...record.receipt, httpStatus: 200 } }, { intent: { ...record.intent, freezeHash: digest('original freeze') } }]) {
+    assert.throws(() => scan(null, { ...record, ...mutation }), /crm025_unreconciled_or_unsafe_execution/);
+  }
+  assert.throws(() => scan(null, { ...record, intent: null }), /crm025_result_without_intent/);
+});
+
 test('legitimate scoped list empties are observations, not unknown or actual wrong returns', () => {
   const result = auditTools(snap(observation('crm_list_conversations', { contact_id: 'contact' }, { conversations: [] }),
     observation('crm_list_followups', { lead_id: 'lead' }, { lead_id: 'lead', contact_id: 'contact', retornos: [] }),
@@ -93,17 +152,25 @@ test('does not infer a three-specialist pass from a single real root', () => {
   assert.equal(protection.validArm, false);
 });
 
-test('tool mount projection uses actual runtime tools including both legacy mounted lists', async () => {
-  const actual = await mountedTools({ toolIds: ['crm_list_conversations', 'crm_get_conversation_history', 'crm_list_followups',
-    'crm_get_lead', 'crm_send_whatsapp_message', 'crm_create_stage', 'not_an_actual_tool'] }, scope, {
+test('tool mount projection uses the actual safe runtime tool surface', async () => {
+  const config = { toolIds: ['crm_list_conversations', 'crm_get_conversation_history', 'crm_list_followups',
+    'crm_get_lead', 'crm_list_leads', 'crm_search_contacts', 'crm_send_whatsapp_message', 'crm_create_stage', 'not_an_actual_tool'] };
+  const environment = {
     NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:55521', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'offline-test-anon',
     SUPABASE_SERVICE_ROLE_KEY: 'offline-test-service',
-  });
-  assert.equal(actual.root.crm_list_conversations, 'read');
+  };
+  const actual = await mountedTools(config, scope, environment);
+  assert.equal(actual.root.crm_list_conversations, undefined);
+  assert.equal(actual.root.crm_list_leads, undefined);
+  assert.equal(actual.root.crm_search_contacts, undefined);
   assert.equal(actual.root.crm_list_followups, 'read');
   assert.equal(actual.root.crm_get_conversation_history, undefined);
   assert.equal(actual.root.crm_send_whatsapp_message, undefined);
   assert.equal(actual.root.crm_create_stage, undefined);
   assert.equal(actual.root.not_an_actual_tool, undefined);
   assert.equal(actual.opportunity_diagnosis.crm_get_lead, 'read');
+  const unscoped = await mountedTools(config, {}, environment);
+  assert.equal(unscoped.root.crm_list_conversations, 'read');
+  assert.equal(unscoped.root.crm_list_leads, 'read');
+  assert.equal(unscoped.root.crm_search_contacts, 'read');
 });

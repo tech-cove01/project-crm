@@ -175,7 +175,8 @@ async function measure(context, fixture, probe, adapter, transaction) {
 }
 
 async function runProbeBatch(phase, split, freezeHash) {
-  assert(['baseline', 'candidate'].includes(phase) && ['dev', 'holdout'].includes(split) && sha.test(freezeHash) &&
+  // The original 69 baseline requests have already settled against B0. They are checked offline.
+  assert(phase === 'candidate' && ['dev', 'holdout'].includes(split) && sha.test(freezeHash) &&
     process.env.CRM025_EXECUTE === freezeHash, 'crm025_probe_frozen_scope_required');
   const [{ read025Freeze }, { crm025Transaction }, adapter] = await Promise.all([
     import('./crm025-run.mjs'), import('./crm025-materials.mjs'), import('../../lib/ai/integrations/weknora.ts'),
@@ -196,7 +197,7 @@ async function runProbeBatch(phase, split, freezeHash) {
         const bound = { phase, split, slot, caseId: scenario.id, probeNumber: i + 1, freezeHash, datasetHash: frozen.datasetHash };
         assert(digest(priorRaw) === archived.intentHash && Object.entries(bound).every(([key, val]) =>
           previousIntent[key] === val && archived[key] === val) && previousIntent.request?.query === probe.query &&
-          previousIntent.request.top === top && archived.query === probe.query && !archived.unsafe, 'crm025_probe_original_safety_stop');
+          previousIntent.request.top === top && archived.query === probe.query && archived.unsafe === false, 'crm025_probe_original_safety_stop');
         settled += 1;
         continue;
       }

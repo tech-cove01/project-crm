@@ -1,19 +1,25 @@
 /** Isolated, serial CRM-025 evaluation. Only the authenticated Workbench API can create a root. */
 import assert from 'node:assert/strict';
-import { mkdir, open, readFile, readdir, unlink } from 'node:fs/promises';
+import { access, mkdir, open, readFile, readdir, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { isDeepStrictEqual as same } from 'node:util';
 import { at, business, digest, idle, one, optional, read, seal, sha, uuid } from './crm024-fixtures.mjs';
-import { crm025Context, crm025Transaction, crm025Transport, makeScopeTask } from './crm025-materials-context.mjs';
-import { BASE, BASELINE, MODEL, PHASES, SPLITS, TERMINAL, payloadHash, planSlots, product, readFrozenDataset,
-  reserveSlot, verifySlotMap } from './crm025-run-core.mjs';
+import { crm025Context, crm025Transaction, crm025Transport, makeScopeTask, RECOVERED_FIXTURE_FILE, RECOVERED_PREFLIGHT_FILE,
+  RECOVERED_RUNTIME_FILE } from './crm025-materials-context.mjs';
+import { BASE, BASELINE_ARCHIVE, MODEL, PHASES, SAFETY_FREEZE_FILE, SCOPE_REPLAY_FILE, SPLITS, TERMINAL, payloadHash, planSlots,
+  advanceLedgerSlot, product, read025BaselineSegments, read025OriginalFreeze, read025OriginalMeters, readFrozenDataset, reserveSlot,
+  safetySlots, verifyRecoveredMaterials, verifyScopeReplay, verifySlotMap } from './crm025-run-core.mjs';
 import { findRoots, mountedTools, protectionFor, snapshot, summarizeUsage } from './crm025-run-capture.mjs';
 
-const freezePath = phase => resolve(BASE, phase, 'freeze.json');
+const freezePath = phase => phase === 'baseline' ? SAFETY_FREEZE_FILE : resolve(BASE, 'candidate', 'freeze.json');
 const pathFor = (slot, kind) => resolve(BASE, slot.phase, slot.split, `${slot.label}-${kind}.json`);
 const wellKnownFiles = ['crm024-fixtures.mjs', 'crm024-scope-audit.mjs', 'crm022-sales.mjs'];
+const pathExists = path => access(path).then(() => true, error => {
+  if (error.code === 'ENOENT') return false;
+  throw error;
+});
 
 async function scriptHashes() {
   const files = (await readdir(import.meta.dirname)).filter(file => /^crm025-.*\.mjs$/.test(file) && !file.endsWith('.test.mjs'));
@@ -23,11 +29,12 @@ async function scriptHashes() {
 
 async function inputs(fixtureHash, preflightHash) {
   assert(sha.test(fixtureHash) && sha.test(preflightHash), 'crm025_input_hash_required');
-  const [{ dataset, datasetHash }, context, fixture, preflight] = await Promise.all([readFrozenDataset(), crm025Context(),
-    read(resolve(BASE, 'fixtures.json'), fixtureHash), read(resolve(BASE, 'preflight.json'), preflightHash)]);
+  const [{ dataset, datasetHash }, context, fixture, preflight] = await Promise.all([readFrozenDataset(), crm025Context({ recovered: true }),
+    read(RECOVERED_FIXTURE_FILE, fixtureHash), read(RECOVERED_PREFLIGHT_FILE, preflightHash)]);
   assert(fixture.org === context.org && fixture.databaseId === context.databaseId && fixture.datasetHash === datasetHash &&
     fixture.environmentHash === context.environmentHash && preflight.ready === true && preflight.fixtureHash === fixtureHash &&
-    preflight.datasetHash === datasetHash && preflight.environmentHash === context.environmentHash, 'crm025_preflight_unbound');
+    preflight.datasetHash === datasetHash && preflight.environmentHash === context.environmentHash &&
+    preflight.noModel === true && same(preflight.sourceIds, fixture.sourceIds), 'crm025_preflight_unbound');
   return { dataset, datasetHash, context, fixture, preflight };
 }
 
@@ -56,16 +63,38 @@ async function productConfig(q, c, fixture) {
   return config;
 }
 
-async function freeze(phase, fixtureHash, preflightHash) {
+async function verifyRecovery(fixtureHash, fixture, recoveryHash) {
+  assert(sha.test(recoveryHash), 'crm025_scope_replay_hash_required');
+  const [original, value, meters] = await Promise.all([read025OriginalFreeze(), read(SCOPE_REPLAY_FILE, recoveryHash), read025OriginalMeters()]);
+  const old = await read(resolve(BASE, 'fixtures.json'), original.frozen.fixtureHash);
+  verifyScopeReplay(value, { fixtureHash, originalFixtureHash: original.frozen.fixtureHash, databaseId: old.databaseId });
+  verifyRecoveredMaterials(old, fixture);
+  return { previous: { originalFreezeHash: original.hash, recoveryHash }, meters };
+}
+
+async function freeze(phase, fixtureHash, preflightHash, recoveryHash) {
   const live = product(phase);
   const { dataset, datasetHash, context, fixture } = await inputs(fixtureHash, preflightHash);
   verifySlotMap(dataset, fixture);
+  const recovery = phase === 'baseline' ? await verifyRecovery(fixtureHash, fixture, recoveryHash) : null;
+  const previous = recovery?.previous ?? await candidatePrevious(fixtureHash, preflightHash);
   const { createRuleManifest } = await import('./crm025-score.mjs');
   const ruleHash = payloadHash(createRuleManifest(dataset));
   const scripts = await scriptHashes();
-  const slots = Object.fromEntries(SPLITS.map(split => [split, planSlots(dataset, phase, split)]));
+  const slots = Object.fromEntries(SPLITS.map(split => [split,
+    phase === 'baseline' ? safetySlots(dataset, split) : planSlots(dataset, phase, split)]));
+  for (const slot of Object.values(slots).flatMap(items => items)) {
+    const artifacts = await Promise.all(['intent', 'receipt', 'meter', 'result'].map(kind => pathExists(pathFor(slot, kind))));
+    assert(artifacts.every(present => !present), 'crm025_fixture_already_used_or_changed');
+  }
   const config = await crm025Transaction(context, true, async q => {
     await idle(q, context);
+    for (const meter of recovery?.meters ?? []) {
+      const scope = fixture.slots[meter.key];
+      const root = one(await findRoots(q, context.org, scope.scope));
+      assert(root.id === meter.runId && TERMINAL.has(root.status) && !root.busy &&
+        same(await business(q, context, scope), scope.preState), 'crm025_historical_root_or_business_state_changed');
+    }
     for (const slot of Object.values(slots).flatMap(items => items)) {
       const scope = fixture.slots[slot.key];
       assert(same(await business(q, context, scope), scope.preState) && !(await findRoots(q, context.org, scope.scope)).length,
@@ -74,82 +103,71 @@ async function freeze(phase, fixtureHash, preflightHash) {
     return productConfig(q, context, fixture);
   });
   const mounted = await mountedTools(config, fixture.slots[slots.dev[0].key].scope, context.env);
+  assert(mounted.root.crm_get_lead === 'read' && mounted.root.crm_get_contact === 'read' &&
+    ['crm_list_leads', 'crm_list_conversations', 'crm_search_contacts'].every(tool => !Object.hasOwn(mounted.root, tool)),
+  'crm025_fixed_scope_tools_not_applied');
   const currentLogicalIds = dataset.cases[0].sourcePolicy.authorizedSourceIds;
   const pages = Object.fromEntries(currentLogicalIds.map(id => [id, fixture.pages[id]]));
   assert(Object.values(pages).every(page => page?.pageId && config.sourceIds.includes(page.sourceId) &&
     sha.test(page.bodyHash) && Number.isSafeInteger(page.version)), 'crm025_current_page_map_missing');
-  let previous = null;
   if (phase === 'candidate') {
-    const path = resolve(BASE, 'baseline', 'holdout-seal.json');
-    const [baseline, receipt] = await Promise.all([read(freezePath('baseline')), read(path)]);
-    const baselineHash = digest(await readFile(freezePath('baseline')));
-    assert(receipt.complete === true && receipt.phase === 'baseline' && receipt.taskSlots === 32 && receipt.probes === 48 && sha.test(receipt.manifestHash) &&
-      receipt.datasetHash === datasetHash && receipt.freezeHash === baselineHash && baseline.datasetHash === datasetHash &&
-      baseline.ruleHash === ruleHash && baseline.fixtureHash === fixtureHash && same(baseline.config, config), 'crm025_baseline_seal_mismatch');
-    const meters = await ledger(dataset, true);
-    assert.equal(meters.length, 48, 'crm025_baseline_unfinished');
-    const devProbes = await sealedDevProbes(dataset, datasetHash, baselineHash);
-    previous = { freezeHash: baselineHash, holdoutSealHash: digest(await readFile(path)), devProbeManifestHash: payloadHash(devProbes) };
+    const safety = await read(SAFETY_FREEZE_FILE, previous.safetyFreezeHash);
+    assert(safety.ruleHash === ruleHash && same(safety.config, config), 'crm025_baseline_seal_mismatch');
   }
   await mkdir(resolve(BASE, phase), { recursive: true });
-  return seal(freezePath(phase), { version: 1, at: at(), phase, datasetHash, fixtureHash, preflightHash, ruleHash,
-    environmentHash: context.environmentHash, productHash: live.hash, productCommit: phase === 'baseline' ? BASELINE : live.commit,
+  return seal(freezePath(phase), { version: 1, at: at(), phase, segment: phase === 'baseline' ? 'safe' : 'candidate',
+    datasetHash, fixtureHash, preflightHash, ruleHash,
+    environmentHash: context.environmentHash, productHash: live.hash, productCommit: live.productCommit,
     committingHead: live.commit, scriptHashes: scripts, config, sourceIds: config.sourceIds, slots, mounted, pages, previous });
 }
 
-async function sealedDevProbes(dataset, datasetHash, freezeHash) {
-  const output = [];
-  for (const item of dataset.cases.filter(row => row.split === 'development')) {
-    for (const [index, probe] of item.retrieval.probes.entries()) {
-      const label = `${item.id}-${index + 1}`;
-      const dir = resolve(BASE, 'baseline', 'dev', 'probes');
-      const intentPath = resolve(dir, `${label}-intent.json`);
-      const resultPath = resolve(dir, `${label}-result.json`);
-      const [intent, result, intentBytes, resultBytes] = await Promise.all([read(intentPath), read(resultPath), readFile(intentPath), readFile(resultPath)]);
-      const contract = { datasetHash, freezeHash, phase: 'baseline', split: 'dev', caseId: item.id, probeNumber: index + 1, slot: label };
-      assert(Object.entries(contract).every(([key, value]) => intent[key] === value && result[key] === value) &&
-        result.intentHash === digest(intentBytes) && intent.request?.query === probe.query && intent.request.top === 5 &&
-        result.query === probe.query && result.unsafe === false, 'crm025_baseline_probe_binding_changed');
-      output.push({ label, intentHash: result.intentHash, resultHash: digest(resultBytes) });
-    }
-  }
-  assert(output.length === 21, 'crm025_baseline_dev_probes_unfinished');
-  return output;
+async function candidatePrevious(fixtureHash, preflightHash) {
+  const safetyFreezeHash = digest(await readFile(SAFETY_FREEZE_FILE));
+  const segments = await read025BaselineSegments(safetyFreezeHash);
+  assert(segments.safety.frozen.fixtureHash === fixtureHash && segments.safety.frozen.preflightHash === preflightHash,
+    'crm025_candidate_uses_different_recovered_materials');
+  const { sealedBaselinePrevious } = await import('./crm025-score-seal.mjs');
+  return sealedBaselinePrevious(safetyFreezeHash);
 }
 
 export async function read025Freeze(phase, freezeHash) {
   assert(PHASES.includes(phase) && sha.test(freezeHash), 'crm025_phase_freeze_required');
   const frozen = await read(freezePath(phase), freezeHash);
   const data = await inputs(frozen.fixtureHash, frozen.preflightHash);
-  const live = product(phase);
+  const live = product(phase, frozen.productCommit);
   const { createRuleManifest } = await import('./crm025-score.mjs');
-  assert(frozen.phase === phase && frozen.productHash === live.hash && frozen.datasetHash === data.datasetHash &&
+  assert(frozen.phase === phase && frozen.productCommit === live.productCommit && frozen.productHash === live.hash && frozen.datasetHash === data.datasetHash &&
     frozen.ruleHash === payloadHash(createRuleManifest(data.dataset)) && frozen.environmentHash === data.context.environmentHash &&
     same(frozen.scriptHashes, await scriptHashes()), 'crm025_execution_freeze_changed');
-  return { ...data, frozen, freezeHash };
+  const safetyHash = phase === 'baseline' ? freezeHash : frozen.previous?.safetyFreezeHash;
+  const segments = await read025BaselineSegments(safetyHash);
+  if (phase === 'candidate') {
+    assert(same(frozen.previous, await candidatePrevious(frozen.fixtureHash, frozen.preflightHash)) &&
+      frozen.segment === 'candidate' && SPLITS.every(split => same(frozen.slots[split], planSlots(data.dataset, phase, split))),
+    'crm025_candidate_baseline_binding_changed');
+  }
+  return { ...data, frozen, freezeHash, segments };
 }
 
-async function ledger(dataset, baselineOnly = false) {
-  const meters = [];
-  for (const phase of baselineOnly ? ['baseline'] : PHASES) {
-    const freeze = await optional(freezePath(phase));
-    if (!freeze) continue;
-    const hash = digest(await readFile(freezePath(phase)));
-    for (const split of SPLITS) {
-      for (const slot of planSlots(dataset, phase, split)) {
-        const intent = await optional(pathFor(slot, 'intent'));
-        if (!intent) continue;
-        const meter = await optional(pathFor(slot, 'meter'));
-        assert(meter?.safe === true && sha.test(meter.resultHash) && meter.freezeHash === hash && intent.freezeHash === hash &&
-          meter.key === slot.key && intent.key === slot.key && ['input', 'output', 'specialists', 'unknownInputRows', 'unknownOutputRows']
-            .every(field => Number.isSafeInteger(meter[field]) && meter[field] >= 0), 'crm025_unreconciled_or_unsafe_execution');
-        // Hash opaque bytes here so development execution never consumes holdout answers or scores.
-        assert(digest(await readFile(pathFor(slot, 'result'))) === meter.resultHash, 'crm025_result_changed');
-        meters.push(meter);
-      }
+async function ledger(run) {
+  const meters = [...run.segments.meters];
+  let firstUnused = null;
+  for (const phase of PHASES) {
+    const hash = phase === 'baseline' ? run.segments.safety.hash :
+      (await pathExists(freezePath(phase)) ? digest(await readFile(freezePath(phase))) : null);
+    for (const slot of SPLITS.flatMap(split => phase === 'baseline' ? safetySlots(run.dataset, split) : planSlots(run.dataset, phase, split))) {
+      const [intent, meter, receipt, resultExists] = await Promise.all([
+        optional(pathFor(slot, 'intent')), optional(pathFor(slot, 'meter')), optional(pathFor(slot, 'receipt')), pathExists(pathFor(slot, 'result')),
+      ]);
+      firstUnused = advanceLedgerSlot(firstUnused, slot.key, hash, run.datasetHash, run.fixture.slots[slot.key],
+        { intent, meter, receipt, resultExists });
+      if (!intent) continue;
+      // Hash opaque bytes here so development execution never consumes holdout answers or scores.
+      assert(digest(await readFile(pathFor(slot, 'result'))) === meter.resultHash, 'crm025_result_changed');
+      meters.push(meter);
     }
   }
-  return meters;
+  return { meters, firstUnused };
 }
 
 async function recordResult(run, slot, record) {
@@ -213,7 +231,10 @@ async function observe(run, slot) {
   const snap = await crm025Transaction(context, true, q => snapshot(q, context, root.id, scope));
   const current = snap.runs.find(row => row.id === root.id);
   const protection = protectionFor(snap, payload, scope, frozen, context.org);
-  if (scope.expectedHttpStatus !== 201) protection.environmentValid = false;
+  if (scope.expectedHttpStatus !== 201) {
+    protection.environmentValid = false;
+    protection.safe = false;
+  }
   if (!receipt) {
     receipt = { at: at(), key: slot.key, freezeHash, httpStatus: null, runId: current.id,
       errorCode: null, requestId: null, source: 'read_only_database_reconciliation' };
@@ -231,9 +252,11 @@ async function observe(run, slot) {
 async function submit(run, slot) {
   const scope = run.fixture.slots[slot.key];
   const payload = payloadFor(run, slot, scope);
-  assert(product(slot.phase).hash === run.frozen.productHash && same(await scriptHashes(), run.frozen.scriptHashes) &&
-    digest(await readFile(resolve(BASE, 'runtime.env'))) === run.frozen.environmentHash, 'crm025_pre_submit_source_changed');
-  const used = reserveSlot(await ledger(run.dataset), slot.arm);
+  assert(product(slot.phase, run.frozen.productCommit).hash === run.frozen.productHash && same(await scriptHashes(), run.frozen.scriptHashes) &&
+    digest(await readFile(RECOVERED_RUNTIME_FILE)) === run.frozen.environmentHash, 'crm025_pre_submit_source_changed');
+  const ledgerState = await ledger(run);
+  assert(ledgerState.firstUnused === slot.key, 'crm025_next_frozen_slot_required');
+  const used = reserveSlot(ledgerState.meters, slot.arm);
   await crm025Transaction(run.context, true, async q => {
     await idle(q, run.context);
     const member = one(await q('select role from user_organizations where organization_id=$1::uuid and user_id=$2::uuid and revoked_at is null and accepted_at is not null',
@@ -268,27 +291,40 @@ async function exclusively(action) {
   }
 }
 
-async function status(phase, split) {
+async function status(phase, split, segments = null) {
   const { dataset } = await readFrozenDataset();
   const slots = planSlots(dataset, phase, split);
   const meter = await Promise.all(slots.map(slot => optional(pathFor(slot, 'meter'))));
   const intent = await Promise.all(slots.map(slot => optional(pathFor(slot, 'intent'))));
+  const archived = row => segments && row && BASELINE_ARCHIVE[row.key]?.safe === false &&
+    segments.meters.some(original => same(original, row));
   console.info(JSON.stringify({ phase, split, planned: slots.length, submitted: intent.filter(Boolean).length,
     settled: meter.filter(Boolean).length, roots: meter.filter(row => row?.runId).length,
     denied: meter.filter(row => row?.category === 'permission_blocked').length,
-    paused: meter.filter(row => row && !row.safe).length }));
+    archivedIncidents: meter.filter(archived).length, paused: meter.filter(row => row && !row.safe && !archived(row)).length }));
 }
 
 async function main(args) {
   const [command, phase, splitOrFixture, hashOrPreflight, reconcileSlot] = args;
   if (!command || ['help', '--help'].includes(command)) {
-    console.info('freeze <phase> <fixture-sha> <preflight-sha> | run <phase> <split> <freeze-sha> | reconcile <phase> <split> <freeze-sha> <case-arm> | status <phase> <split>');
+    console.info('freeze-safety <fixture-sha> <preflight-sha> <scope-replay-sha> | freeze candidate <fixture-sha> <preflight-sha>');
+    console.info('run <phase> <split> <freeze-sha> | reconcile <phase> <split> <freeze-sha> <case-arm> | status <phase> <split>');
     return;
   }
-  if (command === 'freeze') return freeze(phase, splitOrFixture, hashOrPreflight);
+  if (command === 'freeze-safety') {
+    assert(args.length === 4, 'crm025_safety_freeze_arguments');
+    return exclusively(() => freeze('baseline', phase, splitOrFixture, hashOrPreflight));
+  }
+  if (command === 'freeze') {
+    assert(args.length === 4 && phase === 'candidate', 'crm025_original_baseline_archived');
+    return exclusively(() => freeze(phase, splitOrFixture, hashOrPreflight));
+  }
   const split = splitOrFixture;
   assert(PHASES.includes(phase) && SPLITS.includes(split), 'crm025_invalid_batch');
-  if (command === 'status') return status(phase, split);
+  if (command === 'status') {
+    const segments = await pathExists(SAFETY_FREEZE_FILE) ? await read025BaselineSegments(digest(await readFile(SAFETY_FREEZE_FILE))) : null;
+    return status(phase, split, segments);
+  }
   assert(['run', 'reconcile'].includes(command), 'crm025_invalid_command');
   const run = await read025Freeze(phase, hashOrPreflight);
   assert(command === 'reconcile' || process.env.CRM025_EXECUTE === run.freezeHash, 'crm025_exact_opt_in_required');
@@ -302,7 +338,7 @@ async function main(args) {
       if (command === 'run' && !(await optional(pathFor(slot, 'intent')))) await submit(run, slot);
       return observe(run, slot);
     });
-    await status(phase, split);
+    await status(phase, split, run.segments);
     assert(meter.safe, 'crm025_result_requires_review');
   }
 }
