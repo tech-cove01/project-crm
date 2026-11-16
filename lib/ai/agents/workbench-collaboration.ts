@@ -389,13 +389,91 @@ function policyRequirement(task: string): PolicyRequirement | null {
   };
 }
 
+const crmFieldRead = String.raw`(?:请\s*)?(?:只|仅)(?:需)?\s*(?:核对|核|确认|查询|查看)\s*`;
+const noPolicy = String.raw`(?:无需|不需要|不用|不必)\s*(?:(?:查阅|查询|查|核对|检索)\s*)?(?:(?:公司|企业|组织)\s*)?(?:政策(?:或(?:企业|公司|组织)资料)?|(?:企业|公司|组织)资料)`;
+const crmField = String.raw`(?:(?:这笔)?商机的?)?(?:当前的?)?(?:金额|阶段|标题|币种|状态|预计(?:关闭|关单)日期|联系人(?:的)?姓名)`;
+const directCrmCheck = new RegExp(
+  `^${crmFieldRead}${crmField}(?:\\s*(?:以及|和|及|与|[、,])\\s*${crmField})*` +
+    `(?:\\s*[,;。\\n]\\s*${noPolicy})?\\s*[。.!]?$`,
+  "i",
+);
+const crmScopeExclusion = new RegExp(
+  `^${crmFieldRead}(?:这(?:两个|几项|些)\\s*)?CRM\\s*字段\\s*[,;]\\s*${noPolicy}$`,
+  "i",
+);
+const crmFieldScope = /^(?:这是)?范围内的\s*CRM\s*核对\s*[;,]\s*(?:只需|仅需|只|仅)(?:回答|核对)指定(?:的)?字段$/i;
+const crmFieldDeclaration = /^请(?:取得|获取)(?:实际)?依据并(?:回答|核对)\s*:\s*(.+)$/;
+const crmFieldNames = /^(?:stage_id|value_cents|contact_name|lead_title|expected_close_date|currency|status)$/;
+const crmReadPresentation = new Set([
+  "只处理指定商机与关联客户",
+  "备注留有旧销售快照",
+  "若与当前结构化字段冲突,按权威的当前 CRM 字段填写",
+  "核对这笔商机当前是否仍开放,并确认金额使用的币种",
+  "旧备注留有预计关单日期和币种",
+  "核对当前权威 CRM 的日期、币种和关联联系人,按当前结构化记录回答",
+  "status 使用 CRM 原值,currency 使用币种原值",
+  "expected_close_date 若为 null 就留空并引用实际商机;currency 及 contact_name 使用当前原值",
+  "fields 逐键填写结果,缺失填 null",
+  "sources 使用同一字段键,直接取证可引用实际商机、联系人或知识证据 UUID,来自专家记录的材料可引用该专家 Run UUID;对缺失的政策填 null",
+  "sources 用同键引用本次成功观察的 CRM 对象、授权知识回执 UUID 或实际专家 Run UUID",
+  "对缺失的政策填 null",
+  "正常空政策项的引用填 null",
+  "请在结构化 evidence 也给出对应引用",
+  "结构化 evidence 同时列出真实引用",
+  "不存在的日期、金额或政策不猜测",
+  "不提案、不改变任何 CRM 对象、不外发",
+  "不提案、不外发",
+  "禁止提案、修改、通知或外发",
+]);
+
+function crmFieldList(declaration: string): boolean {
+  let fields = "";
+  let labelDepth = 0;
+  for (const char of declaration) {
+    if (char === "(") labelDepth += 1;
+    else if (char === ")") {
+      if (labelDepth === 0) return false;
+      labelDepth -= 1;
+    } else if (labelDepth === 0) fields += char;
+  }
+  return labelDepth === 0 && fields.split(/[、,]/).every(key => crmFieldNames.test(key.trim()));
+}
+
 function crmFieldsOnly(task: string): boolean {
-  if (!/^这是范围内的 CRM 核对；只需回答指定字段。$/m.test(task) ||
-      task.includes("企业知识搜索词")) return false;
-  const fields = /^请取得实际依据并回答：(.+)。$/m.exec(task)?.[1];
-  return /不需要政策或企业资料。$/m.test(task) || (fields !== undefined &&
-    fields.split("、").every(field =>
-      /^(?:stage_id|value_cents|contact_name|lead_title|expected_close_date)（[^）]+）$/.test(field)));
+  const normalized = task.normalize("NFKC").trim();
+  if (directCrmCheck.test(normalized)) return true;
+  // Keep the older structured field-list contract. Each surrounding clause
+  // must be recognized as scope or presentation, regardless of policy keywords.
+  let declaredScope = false;
+  let selectedFields = false;
+  for (const part of normalized.split(/[。!?\r\n]+/)) {
+    const clause = part.trim();
+    if (!clause || crmReadPresentation.has(clause)) continue;
+    if (/^(?:\[[^\]\r\n]+\]\s*)?合成资料的只读销售核对$/.test(clause)) continue;
+    if (/^(?:只处理指定)?商机 [\w{}-]+(?:,联系人 | 及关联联系人 )[\w{}-]+$/.test(clause)) continue;
+    if (/^请把 submit_workbench_result\.summary 写成纯 JSON 对象(?:,恰有 fields 和 sources 两个对象)?$/.test(clause)) continue;
+    const formatFields = /^submit_workbench_result\.summary 只交 JSON 对象,恰含 fields 和 sources,两个对象都使用这些键:(.+)$/.exec(clause)?.[1];
+    if (formatFields !== undefined) {
+      if (!formatFields.split(/[、,]/).every(key => crmFieldNames.test(key.trim()))) return false;
+      continue;
+    }
+    if (crmFieldScope.test(clause)) {
+      declaredScope = true;
+      continue;
+    }
+    const declaration = crmFieldDeclaration.exec(clause)?.[1];
+    if (declaration !== undefined) {
+      if (/请|判断|政策|折扣|审批|授权|条款|承诺/.test(declaration) || !crmFieldList(declaration)) return false;
+      selectedFields = true;
+      continue;
+    }
+    if (crmScopeExclusion.test(clause)) {
+      selectedFields = true;
+      continue;
+    }
+    return false;
+  }
+  return declaredScope && selectedFields;
 }
 
 function policyEvidenceStatus(

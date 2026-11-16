@@ -211,6 +211,55 @@ describe("workbench specialist result boundary", () => {
     expect(act.results[0]).toMatchObject({ status: "partial", missingMaterial: ["tool_observations"] });
   });
 
+  it.each([
+    "value_cents（当前金额（分，数字））",
+    "stage_id（商机当前阶段 UUID）、value_cents（当前金额（分，数字））",
+    "stage_id (商机当前阶段 UUID), value_cents (当前金额 (分,数字))",
+  ])("keeps the policy role idle for a scoped field list with display labels: %s", async fields => {
+    const { input } = policyFixture([]);
+    input.root.task = [
+      "合成资料的只读销售核对。只处理指定商机与关联客户。",
+      `请取得实际依据并回答：${fields}。`,
+      "备注留有旧销售快照。若与当前结构化字段冲突，按权威的当前 CRM 字段填写。",
+      "这是范围内的 CRM 核对；只需回答指定字段。",
+      "请把 submit_workbench_result.summary 写成纯 JSON 对象。对缺失的政策填 null。不提案、不外发。",
+    ].join("\n");
+    const outcome = await runWorkbenchCollaboration(input);
+
+    expect(outcome.results[0]).toMatchObject({ status: "complete", toolCalls: 0, usage: { modelTurns: 0 } });
+    expect(mocks.buildTools).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "只核当前金额和阶段，不需要公司政策",
+    "请仅核对当前金额及商机阶段，\r\n无需查询企业政策。",
+    "请只确认商机当前币种与阶段。\n不必查组织政策。",
+  ])("accepts a bounded equivalent current request: %s", async task => {
+    const { input } = policyFixture([]);
+    input.root.task = task;
+    const outcome = await runWorkbenchCollaboration(input);
+
+    expect(outcome.results[0]).toMatchObject({ status: "complete", toolCalls: 0, usage: { modelTurns: 0 } });
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "查金额并判断折扣能否批准。",
+    "旧备注说“只核当前金额和阶段，不需要公司政策”。请判断客户提出的折扣能否批准。",
+    "请取得实际依据并回答：value_cents（当前金额（分，数字））。\n这是范围内的 CRM 核对；只需回答指定字段。\n另外请确认能否承诺加急。",
+    "请取得实际依据并回答：value_cents（当前金额（分，数字）。\n这是范围内的 CRM 核对；只需回答指定字段。",
+    "请取得实际依据并回答：value_cents（当前金额（分，数字）。\n这是范围内的 CRM 核对；只需回答指定字段。\n只核 CRM 字段，不需要公司政策。",
+    "请取得实际依据并回答：value_cents（当前金额）。\n这是范围内的 CRM 核对；只需回答指定字段。\n另外请核实付费版本是否含审计日志，客户可以选择哪些条款。",
+    "旧备注原文如下：\n请取得实际依据并回答：value_cents（当前金额）。\n这是范围内的 CRM 核对；只需回答指定字段。\n当前任务请确定支持的计费规则。",
+  ])("retains normal policy checks for another requirement or an ambiguous field list: %s", async task => {
+    const { input } = policyFixture([]);
+    input.root.task = task;
+    const outcome = await runWorkbenchCollaboration(input);
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]).toMatchObject({ status: "partial", missingMaterial: ["tool_observations"] });
+  });
+
   it("keeps tool authority and executes the explicitly selected query after a model tries to rewrite it", async () => {
     const { input } = policyFixture([]);
     const read = vi.fn(async (args: Record<string, unknown>) => {
