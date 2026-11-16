@@ -7,7 +7,7 @@ import { parseEnv, isDeepStrictEqual as same } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { ROOT, at, business, digest, idle, one, optional, read, seal, sha, uuid } from './crm024-fixtures.mjs';
 import { AUTH_ORIGIN, BASELINE, DATASET_HASH, FIXTURE_FILE, MATERIAL_ROOT, PLAN_FILE, RUNTIME_FILE,
-  SALES_ACTOR, crm025Context, crm025Transaction, read025Dataset } from './crm025-materials-context.mjs';
+  SALES_ACTOR, crm025Context, crm025Transaction, loadMaterials, read025Dataset } from './crm025-materials-context.mjs';
 import { ALPHA_TENANT, createWikiAccess, inspectWiki, pagePath, readSeededWiki, retrieve, revokeWikiAccess, seedWiki, wikiAccessProof,
   wikiTransaction } from './crm025-materials-wiki.mjs';
 
@@ -345,8 +345,8 @@ export async function inspectCrm(c, fixture, dataset, withdrawn) {
 
 async function cleanup(hash) {
   optIn(hash);
-  const c = await crm025Context();
-  const fixture = await read(FIXTURE_FILE, hash), { plan } = c;
+  const c = await loadMaterials(hash);
+  const { materials: fixture, plan } = c;
   assert(fixture.keyId === c.fixture.keyId && fixture.planHash === digest(await readFile(PLAN_FILE)), 'crm025_exact_cleanup_identity_required');
   await seal(local('cleanup-intent.json'), { at: at(), fixtureHash: hash, sourceId: plan.source.current, keyId: fixture.keyId,
     restoreVersionId: plan.restoredAgentVersionId, salesActor: fixture.actorScopes.sales.id }, false);
