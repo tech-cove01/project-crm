@@ -33,7 +33,7 @@ async function transaction<T>(pool: Pool, run: (client: PoolClient) => Promise<T
 }
 
 async function hasOntologyStageAuthorization(
-  client: PoolClient,
+  client: Pick<Pool, "query">,
   input: ApprovalCoordinates & { actorUserId: string },
 ): Promise<boolean> {
   const { rows } = await client.query<{ authorized: boolean }>(
@@ -182,25 +182,26 @@ export async function beginWorkbenchDeferredStageApproval(pool: Pool, input: App
 }
 
 /** Never enter a tool after a cancellation or stale decision is already visible. */
-export async function assertWorkbenchApprovedActionCurrent(pool: Pool, input: {
-  organizationId: string; runId: string; proposalId: string;
+export async function assertWorkbenchApprovedActionCurrent(queryable: Pick<Pool, "query">, input: ApprovalCoordinates & {
+  recheckDeferredStage?: true;
 }): Promise<void> {
-  await pool.query("select public.fn_assert_ai_collaboration_write_allowed($1,$2)", [input.organizationId, input.runId]);
-  const { rows } = await pool.query<{ current: boolean }>(
-    `select exists (
-       select 1 from public.ai_workbench_runs r
+  await queryable.query("select public.fn_assert_ai_collaboration_write_allowed($1,$2)", [input.organizationId, input.runId]);
+  const { rows: [current] } = await queryable.query<{ decision_by: string | null }>(
+    `select p.decision_by from public.ai_workbench_runs r
        join public.ai_agent_action_proposals p
          on p.organization_id=r.organization_id and p.run_id=r.id
        where r.organization_id=$1 and r.id=$2 and r.status='running'
          and p.id=$3 and p.status='approved'
+         and (not $4::boolean or (p.tool_name=$5 and p.result_summary->>'outcome'='executing'))
          and (r.mission_id is null or exists (
            select 1 from public.ai_missions m
            where m.organization_id=r.organization_id and m.id=r.mission_id
-             and m.status not in ('cancelled','completed')))
-     ) as current`,
-    [input.organizationId, input.runId, input.proposalId],
+             and m.status not in ('cancelled','completed')))`,
+    [input.organizationId, input.runId, input.proposalId, input.recheckDeferredStage === true, LEAD_STAGE_TOOL],
   );
-  if (!rows[0]?.current) throw new Error("workbench_approved_action_no_longer_current");
+  if (!current || (input.recheckDeferredStage && (!current.decision_by ||
+      !await hasOntologyStageAuthorization(queryable, { ...input, actorUserId: current.decision_by }))))
+    throw new Error("workbench_approved_action_no_longer_current");
 }
 
 /** Commit one known tool result with the private Pi observation and next job. */

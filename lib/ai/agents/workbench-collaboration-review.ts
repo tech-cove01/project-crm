@@ -385,7 +385,7 @@ export async function withCollaborationActionFence<T>(
   pool: Pool,
   organizationId: string,
   runId: string,
-  action: () => Promise<T>,
+  action: (client: PoolClient) => Promise<T>,
 ) {
   return transaction(pool, async (client) => {
     await client.query(
@@ -400,7 +400,7 @@ export async function withCollaborationActionFence<T>(
     } catch {
       throw new CollaborationReviewRequiredError();
     }
-    return action();
+    return action(client);
   });
 }
 

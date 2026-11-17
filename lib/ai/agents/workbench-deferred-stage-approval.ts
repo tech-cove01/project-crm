@@ -79,24 +79,26 @@ export async function executeDeferredWorkbenchStageApproval(input: {
       await blocked("crm_tool_unavailable");
       return;
     }
-    const result = await withCollaborationActionFence(pool, organizationId, runId, async () => {
-      const start = await claim();
-      if (start !== "claimed") return start;
-      claimed = true;
+    // Persist the execution claim before entering the fence. Its transaction
+    // holds a pool connection, and opening a second one here can stall the worker.
+    const start = await claim();
+    if (start === "blocked") await blocked("approval_no_longer_current");
+    if (start === "uncertain") await uncertain();
+    if (start !== "claimed") return;
+    claimed = true;
+    const result = await withCollaborationActionFence(pool, organizationId, runId, async (client) => {
       try {
-        await assertWorkbenchApprovedActionCurrent(pool, coordinates);
+        await assertWorkbenchApprovedActionCurrent(client, { ...coordinates, recheckDeferredStage: true });
       } catch {
         return "blocked" as const;
       }
-      await assertLease();
+      await assertLease(client);
       enteredTool = true;
       return executeApprovedWorkbenchTool({ toolName: LEAD_STAGE_TOOL, args: args.args, tools: mcp.tools as never });
     });
     if (result === "blocked") {
       await blocked("approval_no_longer_current");
-    } else if (result === "uncertain") {
-      await uncertain();
-    } else if (result !== "settled") {
+    } else {
       const outcome = await finishWorkbenchApprovedAction(pool, {
         ...coordinates, toolName: LEAD_STAGE_TOOL, expectedOutcome: "executing", assertOwner,
         result: { kind: "success", output: result.output },
@@ -108,6 +110,8 @@ export async function executeDeferredWorkbenchStageApproval(input: {
       await blocked(error instanceof CollaborationReviewRequiredError ? "collaboration_review_required" : "crm_tool_rejected");
     } else if (enteredTool) {
       await uncertain();
+    } else if (claimed) {
+      await blocked("approval_execution_not_started");
     } else {
       throw error;
     }
