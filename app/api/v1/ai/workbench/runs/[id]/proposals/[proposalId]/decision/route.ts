@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
+import { resolveWorkbenchScope, workbenchScopeInputFromRun } from "@/lib/ai/agents/workbench-scope";
 import {
   executeApprovedWorkbenchTool, NonCompensableWorkbenchWriteError, WorkbenchToolRejectedError,
 } from "@/lib/ai/agents/approved-workbench-tool";
@@ -24,6 +24,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { ASK_INTERNAL_COLLEAGUE_TOOL } from "@/lib/ai/agents/internal-question-contract";
+import { LEAD_STAGE_TOOL } from "@/lib/ai/agents/workbench-ontology-contract";
 import {
   approveProposedFeishuQuestion, InternalQuestionError,
 } from "@/lib/ai/internal-collaboration/feishu-question";
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("state_conflict", "run 当前不等待确认。", 409, { requestId });
   const { data: proposal } = await admin
     .from("ai_agent_action_proposals")
-    .select("id, sequence, tool_name, tool_args, status")
+    .select("id, sequence, tool_name, tool_args, preview, status")
     .eq("organization_id", authz.org.orgId)
     .eq("run_id", id)
     .eq("id", proposalId)
@@ -311,7 +312,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const agentBase = await loadAgentVersionConfig(
     getRequestPool(), authz.org.orgId, run.agent_id, state.versionId,
   );
-  const scopeInput = scopeInputFromRun(run.scope);
+  const scopeInput = workbenchScopeInputFromRun(run.scope);
   const agent = agentBase
     ? { ...agentBase, pipelineIds: scopeInput.pipelineId ? [scopeInput.pipelineId] : [] }
     : null;
@@ -324,6 +325,27 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   } catch {
     return fail("scope_not_found", "CRM 对象范围已变化；操作保持未执行。", 409,
       { requestId });
+  }
+  const preview = proposal.preview as { ontologyBasis?: unknown } | null;
+  if (proposal.tool_name === LEAD_STAGE_TOOL && preview?.ontologyBasis) {
+    let queued: boolean;
+    try {
+      queued = await claimWorkbenchApprovedAction(getRequestPool(), {
+        organizationId: authz.org.orgId, runId: id, proposalId,
+        toolName: proposal.tool_name, actorUserId: authz.user.id, reason: parsed.data.reason,
+        deferOntologyStage: true,
+      });
+    } catch {
+      return fail("decision_state_unknown", "批准决定状态暂未确认，请刷新运行详情。", 503, { requestId });
+    }
+    if (!queued)
+      return fail("state_conflict", "任务、提案或约见依据已变化；没有执行 CRM 工具。", 409, { requestId });
+    void audit({
+      action: "ai_workbench.action_approved", actorUserId: authz.user.id, organizationId: authz.org.orgId,
+      resourceType: "ai_agent_action_proposal", resourceId: proposalId, requestId,
+      metadata: { run_id: id, tool: proposal.tool_name, execution: "queued" },
+    });
+    return ok({ proposal_id: proposalId, status: "approved", run_status: "running" }, { requestId });
   }
   const deps = requestTurnDeps();
   const mcp = await buildMcpTurnTools(
@@ -435,14 +457,4 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   } finally {
     await mcp?.cleanup();
   }
-}
-
-function scopeInputFromRun(value: unknown) {
-  const scope = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  return {
-    ...(typeof scope.contactId === "string" ? { contactId: scope.contactId } : {}),
-    ...(typeof scope.leadId === "string" ? { leadId: scope.leadId } : {}),
-    ...(typeof scope.conversationId === "string" ? { conversationId: scope.conversationId } : {}),
-    ...(typeof scope.pipelineId === "string" ? { pipelineId: scope.pipelineId } : {}),
-  };
 }

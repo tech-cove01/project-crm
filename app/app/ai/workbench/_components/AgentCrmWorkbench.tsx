@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MissionSendControl } from "./MissionSendControl";
 import { CollaborationReviewPanel, type ReviewSummary } from "./CollaborationReviewPanel";
 import {
+  WORKBENCH_ONTOLOGY_TOOL,
+  workbenchOntologyObservationSchema,
+  workbenchOntologyStageBasisSchema,
+} from "@/lib/ai/agents/workbench-ontology-contract";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -172,12 +177,15 @@ const EVENT_LABELS: Record<string, string> = {
 const TOOL_LABELS: Record<string, string> = {
   crm_request_human_handoff: "请求转交人工",
   crm_update_lead: "更新商机字段",
+  crm_move_lead_stage: "变更商机阶段",
   crm_schedule_followup: "安排客户跟进",
   send_message: "发送客户回复",
   ask_internal_colleague: "向飞书同事提问",
 };
 
 function eventLabel(event: EventRow): string {
+  if (event.event_type === "tool_completed" && event.payload.tool === WORKBENCH_ONTOLOGY_TOOL)
+    return "已完成约见查询";
   if (event.event_type === "policy_checked") {
     const verdict = event.payload.verdict ?? event.payload.decision;
     if (verdict === "veto") return "发送策略拦截";
@@ -187,6 +195,54 @@ function eventLabel(event: EventRow): string {
     if (verdict === "allowed_reversible_write") return "允许自动执行可逆写入";
   }
   return EVENT_LABELS[event.event_type] ?? event.event_type;
+}
+
+function WorkbenchOntologyEvidence({ value }: { value: unknown }) {
+  const parsed = workbenchOntologyObservationSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const result = parsed.data;
+  const summary = {
+    matched: "找到匹配的已完成约见记录",
+    empty: "该时间窗内 CRM 无匹配记录",
+    truncated: "只显示部分匹配记录，列表已截断",
+    clarification_required: "需要明确模板和 UTC 起止时间",
+    forbidden: "无权查询当前所选商机",
+    error: "查询失败，无法判断是否有记录",
+  }[result.status];
+
+  return (
+    <div className="mt-1 space-y-1 text-xs">
+      <p className="font-medium">{summary} · 定义 v{result.version}</p>
+      {"scope" in result && (
+        <>
+          <p>商机 {result.scope.leadId}</p>
+          <p>从 <time dateTime={result.window.startUtc}>{result.window.startUtc}</time>
+            {"（含）到 "}<time dateTime={result.window.endUtc}>{result.window.endUtc}</time>（不含）</p>
+          {result.activities.length > 0 && (
+            <ul className="list-disc space-y-1 pl-4">
+              {result.activities.map((activity) => (
+                <li key={activity.id}>
+                  {activity.id} · {activity.type} · <time dateTime={activity.performedAt}>{activity.performedAt}</time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function WorkbenchOntologyProposalBasis({ value }: { value: unknown }) {
+  const parsed = workbenchOntologyStageBasisSchema.safeParse(value);
+  if (!parsed.success) return null;
+  return (
+    <div className="mt-1">
+      <p>已完成约见记录 {parsed.data.activityId}</p>
+      <p>取证调用 {parsed.data.toolCallId}</p>
+      <p className="text-muted-foreground">批准后由后台执行，并回查商机阶段。</p>
+    </div>
+  );
 }
 
 const fetchEvaluation = async (
@@ -1274,6 +1330,7 @@ export function AgentCrmWorkbench({
                                 <p className="mt-1">
                                   目标阶段 ID：{String(proposal.preview.toStageId ?? "未记录，请先核对")}
                                 </p>
+                                <WorkbenchOntologyProposalBasis value={proposal.preview.ontologyBasis} />
                                 <p className="mt-1 text-muted-foreground">
                                   请与商机及目标阶段核对后批准；历史提案可能缺少预览。
                                 </p>
@@ -1562,10 +1619,11 @@ export function AgentCrmWorkbench({
                             <p className="text-xs text-muted-foreground">
                               {new Date(event.created_at).toLocaleTimeString()} ·{" "}
                               {Object.entries(event.payload ?? {})
-                                .filter(([key]) => !/id$/.test(key))
+                                .filter(([key]) => !/id$/.test(key) && key !== "ontology")
                                 .map(([key, value]) => `${key}: ${String(value)}`)
                                 .join(" · ")}
                             </p>
+                            <WorkbenchOntologyEvidence value={event.payload.ontology} />
                           </div>
                         </div>
                       ))}

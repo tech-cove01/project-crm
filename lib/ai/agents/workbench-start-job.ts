@@ -24,6 +24,11 @@ import {
   createMissionQuestionTools,
 } from "@/lib/ai/agents/internal-question-tools";
 import { canExposeInternalQuestionTools } from "@/lib/ai/agents/internal-question-contract";
+import {
+  LEAD_STAGE_TOOL, matchedOntologyStageBasis, WORKBENCH_ONTOLOGY_TOOL, type WorkbenchOntologyObservation,
+  type WorkbenchOntologyStageBasis,
+} from "./workbench-ontology-contract";
+import { mountWorkbenchOntologyTool } from "./workbench-ontology-tools";
 import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
 import { runResumedWorkbenchTurn } from "@/lib/ai/agents/run-resumed-workbench-turn";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -331,7 +336,10 @@ export async function runWorkbenchStartJob(
         conversationId: scope.conversationId ?? undefined,
       } },
     );
-    const proposalInputs: Array<{ tool: string; arguments: unknown }> = [];
+    const proposalInputs: Array<{
+      tool: string; arguments: unknown; ontologyBasis?: WorkbenchOntologyStageBasis;
+    }> = [];
+    let ontologySeenByModel = new Map<string, WorkbenchOntologyObservation>();
     const resultChannel = createWorkbenchResultChannel({
       mode: run.mode,
       hasPendingApproval: () => proposalInputs.some(({ tool }) => {
@@ -343,6 +351,7 @@ export async function runWorkbenchStartJob(
     const effectByTool = new Map<string, NonNullable<ReturnType<typeof workbenchToolEffect>>>();
     const gatedTools: Record<string, unknown> = {};
     for (const [name, definition] of Object.entries(workbenchMcp?.tools ?? {})) {
+      if (name === WORKBENCH_ONTOLOGY_TOOL) continue;
       const effect = workbenchToolEffect(name);
       if (!effect) continue; // Unknown effects fail closed and are never exposed to Pi.
       effectByTool.set(name, effect);
@@ -361,7 +370,8 @@ export async function runWorkbenchStartJob(
           if (run.mode === "inspect") {
             return { content: "Blocked by inspect-only policy; no CRM state was changed.", isError: true };
           }
-          proposalInputs.push({ tool: name, arguments: args });
+          const ontologyBasis = name === LEAD_STAGE_TOOL ? matchedOntologyStageBasis(ontologySeenByModel, args) : undefined;
+          proposalInputs.push({ tool: name, arguments: args, ontologyBasis });
           return {
             content: effect.effect === "reversible_write"
               ? "Staged for the CRM Harness to apply with an audit diff and compensation; do not claim completion yet."
@@ -383,6 +393,11 @@ export async function runWorkbenchStartJob(
       effectByTool.set(LIST_INTERNAL_COLLEAGUES_TOOL, { effect: "read", resource: "internal_colleagues" });
       effectByTool.set(ASK_INTERNAL_COLLEAGUE_TOOL, { effect: "external", resource: "internal_questions" });
     }
+    const ontologyObservations = await mountWorkbenchOntologyTool(getRequestPool(), {
+      organizationId: job.organization_id, runId, leadId: scope.leadId,
+    }, gatedTools);
+    if (WORKBENCH_ONTOLOGY_TOOL in gatedTools)
+      effectByTool.set(WORKBENCH_ONTOLOGY_TOOL, workbenchToolEffect(WORKBENCH_ONTOLOGY_TOOL)!);
     if (SUBMIT_WORKBENCH_RESULT_TOOL in gatedTools)
       throw new Error("workbench_result_tool_name_collision");
     Object.assign(gatedTools, resultChannel.tools);
@@ -501,19 +516,24 @@ export async function runWorkbenchStartJob(
           });
         } else if (event.type === "tool_execution_end") {
           toolResultCount += 1;
+          const ontology = tool === WORKBENCH_ONTOLOGY_TOOL && toolCallId
+            ? ontologyObservations.get(toolCallId)
+            : undefined;
           await appendWorkbenchEvent(admin, {
             organizationId: job.organization_id,
             runId,
             type: "tool_completed",
-            payload: { tool, toolCallId, status: data.is_error ? "error" : "success" },
+            payload: { tool, toolCallId, status: data.is_error ? "error" : "success", ontology },
           });
-        } else if (event.type === "turn_end")
+        } else if (event.type === "turn_end") {
+          ontologySeenByModel = new Map(ontologyObservations);
           await appendWorkbenchEvent(admin, {
             organizationId: job.organization_id,
             runId,
             type: "model_decision",
             payload: { toolResultCount },
           });
+        }
       },
     } satisfies RunModelCallInput;
     const firstModelResult = await executePiTurnModelCall(modelDeps, modelCallInput);
@@ -624,6 +644,7 @@ export async function runWorkbenchStartJob(
         ? result.candidates.map((candidate) => ({
             tool: "send_message",
             arguments: { body: candidate.body.trim() },
+            ontologyBasis: undefined,
           }))
         : [];
     const proposals = collaborationBlocked ? [] : [...result.proposals, ...sendProposals];
@@ -676,6 +697,7 @@ export async function runWorkbenchStartJob(
               preview: {
                 requiresHumanConfirmation: true,
                 ...workbenchProposalPreview(proposal.tool, proposal.arguments),
+                ...(proposal.ontologyBasis ? { ontologyBasis: proposal.ontologyBasis } : {}),
                 ...(proposal.tool === "send_message" ? { externalEffect: "customer_message" } : {}),
                 ...(proposal.tool === ASK_INTERNAL_COLLEAGUE_TOOL
                   ? { externalEffect: "feishu_internal_question",

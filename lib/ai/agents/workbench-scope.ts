@@ -7,6 +7,16 @@ export interface WorkbenchScopeInput {
   pipelineId?: string;
 }
 
+export function workbenchScopeInputFromRun(value: unknown): WorkbenchScopeInput {
+  const scope = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    ...(typeof scope.contactId === "string" ? { contactId: scope.contactId } : {}),
+    ...(typeof scope.leadId === "string" ? { leadId: scope.leadId } : {}),
+    ...(typeof scope.conversationId === "string" ? { conversationId: scope.conversationId } : {}),
+    ...(typeof scope.pipelineId === "string" ? { pipelineId: scope.pipelineId } : {}),
+  };
+}
+
 export async function resolveWorkbenchScope(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,

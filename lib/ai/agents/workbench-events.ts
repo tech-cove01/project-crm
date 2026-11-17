@@ -2,6 +2,7 @@ import { integrationBinding } from "@/lib/ai/integrations/config";
 import { projectLangfuseRun } from "@/lib/ai/integrations/langfuse";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { WORKBENCH_ONTOLOGY_TOOL, workbenchOntologyObservationSchema } from "./workbench-ontology-contract";
 
 export type CrmAgentEventType =
   | "run_started"
@@ -141,7 +142,11 @@ export function redactEventPayload(
     return item;
   };
   const allowed = new Set(EVENT_FIELDS[type]);
-  return visit(
-    Object.fromEntries(Object.entries(value).filter(([key]) => allowed.has(key))),
-  ) as Record<string, unknown>;
+  const payload = Object.fromEntries(Object.entries(value).filter(([key]) => allowed.has(key)));
+  if (type === "tool_completed" && value.tool === WORKBENCH_ONTOLOGY_TOOL &&
+      typeof value.toolCallId === "string" && value.toolCallId.length) {
+    const observation = workbenchOntologyObservationSchema.safeParse(value.ontology);
+    if (observation.success) payload.ontology = observation.data;
+  }
+  return visit(payload) as Record<string, unknown>;
 }

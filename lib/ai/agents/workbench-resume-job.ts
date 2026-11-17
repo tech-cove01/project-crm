@@ -6,6 +6,7 @@ import { resolveWorkbenchScope } from "@/lib/ai/agents/workbench-scope";
 import { runResumedWorkbenchTurn } from "@/lib/ai/agents/run-resumed-workbench-turn";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWorkbenchJobLease } from "@/lib/ai/agents/workbench-job-lease";
+import { executeDeferredWorkbenchStageApproval } from "./workbench-deferred-stage-approval";
 
 /** Resume a confirmed run from the persisted CRM/Pi message snapshot. */
 export async function runWorkbenchResumeJob(
@@ -25,6 +26,16 @@ export async function runWorkbenchResumeJob(
     .eq("id", runId)
     .maybeSingle();
   if (runError) throw new Error("workbench_resume_run_read_failed");
+  if (job.payload.approvedProposalId !== undefined) {
+    if (typeof job.payload.approvedProposalId !== "string")
+      throw new Error("workbench_resume_approved_proposal_id_invalid");
+    if (run) await executeDeferredWorkbenchStageApproval({
+      pool, admin, organizationId: job.organization_id, runId, proposalId: job.payload.approvedProposalId,
+      run, assertLease: beforeSideEffect,
+      assertOwner: (queryable) => assertWorkbenchJobLease(queryable, job, workerId, { ownershipOnly: true }),
+    });
+    return;
+  }
   if (!run || run.status === "cancelled") return;
   if (run.status !== "running") return;
   await beforeSideEffect();

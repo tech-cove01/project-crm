@@ -85,7 +85,7 @@ import { createOperatorTurnHandler } from "@/lib/agent-engine/agent/operator-tur
 import { runWorkbenchResumeJob } from "@/lib/ai/agents/workbench-resume-job";
 import { runWorkbenchStartJob } from "@/lib/ai/agents/workbench-start-job";
 import { reconcileWorkbenchSendDecisions } from "@/lib/ai/agents/workbench-send-decision-recovery";
-import { reconcileStaleWorkbenchApprovedActions } from "@/lib/ai/agents/workbench-approved-action";
+import { reconcileAbandonedDeferredStageApproval, reconcileStaleWorkbenchApprovedActions } from "@/lib/ai/agents/workbench-approved-action";
 import { runMissionDeadlineLoop } from "@/lib/ai/agents/mission-deadlines";
 import {
   expireFeishuInboxPayloads,
@@ -563,6 +563,16 @@ export async function startWorker(
         if (settled?.status === "dead" && job.kind === "internal_im_question")
           await reconcileDeadFeishuQuestionJobs(pool);
         if (
+          settled?.status === "dead" &&
+          job.kind === "workbench_resume" &&
+          typeof job.payload.runId === "string" &&
+          typeof job.payload.approvedProposalId === "string"
+        ) {
+          await reconcileAbandonedDeferredStageApproval(pool, {
+            organizationId: job.organization_id, runId: job.payload.runId,
+            proposalId: job.payload.approvedProposalId,
+          });
+        } else if (
           settled?.status === "dead" &&
           (job.kind === "workbench_start" || job.kind === "workbench_resume") &&
           typeof job.payload.runId === "string"
