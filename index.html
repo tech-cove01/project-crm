@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f8fc">
-  <meta name="description" content="面向销售团队的 AI-native CRM。基于已确认的客户事实和授权企业资料给出跟进建议，经审批推进商机，并回查实际结果。">
+  <meta name="description" content="面向销售团队的 AI-native CRM。按已审核口径筛选开放商机和约见记录，从授权历史单聊提取可审核的记忆，在新会话复用确认事实。">
   <title>AI Native CRM — 客户管理与销售协作</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css?v=sales-intro-20261117">
+  <link rel="stylesheet" href="./styles.css?v=ontology-memory-20261117">
   <script src="./script.js?v=overview-20261102" defer></script>
 </head>
 <body data-page="overview">
@@ -25,8 +25,8 @@
   <main id="main">
     <section class="overview-hero container" id="context" aria-labelledby="overview-title">
       <p class="eyebrow">AI-native CRM · 客户管理与销售协作</p>
-      <h1 id="overview-title">有依据地跟进客户，<br>经审批推进商机。</h1>
-      <p class="overview-lead">面向销售团队的 AI-native 客户经营与协作系统。选定客户和商机后，Agent 读取已确认的客户事实和获授权的企业资料，给出带来源的跟进建议。需要调整商机阶段时，先提请审批，获批后执行并回查，拒绝则保留原阶段。</p>
+      <h1 id="overview-title">筛选开放商机，<br>复用客户偏好。</h1>
+      <p class="overview-lead">面向销售团队的 AI-native 客户经营与协作系统。Agent 按已审核的业务口径筛选商机和约见记录，也可从授权历史单聊提取带原文的偏好候选。负责人确认后，新会话可以复用这些事实。阶段变更经人工批准后执行，并回查 CRM 中的实际结果。</p>
       <nav class="overview-actions" aria-label="项目主要入口">
         <div class="overview-primary-actions">
           <a class="button overview-workflow-action" href="./details.html#workflow">业务流程与案例</a>
@@ -38,14 +38,14 @@
           <a class="overview-action-link" href="./details.html#stack">完整技术栈</a>
         </div>
       </nav>
-      <p class="overview-scene"><strong>典型场景</strong>隔天跟进同一客户时，可在新会话读取仍有效的预算和沟通偏好，再核对本次需要的产品条款。</p>
+      <p class="overview-scene"><strong>典型场景</strong>从授权管道里找出指定时间窗内没有已完成约见记录的开放商机，再结合已确认偏好准备跟进。</p>
     </section>
     <section class="overview-problems container" id="difficulties" aria-labelledby="difficulties-title">
-      <h2 id="difficulties-title">销售跟进的难点，Agent 怎样协助。</h2>
+      <h2 id="difficulties-title">Agent 怎样协助跟进</h2>
       <div class="overview-comparison" id="agent-help">
         <div class="overview-comparison-head" aria-hidden="true"><span>业务难点</span><span>Agent 的帮助</span></div>
-        <article><div><h3>信息分散，每次都要重新查</h3><p>客户需求、历史沟通和企业资料分散，回复前要重新拼出背景。</p></div><div><h3>整理客户，核对依据</h3><p>读取当前客户与商机，结合已确认事实和获授权资料，形成带来源的建议。</p></div></article>
-        <article><div><h3>多笔商机，进展容易遗漏</h3><p>每笔机会的阶段、待确认条件和负责人不同，隔天跟进或换人交接容易断档。</p></div><div><h3>分析进展，列出下一步</h3><p>综合客户事实、商机状态和产品政策，列出跟进建议与需要继续确认的问题。</p></div></article>
+        <article><div><h3>历史消息里的偏好容易漏掉</h3><p>隔天跟进或换人交接时，销售还得回到历史会话找客户原话。</p></div><div><h3>确认后在新会话复用</h3><p>从授权单聊提取候选并附原文。负责人确认后，Agent 才能把它作为客户事实读取。</p></div></article>
+        <article><div><h3>同一个筛选条件，理解可能不同</h3><p>怎么看开放商机、哪些算完成约见，需要先对齐口径。</p></div><div><h3>统一口径，按证据筛查</h3><p>Agent 按已审核口径查询授权范围内的记录。遇到未定义的高潜或有效跟进标准，先澄清所缺条件。</p></div></article>
         <article><div><h3>有了建议，还要判断能否执行</h3><p>客户期望不等于公司承诺，模型说“完成”也不能代替业务结果。</p></div><div><h3>关键动作由人决定，执行后核对</h3><p>需要确认的阶段变更先形成提案，批准后执行，再用回执与实际状态核对结果。</p></div></article>
       </div>
       <a class="text-link overview-case-link" href="./details.html#workflow">查看年度服务合同的跟进案例 <span aria-hidden="true">↗</span></a>
@@ -54,26 +54,25 @@
       <div class="overview-section-heading"><h2 id="highlights-title">销售跟进背后的四项设计</h2><a class="text-link overview-validation-link" href="./details.html#validation">查看验证方法与结果</a></div>
       <div class="overview-highlight-grid">
         <article class="overview-highlight-card">
-          <h3>Pi 执行与销售审批</h3>
-          <p class="overview-highlight-value">销售收到跟进建议和阶段变更提案。负责人批准后可查看执行回执和当前阶段，拒绝则保留原阶段。</p>
+          <h3>Pi 内核与业务本体建模</h3>
+          <p class="overview-highlight-value">销售可以筛选授权管道内的开放商机，再查看指定时间窗内没有已完成约见记录的商机。缺少高潜或有效跟进标准时，Agent 先澄清。</p>
           <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
-            <li><strong>内核适配</strong>将 CRM 工具契约接入 Pi，统一处理模型/工具事件与运行消息。</li>
-            <li><strong>职责分层</strong>Pi 运行模型和工具，CRM 业务层负责权限与动作确认。独立 Worker 通过持久队列和租约接续任务。</li>
-            <li><strong>审批续跑</strong>提案绑定对象与参数，获批后执行、保存回执并重读结果；结果未知时暂停核对。</li>
-          </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">模拟批准、拒绝与回查</a><a href="./details.html#controlled-execution">了解执行与审批设计</a></div>
+            <li><strong>口径与查询</strong>版本化业务本体目录统一商机、活动及其关系。服务端限制可查口径和授权范围，保留查询证据。</li>
+            <li><strong>人工决定</strong>Pi 负责模型与工具循环。所选商机的已完成约见可作为提案依据，负责人批准后由 Worker 执行并回查阶段。</li>
+          </ul><p><a class="text-link" href="./details.html#controlled-execution">了解执行与审批设计</a></p></details>
+          <div class="overview-highlight-links"><a href="./details.html#ontology-walkthrough">看商机筛查与口径说明</a><a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">模拟批准、拒绝与回查</a></div>
         </article>
         <article class="overview-highlight-card">
-          <h3>跨会话记忆与事实更新</h3>
-          <p class="overview-highlight-value">预算和沟通偏好经确认后可在新会话复用。更新后读取当前有效事实，撤回的内容不再使用，同名客户按所选档案区分。</p>
+          <h3>客户记忆提取与跨会话复用</h3>
+          <p class="overview-highlight-value">销售可从授权历史单聊提取沟通偏好，查看原话并确认。下一次打开新会话时，Agent 可读回已确认的偏好，待审和已撤回内容均不可召回。</p>
           <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
-            <li><strong>事实回读</strong>SQL 保存当前确认事实。Mem0 辅助检索排序，命中后仍回读所选客户的 SQL 记录。</li>
-            <li><strong>更新与回退</strong>更新时先撤回旧事实，再确认新值。Mem0 不可用时使用本地确认事实。</li>
-          </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟查看 SQL 事实来源</a><a href="./details.html#memory-comparison">查看真实跨会话对照</a></div>
+            <li><strong>来源与审核</strong>服务端核验候选引用的原文。重复确认只产生一条 SQL 事实和一个同步事件。更新时先撤回旧事实，再确认新值。</li>
+            <li><strong>事实回读</strong>SQL 保存当前确认事实。Mem0 可辅助排序，使用前仍回读 SQL，Mem0 不可用时回退到 SQL。</li>
+          </ul><p><a class="text-link" href="./details.html#memory-comparison">查看真实跨会话对照</a></p></details>
+          <div class="overview-highlight-links"><a href="./details.html#memory-lifecycle">看记忆提取与确认步骤</a><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟查看 SQL 事实来源</a></div>
         </article>
         <article class="overview-highlight-card">
-          <h3>企业知识检索与引用依据</h3>
+          <h3>知识检索优化与证据约束</h3>
           <p class="overview-highlight-value">销售可以从建议追到授权原文。资料改版或撤回后，Agent 需要重新核对有效版本，资料缺失时保留待确认项。</p>
           <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
             <li><strong>检索候选</strong>WeKnora 使用主题词回退、有界候选扩展和标题、正文排序。</li>
@@ -82,7 +81,7 @@
           <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟资料改版与旧引用拒绝</a><a href="./details.html#knowledge-retrieval">了解检索与引用设计</a></div>
         </article>
         <article class="overview-highlight-card">
-          <h3>效果对照与运行观测</h3>
+          <h3>Agent 业务评测与运行观测</h3>
           <p class="overview-highlight-value">分开检查资料是否找全、回答是否有据、动作是否落地。遇到问题时可以沿运行轨迹回查。</p>
           <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
             <li><strong>同题对照</strong>对照单 Agent、三位专家以及不同记忆方案的结果、耗时和 Token。</li>
@@ -95,7 +94,7 @@
     <section class="overview-implementation container" id="implementation" aria-labelledby="implementation-title">
       <div class="overview-section-heading"><h2 id="implementation-title">支撑销售工作流的技术实现。</h2></div>
       <dl class="overview-stack"><div><dt>应用与接口</dt><dd>Next.js · React · TypeScript</dd></div><div><dt>执行与业务数据</dt><dd>Node.js Worker · Pi · PostgreSQL / Supabase</dd></div><div><dt>记忆、知识与观测</dt><dd>Mem0 · WeKnora · Langfuse</dd></div></dl>
-      <div class="overview-evidence"><p>前端承载工作台与审批交互，后端处理权限、持久任务和业务数据，Agent 围绕客户与商机调用工具。在线演示使用固定示例，完整 Agent 流程由本机 CRM 承载。</p></div>
+      <div class="overview-evidence"><p>应用提供客户档案、工作台和审批交互。Pi 调用 CRM 工具，业务本体目录约束查询口径，服务端处理授权、候选审核和持久任务。完整 Agent 流程由本机 CRM 承载，在线演示使用固定示例。</p></div>
     </section>
   </main>
   <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><div><a href="./details.html">项目详解</a><a href="./demo/index.html#/app/ai/workbench">交互演示</a></div></footer>

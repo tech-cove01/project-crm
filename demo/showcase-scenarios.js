@@ -4,6 +4,10 @@
   const panels = window.CRM_SHOWCASE_PANELS || {};
   const order = ['execution', 'knowledge', 'collaboration', 'evaluation'];
   const shortNames = { execution: '受控执行', knowledge: '记忆与知识', collaboration: '专家协作', evaluation: '观测与评测' };
+  const walkthroughs = {
+    execution: { anchor: 'ontology-walkthrough', label: '看商机筛查与口径说明' },
+    knowledge: { anchor: 'memory-lifecycle', label: '看记忆提取与确认步骤' },
+  };
   const h = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const valid = id => order.includes(id) && Boolean(panels[id]);
   const states = {};
@@ -63,8 +67,9 @@
   }
   function shell() {
     const panel = panels[selected];
+    const walkthrough = walkthroughs[selected];
     return `<section id="showcase-scenario" class="showcase-workspace" data-showcase-scenario="${selected}" aria-labelledby="showcase-title">
-      <div class="showcase-topline"><a href="../details.html#${({ execution: 'controlled-execution', knowledge: 'trusted-context', collaboration: 'expert-collaboration', evaluation: 'observation-evaluation' })[selected]}">阅读该场景的业务讲解</a><button type="button" class="showcase-button" data-showcase-close>返回自由探索</button></div>
+      <div class="showcase-topline"><a href="../details.html#${({ execution: 'controlled-execution', knowledge: 'trusted-context', collaboration: 'expert-collaboration', evaluation: 'observation-evaluation' })[selected]}">阅读该场景的业务讲解</a>${walkthrough ? `<a href="../details.html#${walkthrough.anchor}">${walkthrough.label}</a>` : ''}<button type="button" class="showcase-button" data-showcase-close>返回自由探索</button></div>
       <nav class="showcase-tabs" aria-label="四条亮点演示">${order.filter(valid).map((id, i) => `<button type="button" class="showcase-tab${selected === id ? ' active' : ''}" data-showcase-open="${id}" aria-current="${selected === id ? 'page' : 'false'}"><span>${i + 1}</span>${shortNames[id]}</button>`).join('')}</nav>
       <header class="showcase-heading"><div><p class="showcase-eyebrow">商机跟进 · 可操作的固定示例</p><h1 id="showcase-title" tabindex="-1">${h(panel.title)}</h1><p>${h(panel.intro)}</p></div><div class="showcase-actions"><button type="button" class="showcase-button primary" data-scenario-guide>跟我操作</button><button type="button" class="showcase-button" data-showcase-reset>重置本场景</button></div></header>
       <p class="showcase-boundary">浏览器本地模拟 · 不调用 Pi、模型、Mem0、WeKnora 或后端 · 操作仅影响本场景，刷新回到起点</p>

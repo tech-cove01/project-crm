@@ -107,6 +107,35 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .story-scope { margin-top: 22px; color: var(--muted); font-size: 15px; line-height: 1.9; }
 .story-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 25px; margin-top: 18px; }
 .story-links > span { font-size: 14px; color: var(--muted); }
+.capability-paths { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin-top: 12px; }
+.walkthrough-link { display: inline-block; color: #1d4ed8; font-weight: 650; text-decoration: underline; text-underline-offset: 4px; }
+.walkthrough-area { display: grid; gap: 34px; padding-top: clamp(36px, 6vw, 82px); }
+.walkthrough { min-width: 0; padding: clamp(16px, 4vw, 40px); border: 1px solid #cadbf4; border-radius: var(--radius); background: var(--paper); }
+.walkthrough-header { max-width: 720px; margin-bottom: 24px; }
+.walkthrough-header h2 { font-size: clamp(24px, 3.6vw, 36px); }
+.walkthrough-header p { margin-top: 10px; color: var(--muted); }
+.walkthrough-header .walkthrough-label { color: #254b90; font-size: 14px; font-weight: 650; }
+.walkthrough-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: clamp(16px, 4vw, 35px); }
+.walkthrough-steps { display: grid; gap: 8px; counter-reset: walkthrough-step; }
+.walkthrough-steps > li { min-width: 0; counter-increment: walkthrough-step; }
+.walkthrough-steps details { border: 1px solid var(--line); border-radius: 10px; }
+.walkthrough-steps details[open] { border-color: #bcd2f6; }
+.walkthrough-steps summary { display: grid; grid-template-columns: 29px minmax(0, 1fr) 14px; align-items: center; gap: 10px; min-height: 52px; padding: 10px 13px; cursor: pointer; font-weight: 650; line-height: 1.55; list-style: none; }
+.walkthrough-steps summary::-webkit-details-marker { display: none; }
+.walkthrough-steps summary::before { content: counter(walkthrough-step); display: grid; place-items: center; height: 29px; border-radius: 7px; background: var(--soft); color: #254b90; font-size: 14px; }
+.walkthrough-steps summary::after { content: ""; justify-self: center; width: 7px; height: 7px; margin-top: -4px; border-right: 2px solid #496d9f; border-bottom: 2px solid #496d9f; transform: rotate(45deg); }
+.walkthrough-steps details[open] summary { background: var(--soft); border-radius: 9px 9px 0 0; }
+.walkthrough-steps details[open] summary::after { margin-top: 4px; transform: rotate(225deg); }
+.walkthrough-steps summary:focus-visible { outline: 3px solid var(--blue); outline-offset: -3px; }
+.walkthrough-step-content { padding: 14px 16px 17px 52px; overflow-wrap: anywhere; }
+.walkthrough-step-content p + p { margin-top: 10px; }
+.walkthrough-step-content strong { color: #254b90; }
+.walkthrough-aside { min-width: 0; padding: clamp(15px, 3vw, 24px); border: 1px solid #d8e5f8; border-radius: 10px; background: var(--soft); overflow-wrap: anywhere; }
+.walkthrough-aside h3 { font-size: 18px; }
+.walkthrough-aside dl { display: grid; gap: 10px; margin: 14px 0 19px; padding-bottom: 17px; border-bottom: 1px solid #ccdff8; }
+.walkthrough-aside dt, .walkthrough-aside p { color: var(--muted); }
+.walkthrough-aside dd { margin: 1px 0 0; color: #254b90; font-weight: 650; }
+.walkthrough-aside p, .walkthrough-aside .walkthrough-link { margin-top: 8px; }
 .capability-section { background: #edf3fb; border-block: 1px solid var(--line); }
 .capability-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; }
 .capability-card { min-width: 0; border: 1px solid var(--line); background: #fff; border-radius: var(--radius); padding: 30px; }
@@ -302,6 +331,7 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
 }
 @media (max-width: 900px) {
   .story-context { grid-template-columns: 1fr; }
+  .walkthrough-grid { grid-template-columns: minmax(0, 1fr); }
 
   .hero { grid-template-columns: minmax(0,1fr); gap: 32px; padding-block: 42px; }
   .hero-copy { max-width: 700px; }
@@ -349,6 +379,7 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
   .story-takeaway strong { font-size: 20px; }
   .story-links { align-items: flex-start; flex-direction: column; }
   .story-links > span { font-size: 15px; }
+  .walkthrough-step-content { padding-inline: 14px; }
 
   html { scroll-padding-top: 88px; }
   .container { width: calc(100% - 40px); }
