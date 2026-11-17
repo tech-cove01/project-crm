@@ -84,6 +84,10 @@ const TWO_UTC_DATES = /(?:在\s*)?\[utc\]\s*(?:到|至|and|to|~|—)\s*\[utc\](?
 const SELECTED_LEAD = /(?:(?:本次)?所选|当前选中|这笔)商机/u;
 const EXPLICIT_WINDOW = /(?:在)?(?:指定|给定|明确)\s*(?:utc\s*)?(?:时间窗|窗口|时间窗口|时间范围)内(?:的)?/u;
 const SELECTED_LEAD_PREFIX = new RegExp(`^${SELECTED_LEAD.source}(?:的)?\\s*`, "u");
+const SELECTED_LEAD_REFERENCE = new RegExp(
+  `(${SELECTED_LEAD.source})\\s*\\(\\s*(?:lead_id|商机\\s*id)\\s*[:=]?\\s*([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\\s*\\)`,
+  "giu",
+);
 const EXPLICIT_WINDOW_PREFIX = new RegExp(`^${EXPLICIT_WINDOW.source}\\s*`, "u");
 
 // Only remove reviewed request wrappers. Keep business filters, negations,
@@ -128,7 +132,19 @@ export function planOntologyQuery(input: unknown, scope: OntologyQueryScope, cat
       .filter(definition => hasUndefinedTerms.some(term => term.id === definition.id))
       .flatMap(definition => definition.missing));
   }
-  const questionTemplate = question ? matchesQuestion(question, catalog) : undefined;
+  // A redundant target in prose can only confirm the persisted selection.
+  // Leave every other qualifier in the question for the allowlist check.
+  let referencesUnboundLead = false;
+  const scopedQuestion = question?.normalize("NFKC").replace(SELECTED_LEAD_REFERENCE, (_full, label: string, leadId: string) => {
+    if (leadId.toLowerCase() !== scope.leadId?.toLowerCase()) referencesUnboundLead = true;
+    return label;
+  });
+  if (referencesUnboundLead) {
+    return scope.leadId
+      ? clarify("conflicting_conditions", ["问题中的商机与工作台所选商机不一致，请确认要查询的对象。"])
+      : clarify("scope_required", ["请在工作台明确选择一笔可读商机。"]);
+  }
+  const questionTemplate = scopedQuestion ? matchesQuestion(scopedQuestion, catalog) : undefined;
   const explicit = templateSchema.safeParse(requestedTemplate);
   if ((question && !questionTemplate) || (requestedTemplate && !explicit.success)) {
     return clarify("unsupported_question", ["当前问题的完整条件不对应已审核的查询。请明确口径和需要保留的筛选条件。"]);
@@ -153,7 +169,7 @@ export function planOntologyQuery(input: unknown, scope: OntologyQueryScope, cat
   if ((template === "completed_appointments" || SELECTED_LEAD.test(normalize(question ?? ""))) && !scope.leadId) {
     return clarify("scope_required", ["请在工作台明确选择一笔可读商机。"]);
   }
-  const datesInQuestion = question?.match(UTC_STAMP) ?? [];
+  const datesInQuestion = scopedQuestion?.match(UTC_STAMP) ?? [];
   const permittedResult = { ...terms, status: "allowed" as const, limit: catalog.limits.rows };
   if (template === "open_leads") {
     if (startUtc !== undefined || endUtc !== undefined || datesInQuestion.length ||

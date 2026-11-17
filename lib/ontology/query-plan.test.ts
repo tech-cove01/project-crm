@@ -28,6 +28,21 @@ describe("CRM ontology query planning", () => {
     expect(planOntologyQuery({ template: "completed_appointments" }, scope)).toMatchObject({ reason: "invalid_window" });
   });
 
+  it("accepts only a repeated bound lead with its exact UTC window and keeps other qualifiers", () => {
+    const options = { template: "completed_appointments", ...window };
+    const question = `查询所选商机（lead_id ${scope.leadId}）在 ${startUtc} 至 ${endUtc} UTC 时间窗内的已完成约见`;
+    expect(planOntologyQuery({ ...options, question }, scope)).toMatchObject({ status: "allowed", window });
+    expect(planOntologyQuery({ ...options, question }, {})).toMatchObject({ reason: "scope_required" });
+    expect(planOntologyQuery({ ...options, question }, { leadId: "11111111-1111-4111-8111-111111111111" }))
+      .toMatchObject({ reason: "conflicting_conditions" });
+    expect(planOntologyQuery({ ...options, question: `${question}，仅限线下渠道` }, scope))
+      .toMatchObject({ reason: "unsupported_question" });
+    expect(planOntologyQuery({ ...options, question: `${question}，且跟进不足` }, scope))
+      .toMatchObject({ reason: "missing_definition" });
+    expect(planOntologyQuery({ ...options, question: question.replace(endUtc, startUtc) }, scope))
+      .toMatchObject({ reason: "invalid_window" });
+  });
+
   it("keeps the composition narrow and references both underlying definitions", () => {
     const plan = planOntologyQuery({
       question: `当前授权范围内在 ${startUtc} 到 ${endUtc} 内没有已完成约见记录的开放商机`,
