@@ -115,6 +115,10 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .card-glyph { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 7px; background: #edf4ff; color: var(--blue); font-size: 19px; }
 .capability-card h3 { font-size: 25px; margin-top: 16px; margin-bottom: 14px; font-weight: 700; }
 .capability-card > p { font-size: 17px; line-height: 1.85; color: var(--muted); }
+.collaboration-example { margin-top: 22px; }
+#validation .capability-card p + :is(p, a) { margin-top: 10px; }
+#validation .capability-card > a { display: inline-block; }
+#validation .text-link, .overview-validation-link { color: #1d4ed8; text-decoration: underline; text-underline-offset: 4px; }
 .card-points { display: grid; gap: 12px; margin-top: 22px; }
 .card-points li { padding-left: 15px; position: relative; font-size: 16px; color: var(--muted); line-height: 1.85; }
 .card-points li:before { content: ""; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #5d86c4; left: 0; top: 12px; }
@@ -216,6 +220,7 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
 .overview-section-heading { margin-bottom: 28px; }
 .overview-section-heading h2 { font-size: 32px; margin-top: 10px; }
 .overview-section-heading > p:last-child:not(.eyebrow) { margin-top: 12px; color: var(--muted); font-size: 17px; }
+.overview-validation-link { display: inline-block; margin-top: 10px; }
 .overview-highlight-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; }
 .overview-highlight-card { display: flex; flex-direction: column; min-width: 0; padding: 28px 30px 22px; border: 1px solid #d6e2f3; border-radius: 14px; background: #fff; }
 .overview-highlight-index { color: #365a91; font-size: 14px; font-weight: 650; }
@@ -322,6 +327,9 @@ body[data-page="overview"] .primary-nav > a:not(.button) { display: inline-flex;
   .experience-inner { align-items: flex-start; flex-direction: column; gap: 28px; }
   .experience-actions { align-items: flex-start; }
   .site-footer > div { width: 100%; margin-left: 0; }
+}
+@media (min-width: 651px) and (max-width: 768px) {
+  body[data-page="details"] .primary-nav { gap: 12px; }
 }
 @media (max-width: 650px) {
   .hero-question { padding: 15px 17px; }

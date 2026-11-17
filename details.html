@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f8fc">
-  <meta name="description" content="AI Native CRM，将客户记忆、企业知识、商机协作与受控 Agent 执行连接在同一工作台。了解业务流程、系统架构与技术取舍，直接体验浏览器交互。">
+  <meta name="description" content="了解 AI-native CRM 如何给出带来源的销售建议，经审批推进商机，并复用确认事实。查看知识检索、运行观测与独立验证结果。">
   <title>AI Native CRM · 业务与实现详解</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css?v=four-scenarios-20261110">
+  <link rel="stylesheet" href="./styles.css?v=sales-intro-20261117">
   <script src="./script.js?v=overview-20261102" defer></script>
 </head>
 <body data-page="details">
@@ -17,7 +17,7 @@
       <a class="brand" href="./index.html" aria-label="AI Native CRM 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>CRM<span class="brand-suffix"> / AI NATIVE</span></span></a>
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span></span><span></span><span class="sr-only">打开导航菜单</span></button>
       <nav class="primary-nav" id="primary-nav" aria-label="主导航">
-        <a href="#workflow">业务讲解</a><a href="#stack">技术栈</a><a href="#capabilities">核心能力</a><a href="#architecture">系统架构</a>
+        <a href="#workflow">业务讲解</a><a href="#stack">技术栈</a><a href="#capabilities">核心能力</a><a href="#architecture">系统架构</a><a href="#validation">验证结果</a>
         <a class="button button-small button-dark" href="./index.html">项目首页 <span aria-hidden="true">↗</span></a>
       </nav>
     </div>
@@ -26,16 +26,15 @@
   <main id="main">
     <section class="detail-intro container" aria-labelledby="detail-title">
       <a class="text-link" href="./index.html">← 返回项目首页</a>
-      <p class="eyebrow">业务流程 · 实现机制 · 方案取舍</p>
       <h1 id="detail-title">CRM 业务与实现详解</h1>
-      <p>从一次销售跟进，理解 Agent 怎样取证、业务系统怎样授权，以及建议如何变成可核对的动作。</p>
+      <p>销售选定客户和商机后，Agent 核对确认事实与授权资料，给出带出处的跟进建议。阶段变更由负责人审批，执行后凭回执和实际阶段核对结果。</p>
     </section>
 
     <section class="section container" id="workflow" aria-labelledby="workflow-title">
       <div class="section-heading"><div><p class="eyebrow">01 / A SALES FOLLOW-UP</p><h2 id="workflow-title">从一句客户咨询，<br>到一次可核对的业务动作。</h2></div><p class="section-intro">沿着赵强的年度服务合同，读懂完整 CRM 怎样调查、分析、等待人工决定，再核对执行结果。</p></div>
       <div class="detail-scenario"><strong>业务教学场景 · 赵强的年度服务合同</strong><blockquote>“请再发一份年度合同，并确认预计什么时候开始。”</blockquote><p>双方已沟通过服务范围，报价与交期仍未确认。销售希望系统先调查和分析；如果后续需要调整阶段，先形成具体提案交由人工决定。</p></div>
       <div class="story-context">
-        <article><h3>谁在用，遇到什么问题？</h3><p>销售团队和负责人准备跟进客户时，需要同时查看沟通记录、当前商机与产品条款。赵强问什么时候开始，但这笔商机的报价和交期仍未确认；只看一句咨询，销售无法直接作出承诺。</p></article>
+        <article><h3>谁在用，遇到什么问题？</h3><p>销售团队和负责人准备跟进客户时，需要同时查看沟通记录、当前商机与产品条款。示例客户赵强问什么时候开始，但这笔商机的报价和交期仍待确认，销售需要先核对依据。</p></article>
         <article><h3>为什么需要 Agent？</h3><p>每次咨询的问题和资料组合不同，Agent 适合理解目标、选择允许的工具、组织多来源建议。权限校验、字段更新和批准执行由确定性的业务代码负责，固定查询也可以直接交给普通接口。</p></article>
       </div>
       <ol class="story-steps" aria-label="完整 CRM 的六步业务流程">
@@ -60,15 +59,122 @@
       <article class="stack-card"><span class="stack-category">工程与复盘</span><h3>Langfuse / Docker Compose</h3><p>pnpm · Vitest · Playwright · ESLint</p><div class="stack-detail">异步投递观测，保存规则评测与按需语义复核结果；容器与数据库迁移支持本地运行。</div></article>
     </div></section>
 
-    <section class="capability-section section" id="capabilities" aria-labelledby="capabilities-title"><div class="container">
-      <div class="section-heading"><div><p class="eyebrow">03 / CORE CAPABILITIES</p><h2 id="capabilities-title">项目的四条核心能力。</h2></div><p class="section-intro">模型提供理解与推理，业务系统负责事实、权限和动作。四条主线共同支撑从分析建议到销售协作的过程。</p></div>
-      <div class="capability-grid">
-        <article class="capability-card" id="controlled-execution"><div class="card-topline"><span class="capability-index">A / PI AGENT CORE</span><span class="card-glyph" aria-hidden="true">↗</span></div><h3>Pi 内核与受控执行</h3><p>阶段建议需要核实对象和权限，还可能等待人工决定。销售需要看到当前到底是待批、已执行，还是已拒绝。</p><div class="scenario-outcome"><strong>你可以这样操作</strong><p>分析商机，分别走一次批准与拒绝，再查看执行回执及商机重读。</p><strong>操作后能看到</strong><p>待批时阶段不变；批准后一次模拟执行，拒绝保留原阶段。运行结束与业务结果分开呈现。</p></div><a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：Pi 内核与受控执行">体验该场景</a><details class="scenario-design"><summary>查看技术设计与边界</summary><p>以开源 Pi Agent Core 为执行内核，适配 CRM 工具、事件和运行消息。Pi 管模型/工具循环，CRM 业务 Harness 管权限和副作用，Worker 管任务领取与状态推进。</p><div class="execution-diagram" aria-label="Pi 执行循环、CRM 业务约束与持久 Worker 分层协作"><span>Pi 循环</span><i aria-hidden="true">↔</i><span>业务约束</span><i aria-hidden="true">↔</i><span class="diagram-highlight">Worker 调度</span></div><ul class="card-points"><li><strong>循环适配与收口</strong>：通过模型网关和 MCP 工具接入；轮次与预算参与停止判断，末轮只开放结构化结果提交</li><li><strong>持久执行</strong>：SQL 队列与租约承接长任务，保存 Pi 消息及事件，为审批后续跑提供依据</li><li><strong>授权后续跑</strong>：恢复时重新装配当前业务约束，执行后保存回执、重读结果；未知结果先暂停核对</li></ul><p class="scenario-note">这里的提案、回执和阶段变化只保存在本页示例内，不是远端 SQL 写入。</p></details><details class="scenario-proof"><summary>查看历史真实验证说明</summary><p>本站交互是模拟。真实运行的验证范围、失败与限制保留在公开记录中。</p><a href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-021a-approved-chain.md" target="_blank" rel="noopener noreferrer">阅读公开验证记录</a></details></article>
-        <article class="capability-card" id="trusted-context"><div class="card-topline"><span class="capability-index">B / CONTEXT</span><span class="card-glyph" aria-hidden="true">◎</span></div><h3>客户记忆与可信知识</h3><p>检索命中不代表内容仍然有效。客户确认事实发生删改，或企业资料失效后，建议需要重新核对。</p><div class="scenario-outcome"><strong>你可以这样操作</strong><p>查看记忆来源，切换删改、记忆服务异常、资料改版、撤回或越权，再检索同一问题。</p><strong>操作后能看到</strong><p>服务异常回退本地事实；旧投影不能覆盖新正文，过期、撤回或未授权资料不能继续引用。</p></div><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：客户记忆与可信知识">体验该场景</a><details class="scenario-design"><summary>查看技术设计与边界</summary><p>客户确认事实与企业产品依据分别管理。记忆检索帮助找信息，SQL 和授权原文决定最终能使用什么。</p><div class="source-pair"><div><span class="source-type">客户这边</span><strong>偏好 · 事实 · 约束</strong><span>SQL 权威正文 / Mem0 辅助检索</span></div><div><span class="source-type">企业这边</span><strong>产品 · 政策 · FAQ</strong><span>原生 RAG / WeKnora 来源回读</span></div></div><ul class="card-points"><li><strong>事实重新核对</strong>：命中后校验归属，重读当前正文</li><li><strong>不可用时回退</strong>：外部记忆服务失败，仍能读取本地事实</li><li><strong>资料更新后复核</strong>：改版或撤回后，旧依据重新核验</li></ul><p class="scenario-note">客户偏好与企业政策分开显示。SQL、Mem0 和 WeKnora 在本场景中均为固定模拟数据。</p></details><details class="scenario-proof"><summary>查看历史真实验证说明</summary><p>本站交互是模拟。真实运行的验证范围、失败与限制保留在公开记录中。</p><a href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-020d-data-boundaries.md" target="_blank" rel="noopener noreferrer">阅读公开验证记录</a></details></article>
-        <article class="capability-card" id="expert-collaboration"><div class="card-topline"><span class="capability-index">C / MULTI-AGENT</span><span class="card-glyph" aria-hidden="true">✳</span></div><h3>多 Agent 协作与商机分析</h3><p>不同专家可能读到不同字段值或资料版本。汇总需要保留分歧来源，不能把互相矛盾的结论拼成成功。</p><div class="scenario-outcome"><strong>你可以这样操作</strong><p>逐个查看三专家依据，切换字段或版本冲突，回查 CRM 与原文，走人工复核和再次核验。</p><strong>操作后能看到</strong><p>清楚看到回查消解了什么、仍缺什么；未解决项阻断动作，专家从不各自修改商机。</p></div><a class="scenario-entry" data-scenario-link="collaboration" href="./demo/index.html?scenario=collaboration&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：多 Agent 协作与商机分析">体验该场景</a><details class="scenario-design"><summary>查看技术设计与边界</summary><p>三类专家各自建立持久子任务，运行独立 Pi 循环，以结构化结果交给父 Agent 汇总。协作采用固定计划，专家只读，受控写入由父流程接回 CRM。</p><div class="specialists-diagram"><span>客户事实</span><span>商机诊断</span><span>政策顾问</span><div><i aria-hidden="true">↘</i><span>父 Agent 汇总建议</span><i aria-hidden="true">↙</i></div></div><ul class="card-points"><li><strong>角色与执行边界</strong>：每个专家有工具白名单、对象和知识范围，以及轮次、工具调用和模型预算约束</li><li><strong>结构化证据对照</strong>：比较字段值与来源版本，区分真实分歧、资料变化和互补信息</li><li><strong>失败与冲突处理</strong>：保留缺证、超时和局部失败；权威重读后仍未解决的冲突进入持久人工复核，并阻断相关动作</li></ul><p class="scenario-note">示例展示按顺序进行的独立子运行，不代表并行执行或浏览器实时运行 Pi。</p></details><details class="scenario-proof"><summary>查看历史真实验证说明</summary><p>本站交互是模拟。真实运行的验证范围、失败与限制保留在公开记录中。</p><a href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-021b-collaboration-verified.md" target="_blank" rel="noopener noreferrer">阅读公开验证记录</a></details></article>
-        <article class="capability-card" id="observation-evaluation"><div class="card-topline"><span class="capability-index">D / EVALUATION</span><span class="card-glyph" aria-hidden="true">⌁</span></div><h3>Agent 观测与评测回归</h3><p>一个高分无法证明字段和引用正确。修复后也需要保留原失败，才能知道同类问题是否再次出现。</p><div class="scenario-outcome"><strong>你可以这样操作</strong><p>比较正常、错引和字段误述样例，展开规则与模拟 Judge，定位轨迹并重放失败。</p><strong>操作后能看到</strong><p>高模拟分不能覆盖确定性失败；失败回放保留原判定，并定位到对应工具和证据。</p></div><a class="scenario-entry" data-scenario-link="evaluation" href="./demo/index.html?scenario=evaluation&amp;guide=1#/app/ai/workbench" aria-label="体验该场景：Agent 观测与评测回归">体验该场景</a><details class="scenario-design"><summary>查看技术设计与边界</summary><p>任务跑完不代表动作正确，动作正确也不等于回答可靠。运行事实、规则检查和语义复核分别保留。</p><div class="eval-strip"><div><span class="eval-dot"></span><strong>任务完成</strong><small>运行状态</small></div><div><span class="eval-dot"></span><strong>动作正确</strong><small>工具与回执</small></div><div><span class="eval-dot"></span><strong>回答可靠</strong><small>引用与语义</small></div></div><ul class="card-points"><li><strong>运行与观测解耦</strong>：SQL 保存事实，脱敏轨迹异步投递 Langfuse；投递重试不重复执行业务</li><li><strong>规则与语义分层</strong>：规则核对字段与引用，Judge 按需复核，合并时保留更严格结论</li><li><strong>失败进入回归</strong>：实际误述、错引与无答案误召回保留为样本，支持后续策略复查</li></ul><p class="scenario-note">规则对固定示例计算，Judge 为预设模拟评语。历史真实评测另见记录，不据此计算整体准确率。</p></details><details class="scenario-proof"><summary>查看历史真实验证说明</summary><p>本站交互是模拟。真实运行的验证范围、失败与限制保留在公开记录中。</p><a href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-020f-observation-evaluation.md" target="_blank" rel="noopener noreferrer">阅读公开验证记录</a></details></article>
+    <section class="capability-section section" id="capabilities" aria-labelledby="capabilities-title">
+      <div class="container">
+        <div class="section-heading">
+          <div><h2 id="capabilities-title">销售跟进背后的四项设计</h2></div>
+          <p class="section-intro">从销售能得到的结果出发，再看支撑每一步的工具、业务规则和运行记录。</p>
+        </div>
+        <div class="capability-grid">
+          <article class="capability-card" id="controlled-execution">
+            <h3>Pi 执行与销售审批</h3>
+            <p>销售拿到带依据的建议，阶段变更由负责人审批。获批后看执行回执并重读商机，拒绝时保留原阶段。</p>
+            <div class="scenario-outcome"><strong>固定示例</strong><p>分析商机，分别走一次批准与拒绝，核对待批、执行和重读时的阶段。</p></div>
+            <a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">模拟批准、拒绝与回查</a>
+            <details class="scenario-design">
+              <summary>查看执行与审批设计</summary>
+              <div class="execution-diagram" aria-label="Pi 执行循环、CRM 业务约束与持久 Worker 分层协作"><span>Pi 循环</span><i aria-hidden="true">↔</i><span>业务约束</span><i aria-hidden="true">↔</i><span class="diagram-highlight">Worker 调度</span></div>
+              <ul class="card-points">
+                <li><strong>模型与工具循环</strong>Pi 通过模型网关和 MCP 工具处理请求。CRM 业务层重新校验对象、角色和可执行动作。</li>
+                <li><strong>持久任务</strong>SQL 队列、租约与运行消息承接长任务和审批后的续跑。等待期间可查询当前进度。</li>
+                <li><strong>执行与回执</strong>提案绑定对象和参数，获批后执行、保存回执并重读结果。结果未知时暂停核对。</li>
+              </ul>
+            </details>
+          </article>
+          <article class="capability-card" id="trusted-context">
+            <h3>跨会话记忆与事实更新</h3>
+            <p>新会话可以读取已确认的客户预算或沟通偏好。事实更新后使用当前值，撤回后停止引用，同名客户按所选档案区分。</p>
+            <div class="scenario-outcome"><strong>固定示例</strong><p>在记忆与资料场景中查看 SQL 事实来源，以及旧投影和服务异常时的有效内容保护。</p></div>
+            <a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟查看 SQL 事实来源</a>
+            <details class="scenario-design">
+              <summary>查看事实更新与回退设计</summary>
+              <ul class="card-points">
+                <li><strong>当前事实</strong>SQL 保存用户确认后的正文。更新分两步，先撤回旧事实，再确认新值。</li>
+                <li><strong>辅助排序</strong>Mem0 帮助找候选，CRM 按组织、客户和事实 ID 回读 SQL；Mem0 不可用时回退到本地。</li>
+              </ul>
+              <p class="scenario-note">跨会话读取、更新和撤回见<a class="text-link" href="#memory-comparison">真实记忆对照</a>。资料改版操作见<a class="text-link" href="#knowledge-retrieval">知识检索场景</a>。</p>
+            </details>
+          </article>
+          <article class="capability-card" id="knowledge-retrieval">
+            <h3>企业知识检索与引用依据</h3>
+            <p>销售可以从建议回到获授权的原文。资料发生改版或撤回时，重新核对当前有效版本，缺失的条款保留待确认。</p>
+            <div class="scenario-outcome"><strong>固定示例</strong><p>查看资料和引用，切换改版，观察旧引用被拒，再检索当前版本。</p></div>
+            <a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟资料改版与旧引用拒绝</a>
+            <details class="scenario-design">
+              <summary>查看检索与引用设计</summary>
+              <ul class="card-points">
+                <li><strong>找资料</strong>WeKnora 使用主题词回退，在限定范围内扩展候选，再按标题和正文排序。</li>
+                <li><strong>核对依据</strong>引用前回读原文，检查访问权限、发布状态和版本，再判断资料是否支持所问结论。</li>
+              </ul>
+              <p class="scenario-note">检索对照的命中分母、无关候选和请求数见<a class="text-link" href="#retrieval-comparison">检索对照结果</a>。</p>
+            </details>
+          </article>
+          <article class="capability-card" id="observation-evaluation">
+            <h3>效果对照与运行观测</h3>
+            <p>分开检查资料是否找全、回答是否有据、动作是否落地，并沿轨迹定位问题。</p>
+            <div class="scenario-outcome"><strong>固定示例</strong><p>比较正常和错引样例。规则判定错引失败，即使模拟 Judge 给出高分；重放时保留原失败。</p></div>
+            <a class="scenario-entry" data-scenario-link="evaluation" href="./demo/index.html?scenario=evaluation&amp;guide=1#/app/ai/workbench">体验错引判定与失败回放</a>
+            <details class="scenario-design">
+              <summary>查看评测与观测设计</summary>
+              <div class="eval-strip"><div><strong>资料找全</strong><small>检索结果</small></div><div><strong>回答有据</strong><small>字段与引用</small></div><div><strong>动作落地</strong><small>回执与重读</small></div></div>
+              <ul class="card-points">
+                <li><strong>效果对照</strong>以同题比较单 Agent、三位专家及不同记忆方案的结果、耗时和 Token。</li>
+                <li><strong>评测依据</strong>SQL 保存运行事实，规则核对字段和引用，按需由 Judge 复核语义。</li>
+                <li><strong>运行观测</strong>Langfuse 关联脱敏轨迹、耗时、Token 和已记录的评分，供回查。</li>
+              </ul>
+              <p class="scenario-note">演示的 Judge 评语采用固定模拟数据。<a class="text-link" href="#validation">查看真实验证方法与结果</a>。</p>
+            </details>
+          </article>
+        </div>
+        <article class="capability-card collaboration-example" id="expert-collaboration">
+          <h3>补充场景：专家取证与冲突复核</h3>
+          <p>客户、商机和政策专家分别在独立子任务中只读取证，父 Agent 汇总。遇到不一致时回查 CRM 字段和资料版本，待人工复核的冲突会阻断相关动作。</p>
+          <a class="scenario-entry" data-scenario-link="collaboration" href="./demo/index.html?scenario=collaboration&amp;guide=1#/app/ai/workbench">模拟三专家取证与冲突复核</a>
+          <details class="scenario-design">
+            <summary>查看专家任务的权限与边界</summary>
+            <div class="specialists-diagram"><span>客户事实</span><span>商机诊断</span><span>政策顾问</span><div><i aria-hidden="true">↘</i><span>父 Agent 汇总建议</span><i aria-hidden="true">↙</i></div></div>
+            <p>子任务分别限制工具、对象和预算。固定导览展示按顺序进行的独立子运行。现有同题对照尚未证明三专家有整体质量优势。</p>
+          </details>
+        </article>
       </div>
-    </div></section>
+    </section>
+
+    <section class="section container" id="validation" aria-labelledby="validation-title">
+      <div class="section-heading">
+        <div><h2 id="validation-title">验证方法与结果</h2></div>
+        <p class="section-intro">这些结果来自隔离环境中的合成样本。下方分别列出检索对照、任务盲评，以及执行与观测的实测范围。</p>
+      </div>
+      <div class="capability-grid">
+        <article class="capability-card" id="retrieval-comparison">
+          <h3>必需资料找全率</h3>
+          <p>69 条合成检索用例以找全该题的全部必需资料为通过。开发组从 <strong>2/21 到 19/21</strong>，保留组从 <strong>4/48 到 44/48</strong>。两组共用资料池，保留组题目规格公开，逐题结果在候选固定后解封。</p>
+          <p>无关候选由 0 增至 123，内部 HTTP 请求由 496 增至 2,250，检索探针中位耗时从 70 增至 150 毫秒。以上数字只衡量检索。</p>
+          <a class="text-link" href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-025d-effect.md">查看检索前后对照</a>
+        </article>
+        <article class="capability-card" id="memory-comparison">
+          <h3>跨会话记忆对照</h3>
+          <p>在 3 个独立业务轨迹的 18 次新会话任务中，无持久确认事实、SQL、SQL＋Mem0 分别通过 <strong>1/6、5/6、5/6</strong>。Mem0 多找回一项较旧事实，整体通过数与 SQL 相同。</p>
+          <p>SQL 和 Mem0 两组均验证了读取、更新、撤回及同名客户隔离。Mem0 组有一次结构化引用写错币种。</p>
+          <a class="text-link" href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-026c-memory.md">查看真实跨会话结果</a>
+        </article>
+        <article class="capability-card">
+          <h3>固定版独立任务</h3>
+          <p>同一版本的单 Agent 验证 6 类独立场景，每类 2 项任务，盲评通过 <strong>10/12</strong>，成对关系成立 <strong>4/6</strong>。这组样本只有一次固定版本观测。</p>
+          <p>保留了一次同义问法漏检后误述，以及一次读到有效签批后仍答成待确认的结果。</p>
+          <a class="text-link" href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-026d-generalization.md">查看逐题泛化记录</a>
+        </article>
+        <article class="capability-card">
+          <h3>审批闭环与观测回读</h3>
+          <p>已实测按一次批准写入商机阶段，保存回执并续跑回读；拒绝后阶段保持原状。中断恢复验证覆盖续跑读取阶段的两个指定故障。</p>
+          <p>Langfuse 在受控窗口回读到脱敏轨迹、耗时、Token 与规则分。原样补投曾出现重复节点 ID，正常消费者的自动恢复仍待验证。</p>
+          <div class="story-links">
+            <a class="text-link" href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-022c-sales.md">销售闭环</a>
+            <a class="text-link" href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-022e-reliability.md">中断恢复</a>
+            <a class="text-link" href="https://github.com/tech-cove01/project-crm/blob/main/docs/evidence/CRM-023d-observation.md">观测回读</a>
+          </div>
+        </article>
+      </div>
+    </section>
 
     <section class="section container" id="architecture" aria-labelledby="architecture-title">
       <div class="section-heading"><div><p class="eyebrow">04 / SYSTEM ARCHITECTURE</p><h2 id="architecture-title">交互轻快，任务持久。<br>业务事实有自己的归处。</h2></div><p class="section-intro">Next.js 提供前后端入口，独立 Worker 承载 Agent 长任务。数据库保存业务与运行事实，外部服务通过适配器参与协作。</p></div>
@@ -95,7 +201,7 @@
 
 
 
-    <section class="experience-section" id="experience" aria-labelledby="experience-title"><div class="container experience-inner"><div><p class="eyebrow">EXPLORE THE WORKSPACE</p><h2 id="experience-title">也可以浏览<br>静态交互界面。</h2><p>沿四条项目主线操作固定场景，也可以继续浏览原工作台、客户档案和演示教程。</p><p class="experience-boundary">浏览器静态交互版，无需账号；任务过程与操作反馈用于展示，不实时调用模型或写入后台。</p></div><div class="experience-actions"><a class="button button-dark" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">打开静态交互界面 <span aria-hidden="true">↗</span></a></div></div></section>
+    <section class="experience-section" id="experience" aria-labelledby="experience-title"><div class="container experience-inner"><div><h2 id="experience-title">体验 CRM 工作台</h2><p>可从四个交互场景开始，也可浏览客户档案、商机和工作台教程。</p><p class="experience-boundary">浏览器使用固定示例，无需账号。任务和反馈均在本页模拟。</p></div><div class="experience-actions"><a class="button button-dark" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">开始审批与回查演示</a></div></div></section>
   </main>
   <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><span class="footer-caption">客户经营与销售协作系统</span><div><a href="./LICENSE" target="_blank" rel="noopener noreferrer">MIT License <span aria-hidden="true">↗</span></a><a href="#main">回到顶部 ↑</a></div></footer>
 </body>

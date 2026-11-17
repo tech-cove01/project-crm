@@ -1,24 +1,25 @@
 # Project CRM · 项目展示
 
-AI-native CRM：面向客户经营与销售协作，将客户事实、企业知识、商机分析和人工审批组织成可追踪的销售工作流。
+面向销售团队的 AI-native 客户经营与协作系统。选定客户和商机后，Agent 给出带来源的跟进建议；阶段变更由负责人审批，获批后执行并回查，拒绝则保留原阶段。
 
 - [在线展示](https://tech-cove01.github.io/project-crm/)
 - [业务与实现详解](https://tech-cove01.github.io/project-crm/details.html)
+- [验证方法与结果](https://tech-cove01.github.io/project-crm/details.html#validation)
 - [CRM 交互演示](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=execution&guide=1#/app/ai/workbench)
 - [正式项目与技术说明](https://github.com/tech-cove01/project-crm/tree/main)
 
 本分支使用 HTML、CSS、JavaScript，在 GitHub Pages 展示项目介绍与现有 CRM 界面的浏览器交互。工作台、看板、客户、知识、记忆、审批等使用固定示例；模型、Supabase/PostgreSQL、Worker、Mem0、WeKnora 和 Langfuse 由正式应用承载。当前站点无需登录，不实时调用这些服务。
 
-首页先介绍完整产品的背景、场景和业务难点，再沿用四条项目主线：销售 Agent 受控执行、客户记忆与可信知识、专家协作与商机分析、Agent 观测与评测回归。页面标题直接点出 Pi 执行内核和多 Agent，正文说明工具/事件适配、执行分层、事实权威、独立专家子任务与分层评测。简介后的主操作区分两层：首行业务流程与案例描边按钮、唯一深色的静态演示按钮；次行项目亮点、架构与设计取舍、完整技术栈使用醒目的文字链接。桌面与手机均直接展示五入口、不带箭头。业务与两个技术入口指向同一详解页的不同章节；展示页不再突出源码与验收报告链接。具体客户案例、六步业务流程和完整架构收在独立详解页；工作台也可以直接打开业务讲解，旧首页章节链接保持兼容。
+首页和详情沿四项设计介绍客户跟进。首页保留业务案例、审批演示、项目亮点、架构和完整技术栈入口。详情保留完整业务和技术说明，在「验证方法与结果」补充合成样本的检索、记忆、泛化、审批和观测范围。
 
-首页与详情的四条亮点分别直达下面四条“跟我操作”引导。每步只定位一个真实按钮；亲自操作后再高亮结果并解释。操作步不能靠“继续”跳过，批准、拒绝和分支切换均由访客点击。可随时暂停自由体验，有已有状态时明确选择继续或清空重走；刷新回到场景起点。
+四项介绍使用既有导览。每步定位一个实际控件，操作成功后高亮并解释结果。批准、拒绝和分支切换由访客点击；可暂停，或在明确选择后继续已有状态、清空重走。刷新回到场景起点。
 
-| 场景 | 可操作的固定示例 |
+| 主题 | 场景与证据入口 |
 | --- | --- |
-| [Pi 内核与受控执行](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=execution&guide=1#/app/ai/workbench) | 阶段提案、批准/拒绝、唯一回执与重读 |
-| [客户记忆与可信知识](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=knowledge&guide=1#/app/ai/workbench) | 看来源与引用→资料改版→旧引用拒绝→当前版本重检 |
-| [多 Agent 协作与商机分析](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=collaboration&guide=1#/app/ai/workbench) | 三专家取证→父汇总与核验→字段冲突→人工选择与再次核验 |
-| [Agent 观测与评测回归](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=evaluation&guide=1#/app/ai/workbench) | 正常对照→错引高分仍失败→重放保留原失败 |
+| Pi 执行与销售审批 | [模拟批准、拒绝与回查](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=execution&guide=1#/app/ai/workbench) |
+| 跨会话记忆与事实更新 | [模拟读取 SQL 事实来源](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=knowledge&guide=1#/app/ai/workbench) · [真实跨会话对照](https://tech-cove01.github.io/project-crm/details.html#memory-comparison) |
+| 企业知识检索与引用依据 | [模拟资料改版与旧引用拒绝](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=knowledge&guide=1#/app/ai/workbench) · [检索前后对照](https://tech-cove01.github.io/project-crm/details.html#retrieval-comparison) |
+| 效果对照与运行观测 | [体验错引判定与失败回放](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=evaluation&guide=1#/app/ai/workbench) · [模拟专家取证与冲突复核](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=collaboration&guide=1#/app/ai/workbench) |
 
 场景状态与原自由探索隔离。通用工作台首次推荐受控执行，也可跳过；“跟我操作”可重开。四场景内不会打开旧教程而丢失所选场景；返回自由探索后仍可显式打开旧七步教程。窄屏提示卡让开目标，滚离后可用“定位当前按钮”返回。所有状态变化和Judge分数均为明示模拟；公开真实验证记录放在详情和场景的次要说明内，保留原限制。
 
