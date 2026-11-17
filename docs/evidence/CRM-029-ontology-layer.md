@@ -58,3 +58,60 @@
 | --- | --- |
 | `approval-pending-observed-1794894878526.json` | `e69d8f5b8dedbb4423fc9298a41ab4fb9b561399a72030226ab2baa9f94ba38c` |
 | `approval-original-partial.json` | `96e8703abac168876c59ea7d8ef92b4191ba27f046a4d18832a214b0cb7755ba` |
+
+### 同一业务任务的修后回归
+
+固定修复 `0a520c24dce6687103516af64fc697102fa277cb` 后，使用相同角色、夹具、条件、目标阶段、模型与预算，只新建一根受影响回归 `1a063620-4737-4a55-9692-dd6e8c5faa17`。独立复核 12 个冻结路径，唯一变动的产品文件为 `lib/ontology/query-plan.ts`。真实模型在回归中使用不带括号 UUID 的同一业务问法。带 UUID 原句的修复由原参数重放和定向负例验证。
+
+真实取证 `call_2fa6635ba2da4c12bc332272` 命中活动 `56510de9-1939-4c30-bd3d-5ebb41e6ed1c`，时间恰为左端点。唯一阶段提案 `d46a2968-bbb3-4e03-ba3a-e1d05fe711f9` 的理由保留该活动、调用和时间，并具有同一结构化提案依据。待批时商机阶段仍为 `2b057e10-545b-4de5-8373-816efc5ae941`，业务快照完全相同，详情回读 200。模型曾在待批前又读一次约见与商机，这两次只读与批准后的真实续跑分开计证。
+
+实施方使用独立合成管理员身份调用一次原生决定接口，HTTP 200。原 Run 依次记录批准 22、Worker 成功回执 25、一次业务变更 26、续跑 27、`crm_get_lead` 回查 30。SQL 只有一条新增 `stage_changed` 记录 `e3ae07b3-dacb-4f5d-bf96-828b4aef9e1c`，实际阶段 `8021809a-7c5e-4510-aceb-f096acc9ec01` 与回执 `call_20e84467efc94be1bea5a23e` 一致，其他商机、旧活动与外发计数不变。3 个作业均首次领取完成，原 Run 为 `completed`。
+
+模型把取证复读安排在事件 11，早于批准 22，偏离了要求批准后再次读本体的指令。最终答复引用的两个约见调用真实存在，先后次序以事件为准。续跑后实际只读回商机与阶段。原观察脚本因此报告 `crm029_same_run_appointment_reread`，保留失败回执，使用同一原 Run 按实际动作及回查重新对账。全程没有重新提交批准或追加模型任务。
+
+| 受影响回归的本机原件 `.local/crm029/` | SHA-256 |
+| --- | --- |
+| `freeze-regression.json` | `842332edb0bc7e5faaef8c69f56615304d4eca0d3207003208b00ed7311d6b60` |
+| `approval-regression-pending-observed-1794895188117.json` | `e6a31bf85d51b434584180f7bfa3ca06393ca580f8440dabd390fb828e72a25b` |
+| `approval-regression-pending-pass.json` | `ad72d05c2d795bf0b175ef512182c3f4f07103306630185ec8753081fc38e11f` |
+| `approval-regression-human-http.json` | `2696bb711fd554c9490aa8fce926ca818e809b7e4e5525beae848721097d6b40` |
+| `approval-regression-final-observed-1794895249498.json` | `c7a08afefce873b581a22394cafc5c2b4e35620c9be9dac7877f9fe63ba199f5` |
+| `approval-regression-final-pass.json` | `00162884fbbdaa862fe180e0cf32b715f51b1baff2e408c55bd4991364a28ddf` |
+| `approval-regression-final-refresh-1794895336634.json` | `5eca627a6eabb440f2691642ed50f64ca60a9ff2df847c920943de02a6e30f6b` |
+
+## 用量
+
+| Run | 业务结果与原状态 | 耗时（秒） | 网关计量条数 | 输入 Token | 输出 Token | 缓存读 Token |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 开放商机与组合 | SQL 一致，`completed` | 55.611 | 1 | 9,689 | 3,359 | 8,960 |
+| 缺定义 | 两类缺项，`partial` | 29.833 | 1 | 4,474 | 1,772 | 16,128 |
+| 首次审批 | 合法原文误拒，`partial` | 20.612 | 1 | 3,415 | 1,054 | 9,728 |
+| 修后审批回归 | 一次动作并回查阶段，`completed` | 89.931 | 2 | 9,320 | 2,361 | 30,976 |
+| 全部 | 3 个原 Run ＋ 1 个定向回归 | 195.987 | 5 | 26,898 | 8,546 | 65,792 |
+
+Run 耗时从 SQL 创建到结算，修后批准到完成约 13.9 秒。Gateway 聚合耗时共 144.375 秒，缓存写 0，金额未知。原结果、原失败和修后回归分开保留。本轮是功能验收，未测量准确率、时延或成本改善。
+
+## Workbench 页面刷新
+
+用合成经理身份打开 `/app/ai/workbench?run=<原 Run ID>`，选择“运行详情”并展开时间线。Chrome 原生页面首次打开和刷新各读取一次相同的 Run 详情，HTTP 200、请求 ID 不同、持久语义事件摘要一致。开放与组合分别渲染 3 条与 1 条商机，显示目录 `1.0.0` 及组合记录覆盖限制。缺定义原 Run 刷新可见两个缺项。浏览器只转发授权 GET，拦截自动后台写请求。刷新前后业务 SQL、模型请求、Run、提案和默认 Agent 配置对账一致。
+
+修后审批 Run 的首次打开与刷新也均返回 200，同一 35 条事件中两条本体回执摘要一致。截图展示批准前的第二次约见取证。提案实际绑定首次取证的调用 ID，该关联可在原生详情 `preview.ontologyBasis` 读取。终态页面的提案卡展示状态，关联字段经原生详情与事件核对。
+
+| 本机页面原件 `.local/crm029/` | SHA-256 |
+| --- | --- |
+| `browser-proof-1794895079805.json` | `1095ef6770218ffbd56532ae2b06fcbbdef2ca3423da1f4213273a874996e4fe` |
+| `browser-open-050b5fb0-b529-470c-a99b-e7881c4bd5b7.png` | `8581d6ee456faa1e90721edb01d34af0319741c94a4d503c18c6901c5c5d833b` |
+| `browser-composition-050b5fb0-b529-470c-a99b-e7881c4bd5b7.png` | `b3b913d7bf93981f5f9ab6e930b392b32d9295ddfb8354c959a94e1dbb6ec793` |
+| `browser-clarification-0ac0d6e4-2d11-4e4e-9027-9acf75f89585.png` | `c69c1793d138148105ed837c7dd04abdcb2705950015a104b5bb796807399f30` |
+| `browser-proof-1794895321139.json` | `74495f5b1ca87e57bedfb95fcb20badc7172d7aeb575cb2ed5639f2527a6f512` |
+| `browser-appointment-1a063620-4737-4a55-9692-dd6e8c5faa17.png` | `c6de6cd43f303ea1f361850eb2604554680135f78fb6b253d3843af1c74d744b` |
+| `browser-approval-native.json` | `f6757db9f9b5fae2c92fcfc0f092b454ae3e008ce4999a281d60184a0b63fcb7` |
+
+## 隔离环境收口
+
+退役前 SQL 核对 4 个父 Run、0 个子 Run、5 条网关计量、1 条提案及 1 条阶段变更、0 条外发及 0 项活动作业。仅停止本批 Web、Worker 和 `project-crm-eval-029`。6 个专用容器、专用卷、专用网络已移除，4 个端口不再监听。其他 20 个运行容器的名称和 ID 前后一致。合成结果与快照留在本机。
+
+| 本机原件 `.local/crm029/` | SHA-256 |
+| --- | --- |
+| `ready-to-clean.json` | `f6559d87a11842aeaa2be6f8e47c7c55ec15274ffd17c6d7338deb20aa26d5d1` |
+| `isolated-cleanup.json` | `3ae0a6eb3afbf9c02458227629add742f1f4c1568430d259fe95e29806da9d69` |
