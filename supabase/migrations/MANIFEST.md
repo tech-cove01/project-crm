@@ -2,6 +2,7 @@
 
 | `20261101010000` | `0411_collaboration_review_gate` | 在既有 root Run 保存独立协作复核状态；未解冲突阻断该 Run/Mission 的写入与批准，数据库提案触发器保护 SQL/RPC 审批路径，复核不执行旧动作。 |
 | `20261101020000` | `0412_collaboration_lead_scope` | 准入扩至同组织同商机；实际写入与复核共享商机锁，提案触发器只查询以避免锁反序；已批准效果回执仍可记账，人工复核前旧 Run 不可重造提案，需新任务取证。 |
+| `20261117000000` | `0413_customer_memory_candidates` | 保存租户与联系人隔离的待审记忆、原文版本摘要及位置、人工决定和确认事实关联。联系人匿名化、合并和删除时清理候选；候选独立于确认记忆和 Mem0 事件。 |
 
 | `20261027190000` | `0409_dashscope_model` | Register Qwen3.8 Flash as a tool-capable DashScope model; pricing is deliberately left unset pending verified provider terms. |
 

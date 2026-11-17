@@ -221,6 +221,8 @@ export const AUDIT_ACTIONS = [
   "ai.integration_configured",
   "ai.integration_drain",
   "ai.customer_memory_confirmed",
+  "ai.customer_memory_candidates_extracted",
+  "ai.customer_memory_candidate_rejected",
   "ai.customer_memory_deleted",
   "ai.customer_memory_reconciled",
   "ai.wiki_source_connected",

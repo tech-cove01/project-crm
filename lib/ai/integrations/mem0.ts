@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import type { EventHandler } from "@/lib/event-log/dispatcher";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
@@ -56,6 +56,58 @@ async function assertContact(pool: Pool, org: string, contact: string) {
   if (!rows[0]) throw new Error("customer_memory_contact_unavailable");
 }
 
+/** Join the caller's transaction so the confirmed fact and its outbox commit together. */
+export async function saveCustomerMemoryInTransaction(
+  client: PoolClient,
+  org: string,
+  actor: string,
+  input: z.infer<typeof customerMemoryInput>,
+  options: { requireNew?: boolean } = {},
+) {
+  const parsed = customerMemoryInput.parse(input);
+  const hash = digest(
+    JSON.stringify({ contact: parsed.contact_id, category: parsed.category, body: parsed.body }),
+  );
+  const contact = await client.query(
+    "select id from contacts where organization_id=$1 and id=$2 and is_anonymized=false and is_merged_into is null for update",
+    [org, parsed.contact_id],
+  );
+  if (!contact.rows[0]) throw new Error("customer_memory_contact_unavailable");
+  const created = await client.query<MemoryRow>(
+    `insert into ai_customer_memories(organization_id,contact_id,request_key,category,body,content_hash,confirmed_by,subject_key)
+       values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(organization_id,request_key) do nothing returning *`,
+    [
+      org,
+      parsed.contact_id,
+      parsed.request_key,
+      parsed.category,
+      parsed.body,
+      hash,
+      actor,
+      userScope(org, parsed.contact_id),
+    ],
+  );
+  if (options.requireNew && !created.rows[0])
+    throw new Error("customer_memory_idempotency_conflict");
+  const row =
+    created.rows[0] ??
+    (
+      await client.query<MemoryRow>(
+        "select * from ai_customer_memories where organization_id=$1 and request_key=$2",
+        [org, parsed.request_key],
+      )
+    ).rows[0];
+  if (!row || row.content_hash !== hash || row.deleted_at)
+    throw new Error("customer_memory_idempotency_conflict");
+  if (created.rows.length)
+    await client.query(
+      `insert into event_log(organization_id,event_type,entity_kind,entity_id,payload)
+       values($1,'ai_integration.mem0_sync','ai_customer_memory',$2,$3::jsonb)`,
+      [org, row.id, JSON.stringify({ memory_id: row.id })],
+    );
+  return { id: row.id, sync_state: row.sync_state, confirmed: true };
+}
+
 /** Human-confirmed categories only; company/product policy belongs in the knowledge service. */
 export async function saveCustomerMemory(
   pool: Pool,
@@ -64,49 +116,12 @@ export async function saveCustomerMemory(
   input: z.infer<typeof customerMemoryInput>,
 ) {
   const parsed = customerMemoryInput.parse(input);
-  const hash = digest(
-    JSON.stringify({ contact: parsed.contact_id, category: parsed.category, body: parsed.body }),
-  );
   const client = await pool.connect();
   try {
     await client.query("begin");
-    const contact = await client.query(
-      "select id from contacts where organization_id=$1 and id=$2 and is_anonymized=false and is_merged_into is null for update",
-      [org, parsed.contact_id],
-    );
-    if (!contact.rows[0]) throw new Error("customer_memory_contact_unavailable");
-    const created = await client.query<MemoryRow>(
-      `insert into ai_customer_memories(organization_id,contact_id,request_key,category,body,content_hash,confirmed_by,subject_key)
-       values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(organization_id,request_key) do nothing returning *`,
-      [
-        org,
-        parsed.contact_id,
-        parsed.request_key,
-        parsed.category,
-        parsed.body,
-        hash,
-        actor,
-        userScope(org, parsed.contact_id),
-      ],
-    );
-    const row =
-      created.rows[0] ??
-      (
-        await client.query<MemoryRow>(
-          "select * from ai_customer_memories where organization_id=$1 and request_key=$2",
-          [org, parsed.request_key],
-        )
-      ).rows[0];
-    if (!row || row.content_hash !== hash || row.deleted_at)
-      throw new Error("customer_memory_idempotency_conflict");
-    if (created.rows.length)
-      await client.query(
-        `insert into event_log(organization_id,event_type,entity_kind,entity_id,payload)
-       values($1,'ai_integration.mem0_sync','ai_customer_memory',$2,$3::jsonb)`,
-        [org, row.id, JSON.stringify({ memory_id: row.id })],
-      );
+    const result = await saveCustomerMemoryInTransaction(client, org, actor, parsed);
     await client.query("commit");
-    return { id: row.id, sync_state: row.sync_state, confirmed: true };
+    return result;
   } catch (error) {
     await client.query("rollback");
     throw error;

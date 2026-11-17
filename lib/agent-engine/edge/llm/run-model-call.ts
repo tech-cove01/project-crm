@@ -236,6 +236,8 @@ export interface RunModelCallInput {
   maxOutputTokens?: number;
   /** Cancelamento propagado pelo chamador; a falha continua registrada em llm_calls. */
   abortSignal?: AbortSignal;
+  /** Use bounded diagnostics when a provider error could echo protected source text. */
+  sensitiveInput?: boolean;
   /**
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
@@ -807,7 +809,7 @@ export async function runModelCall(
       provider: config.provider,
       model,
       origem_da_escolha: decisao.origem,
-      ...normalizarErro(err),
+      ...normalizarErro(err, input.sensitiveInput),
     });
     throw err;
   }
@@ -909,7 +911,7 @@ export async function runModelCall(
  * "por que o funcionário não responde" teria uma classificação própria, e as
  * duas telas dariam nomes diferentes ao mesmo erro do provedor.
  */
-export function normalizarErro(err: unknown): {
+export function normalizarErro(err: unknown, sensitiveInput = false): {
   error_code: string;
   error_message: string;
   http_status: number | null;
@@ -973,7 +975,7 @@ export function normalizarErro(err: unknown): {
     // qualquer `manager` da organização. Um endpoint OpenAI-compatível
     // apontado por `base_url` — caminho que o painel de provedores abre — pode
     // ecoar no corpo de erro o header de autorização ou o prompt recebido.
-    error_message: redigirMensagemDoProvedor(bruto),
+    error_message: sensitiveInput ? "Falha do provedor com entrada protegida." : redigirMensagemDoProvedor(bruto),
     http_status: typeof status === "number" ? status : null,
   };
 }
@@ -1021,7 +1023,7 @@ async function registrarFalha(
     erro: unknown;
   },
 ): Promise<void> {
-  const { error_code, error_message, http_status } = normalizarErro(d.erro);
+  const { error_code, error_message, http_status } = normalizarErro(d.erro, d.input.sensitiveInput);
   await db.query(
     `insert into llm_calls
        (organization_id, contact_id, job_id, workbench_run_id, variant_id, purpose, provider, model,

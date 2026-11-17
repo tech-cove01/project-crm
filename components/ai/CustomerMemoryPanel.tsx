@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { randomId } from "@/lib/random-id";
+import { CustomerMemoryCandidates } from "./CustomerMemoryCandidates";
 
 type Memory = {
   id: string;
@@ -27,14 +28,16 @@ export function CustomerMemoryPanel({
   const [error, setError] = useState("");
   const [settled, setSettled] = useState<Record<string, boolean>>({});
   const requestKey = useRef<string | null>(null);
+  const latestLoad = useRef(0);
   async function load(signal?: AbortSignal) {
+    const version = ++latestLoad.current;
     const response = await fetch(
       `/api/v1/ai/customer-memory?contact_id=${encodeURIComponent(contactId)}`,
       { signal },
     );
     const value = await response.json();
     if (!response.ok) throw new Error(value.error?.message ?? "无法读取客户记忆");
-    if (!signal?.aborted) setRows(value.data);
+    if (!signal?.aborted && latestLoad.current === version) setRows(value.data);
   }
   useEffect(() => {
     const controller = new AbortController();
@@ -75,6 +78,7 @@ export function CustomerMemoryPanel({
         仅保存已确认的客户偏好、事实和沟通背景。公司产品、价格与承诺请放入知识库。Mem0
         启用后会同步这些内容，任务状态和审批仍由 CRM 管理。
       </p>
+      {!readOnly && <CustomerMemoryCandidates key={contactId} contactId={contactId} onConfirmed={load} />}
       {!readOnly && (
         <form
           className="flex flex-wrap gap-2"

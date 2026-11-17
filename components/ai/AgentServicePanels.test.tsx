@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AgentIntegrationsPanel } from "./AgentIntegrationsPanel";
 import { CustomerMemoryPanel } from "./CustomerMemoryPanel";
 
@@ -198,7 +198,9 @@ describe("real integration controls", () => {
     const posts: Array<Record<string, unknown>> = [];
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url, init) => {
+      vi.fn(async (url, init) => {
+        if (String(url).includes("/customer-memory/candidates"))
+          return j({ data: { conversation_id: null, candidates: [] } });
         if (init?.method === "POST") {
           posts.push(JSON.parse(init.body));
           return j({ error: { message: "保存结果未确认，请按相同键重试" } }, 503);
@@ -222,5 +224,92 @@ describe("real integration controls", () => {
       category: "preference",
       body: "Prefers email",
     });
+  });
+
+  it("shows the source before editing a candidate and refreshes confirmed SQL memory", async () => {
+    const candidate = {
+      id: "a0000000-0000-4000-8000-000000000003",
+      status: "pending",
+      category: "preference",
+      body: "工作日上午接听电话",
+      source: {
+        message_id: "a0000000-0000-4000-8000-000000000004",
+        quote: "可以在工作日上午给我打电话。",
+        sent_at: "2026-11-16T09:00:00Z",
+      },
+      fact_id: null,
+    };
+    const contactId = "a0000000-0000-4000-8000-000000000001";
+    const conversationId = "a0000000-0000-4000-8000-000000000002";
+    const changed = "只在工作日上午打电话";
+    let extracted = false;
+    let confirmed = false;
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).includes("/customer-memory/candidates")) {
+        if (init?.method === "POST") extracted = true;
+        if (init?.method === "PATCH") {
+          confirmed = true;
+          return j({ data: { ...candidate, status: "confirmed", body: changed, fact_id: "memory-id" } });
+        }
+        return j({ data: { conversation_id: conversationId, candidates: extracted ? [candidate] : [] } });
+      }
+      return j({
+        data: confirmed ? [{ id: "memory-id", body: changed, sync_state: "pending" }] : [],
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<CustomerMemoryPanel contactId={contactId} />);
+    const extract = screen.getByRole("button", { name: "从历史单聊提取候选" });
+    await waitFor(() => expect(extract).toBeEnabled());
+    fireEvent.click(extract);
+    const review = within(await screen.findByRole("article", { name: /待审候选：/ }));
+    expect(review.getByText(candidate.source.quote)).toBeInTheDocument();
+    expect(screen.queryByText(/已由负责人确认/)).not.toBeInTheDocument();
+    fireEvent.click(review.getByRole("button", { name: "改写候选" }));
+    fireEvent.change(review.getByRole("textbox", { name: "改写后的记忆内容" }), { target: { value: changed } });
+    fireEvent.click(review.getByRole("button", { name: "改写后确认" }));
+    await screen.findByText(/已由负责人确认/);
+    expect(screen.getByText(changed)).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /待审候选：/ })).not.toBeInTheDocument();
+    const writes = fetch.mock.calls
+      .filter(([, options]) => options?.method)
+      .map(([url, options]) => [url, options.method, JSON.parse(options.body)]);
+    expect(writes).toEqual([
+      ["/api/v1/ai/customer-memory/candidates", "POST", { contact_id: contactId, conversation_id: conversationId }],
+      ["/api/v1/ai/customer-memory/candidates", "PATCH",
+        { contact_id: contactId, candidate_id: candidate.id, decision: "confirm", category: "preference", body: changed }],
+    ]);
+  });
+
+  it("cancels candidate loading when a different contact is selected and hides it in readonly mode", async () => {
+    const first = "a0000000-0000-4000-8000-000000000005";
+    const second = "a0000000-0000-4000-8000-000000000006";
+    let firstSignal: AbortSignal | undefined;
+    let finishFirst: ((value: Response) => void) | undefined;
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).includes("/customer-memory/candidates")) {
+        if (String(url).includes(first)) {
+          firstSignal = init?.signal;
+          return new Promise<Response>((resolve) => { finishFirst = resolve; });
+        }
+        return j({ data: { conversation_id: null, candidates: [] } });
+      }
+      return j({ data: [] });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { rerender } = render(<CustomerMemoryPanel contactId={first} />);
+    await waitFor(() => expect(firstSignal).toBeDefined());
+    rerender(<CustomerMemoryPanel contactId={second} />);
+    await screen.findByText("没有可用的历史单聊。");
+    expect(firstSignal?.aborted).toBe(true);
+    await act(async () => finishFirst?.(j({
+      data: {
+        conversation_id: "a0000000-0000-4000-8000-000000000002",
+        candidates: [{ id: "old-candidate", status: "pending", body: "旧客户的候选", category: "preference", source: null, fact_id: null }],
+      },
+    })));
+    expect(screen.queryByText("旧客户的候选")).not.toBeInTheDocument();
+    rerender(<CustomerMemoryPanel contactId={second} readOnly />);
+    expect(screen.queryByRole("region", { name: "待审记忆候选" })).not.toBeInTheDocument();
   });
 });
