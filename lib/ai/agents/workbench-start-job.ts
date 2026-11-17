@@ -394,7 +394,8 @@ export async function runWorkbenchStartJob(
       effectByTool.set(ASK_INTERNAL_COLLEAGUE_TOOL, { effect: "external", resource: "internal_questions" });
     }
     const ontologyObservations = await mountWorkbenchOntologyTool(getRequestPool(), {
-      organizationId: job.organization_id, runId, leadId: scope.leadId,
+      organizationId: job.organization_id, runId, leadId: scope.leadId, contactId: scope.contactId,
+      pipelineId: scope.pipelineId,
     }, gatedTools);
     if (WORKBENCH_ONTOLOGY_TOOL in gatedTools)
       effectByTool.set(WORKBENCH_ONTOLOGY_TOOL, workbenchToolEffect(WORKBENCH_ONTOLOGY_TOOL)!);

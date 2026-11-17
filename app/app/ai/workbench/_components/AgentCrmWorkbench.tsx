@@ -181,11 +181,12 @@ const TOOL_LABELS: Record<string, string> = {
   crm_schedule_followup: "安排客户跟进",
   send_message: "发送客户回复",
   ask_internal_colleague: "向飞书同事提问",
+  [WORKBENCH_ONTOLOGY_TOOL]: "业务语义工具",
 };
 
 function eventLabel(event: EventRow): string {
   if (event.event_type === "tool_completed" && event.payload.tool === WORKBENCH_ONTOLOGY_TOOL)
-    return "已完成约见查询";
+    return "业务语义回执";
   if (event.event_type === "policy_checked") {
     const verdict = event.payload.verdict ?? event.payload.decision;
     if (verdict === "veto") return "发送策略拦截";
@@ -201,33 +202,59 @@ function WorkbenchOntologyEvidence({ value }: { value: unknown }) {
   const parsed = workbenchOntologyObservationSchema.safeParse(value);
   if (!parsed.success) return null;
   const result = parsed.data;
+  const leadQuery = "kind" in result && result.kind === "lead_query";
   const summary = {
-    matched: "找到匹配的已完成约见记录",
-    empty: "该时间窗内 CRM 无匹配记录",
+    resolved: "业务术语",
+    ready: "参数满足审核口径，尚未查询",
+    matched: leadQuery ? "找到符合口径的开放商机" : "找到匹配的已完成约见记录",
+    empty: leadQuery ? "授权范围内 CRM 无匹配商机" : "该时间窗内 CRM 无匹配记录",
     truncated: "只显示部分匹配记录，列表已截断",
-    clarification_required: "需要明确模板和 UTC 起止时间",
-    forbidden: "无权查询当前所选商机",
+    clarification_required: "需要澄清业务口径或限定条件",
+    forbidden: "没有该范围的查询权限",
     error: "查询失败，无法判断是否有记录",
   }[result.status];
+  const semantics = result.semantics;
+  const window = "window" in result ? result.window : undefined;
 
   return (
     <div className="mt-1 space-y-1 text-xs">
-      <p className="font-medium">{summary} · 定义 v{result.version}</p>
-      {"scope" in result && (
+      <p className="font-medium">{summary}{semantics ? ` · 目录 v${semantics.catalog.version}` : ` · 定义 v${"version" in result ? result.version : ""}`}</p>
+      {semantics && (
         <>
-          <p>商机 {result.scope.leadId}</p>
-          <p>从 <time dateTime={result.window.startUtc}>{result.window.startUtc}</time>
-            {"（含）到 "}<time dateTime={result.window.endUtc}>{result.window.endUtc}</time>（不含）</p>
-          {result.activities.length > 0 && (
-            <ul className="list-disc space-y-1 pl-4">
-              {result.activities.map((activity) => (
-                <li key={activity.id}>
-                  {activity.id} · {activity.type} · <time dateTime={activity.performedAt}>{activity.performedAt}</time>
-                </li>
-              ))}
-            </ul>
-          )}
+          <p className="break-all">目录摘要 <code>{semantics.catalog.digest}</code></p>
+          {semantics.definitions.map((item) => (
+            <details key={item.id}>
+              <summary>{item.label} · {{ reviewed: "已审核", disabled: "已停用", undefined: "待定义" }[item.status]} · v{item.version}</summary>
+              <p>{item.rule}</p>
+              {item.fields.length > 0 && <p>{item.fields.join("、")}</p>}
+              <p className="break-all">口径摘要 <code>{item.digest}</code></p>
+            </details>
+          ))}
+          {semantics.concepts.length > 0 && <p>{semantics.concepts.map(({ label }) => label).join("、")}</p>}
         </>
+      )}
+      {result.template && <p>查询模板 <code>{result.template}</code></p>}
+      {"missing" in result && result.missing?.map((condition) => <p key={condition}>{condition}</p>)}
+      {"scope" in result && (
+        <dl className="space-y-1 break-all">
+          {("leadId" in result.scope && result.scope.leadId) && <div><dt className="inline">商机 </dt><dd className="inline">{result.scope.leadId}</dd></div>}
+          {("contactId" in result.scope && result.scope.contactId) && <div><dt className="inline">联系人 </dt><dd className="inline">{result.scope.contactId}</dd></div>}
+          {("pipelineId" in result.scope && result.scope.pipelineId) && <div><dt className="inline">管道 </dt><dd className="inline">{result.scope.pipelineId}</dd></div>}
+          {("conversationId" in result.scope && result.scope.conversationId) && <div><dt className="inline">会话 </dt><dd className="inline">{result.scope.conversationId}</dd></div>}
+          {!Object.values(result.scope).some(Boolean) && <div><dt className="inline">范围 </dt><dd className="inline">当前组织内已授权商机</dd></div>}
+        </dl>
+      )}
+      {window && <p>从 <time dateTime={window.startUtc}>{window.startUtc}</time>{"（含）到 "}<time dateTime={window.endUtc}>{window.endUtc}</time>（不含）</p>}
+      {"coverage" in result && result.coverage === "partial" && <p>仅覆盖 CRM 中已记录的活动，无法据此判断从未跟进。</p>}
+      {"activities" in result && result.activities.length > 0 && (
+        <ul className="list-disc space-y-1 pl-4">
+          {result.activities.map((activity) => <li key={activity.id}>{activity.id} · {activity.type} · <time dateTime={activity.performedAt}>{activity.performedAt}</time></li>)}
+        </ul>
+      )}
+      {"leads" in result && result.leads.length > 0 && (
+        <ul className="list-disc space-y-1 pl-4">
+          {result.leads.map((lead) => <li key={lead.id}>商机 {lead.id} · 开放 · 阶段 {lead.stageId}</li>)}
+        </ul>
       )}
     </div>
   );

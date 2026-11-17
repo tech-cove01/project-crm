@@ -1,40 +1,35 @@
 import type { Queryable } from "@/lib/agent-engine/queue/queue";
 import { tool } from "@/lib/agent-engine/edge/llm/run-model-call";
+import { planOntologyQuery, resolveOntologyTerms } from "@/lib/ontology/query-plan";
 import {
   COMPLETED_APPOINTMENTS,
   parseWorkbenchOntologyWindow,
   WORKBENCH_ONTOLOGY_TOOL,
   workbenchOntologyInputSchema,
+  type WorkbenchAppointmentObservation,
+  type WorkbenchOntologyInput,
   type WorkbenchOntologyObservation,
 } from "./workbench-ontology-contract";
+import {
+  AUTHORIZED_ONTOLOGY_RUN_SQL,
+  hasWorkbenchLeadOntologyAccess,
+  queryWorkbenchOpenLeads,
+} from "./workbench-ontology-query";
 
 type RunScope = { organizationId: string; runId: string; leadId: string };
-
-// The worker connection can bypass RLS. Match the current org-wide read branch
-// of fn_can_view_lead for manager/admin, with live membership and object binding.
-const AUTHORIZED_LEAD_SQL = `
-  select lead.id, lead.organization_id
-    from public.ai_workbench_runs run
-    join public.user_organizations member
-      on member.organization_id = run.organization_id and member.user_id = run.actor_user_id
-     and member.accepted_at is not null and member.revoked_at is null
-     and member.role in ('manager', 'admin')
-    join public.crm_leads lead
-      on lead.organization_id = run.organization_id and lead.id = $3
-     and lead.id::text = lower(run.scope->>'leadId')
-     and (run.scope->>'contactId' is null or lead.contact_id::text = lower(run.scope->>'contactId'))
-     and (run.scope->>'pipelineId' is null or lead.pipeline_id::text = lower(run.scope->>'pipelineId'))
-    join public.crm_pipelines pipeline
-      on pipeline.organization_id = lead.organization_id and pipeline.id = lead.pipeline_id
-     and pipeline.is_archived is false
-   where run.organization_id = $1 and run.id = $2
-     and run.run_kind = 'root' and run.parent_run_id is null and run.status = 'running'
-`;
+type OntologyScope = Omit<RunScope, "leadId"> & {
+  leadId: string | null;
+  contactId?: string | null;
+  pipelineId?: string | null;
+};
 
 // Authorization and evidence share one SQL snapshot; even a later tool call
 // must satisfy the durable Run's current membership and selected lead again.
 const COMPLETED_APPOINTMENTS_SQL = `
-  with authorized_lead as (${AUTHORIZED_LEAD_SQL})
+  with authorized_scope as (${AUTHORIZED_ONTOLOGY_RUN_SQL}),
+  authorized_lead as (
+    select lead_id as id, organization_id from authorized_scope where lead_id=$3
+  )
   select lead.id as "leadId", activity.id,
          activity.type,
          to_char(activity.performed_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "performedAt"
@@ -56,7 +51,7 @@ export async function queryWorkbenchOntology(
   db: Queryable,
   scope: RunScope,
   input: unknown,
-): Promise<WorkbenchOntologyObservation> {
+): Promise<WorkbenchAppointmentObservation> {
   const window = parseWorkbenchOntologyWindow(input);
   if (!window) return { ...definition, status: "clarification_required" };
 
@@ -82,7 +77,7 @@ export async function queryWorkbenchOntology(
   }
 }
 
-const meaning: Record<WorkbenchOntologyObservation["status"], string> = {
+const appointmentMeaning: Record<WorkbenchAppointmentObservation["status"], string> = {
   matched: "这些记录是该 UTC 时间窗口内所选商机的已完成约见活动。",
   empty: "该时间窗内 CRM 无匹配记录。",
   truncated: "已找到记录，但活动列表达到上限，不能把它当作完整列表或总数。可缩小时间窗。",
@@ -91,33 +86,97 @@ const meaning: Record<WorkbenchOntologyObservation["status"], string> = {
   error: "活动查询失败，无法判断是否有记录。",
 };
 
+export async function executeWorkbenchOntology(
+  db: Queryable,
+  scope: OntologyScope,
+  input: WorkbenchOntologyInput,
+): Promise<WorkbenchOntologyObservation> {
+  const { operation = "query", ...request } = input;
+  if (operation === "resolve") {
+    const semantics = resolveOntologyTerms(request.question ?? request.template ?? "");
+    return { kind: "planning", operation, status: "resolved", semantics };
+  }
+  const legacyAppointmentQuery = operation === "query" && request.template === COMPLETED_APPOINTMENTS.template;
+  if (!request.question && !legacyAppointmentQuery) {
+    return {
+      kind: "planning", operation, status: "clarification_required", reason: "invalid_input",
+      missing: ["请提供包含全部限定条件的用户查询原文。"],
+      semantics: resolveOntologyTerms(request.template ?? ""),
+    };
+  }
+
+  const planned = planOntologyQuery(request, {
+    leadId: scope.leadId,
+    contactId: scope.contactId ?? null,
+    pipelineId: scope.pipelineId ?? null,
+  });
+  const { catalog, definitions, concepts } = planned;
+  const semantics = { catalog, definitions, concepts };
+  if (planned.status === "clarification_required") {
+    return { kind: "planning", operation, status: planned.status, reason: planned.reason, missing: planned.missing, semantics };
+  }
+  const { template, window } = planned;
+  if (operation === "plan") {
+    return { kind: "planning", operation, status: "ready", template, semantics, ...(window ? { window } : {}) };
+  }
+  if (template === COMPLETED_APPOINTMENTS.template) {
+    if (!scope.leadId || !window) return { ...definition, status: "clarification_required", semantics };
+    const receipt = await queryWorkbenchOntology(db, { ...scope, leadId: scope.leadId }, { template, ...window });
+    return { ...receipt, semantics };
+  }
+
+  const receipt = template === "open_leads"
+    ? await queryWorkbenchOpenLeads(db, scope, { template })
+    : await queryWorkbenchOpenLeads(db, scope, { template, window });
+  const context = { kind: "lead_query" as const, template, semantics, ...(window ? { window } : {}) };
+  if (!("leads" in receipt)) return { ...context, status: receipt.status };
+  return { ...context, ...receipt, coverage: window ? "partial" : "complete" };
+}
+
+function meaningFor(result: WorkbenchOntologyObservation): string {
+  if (!("kind" in result)) return appointmentMeaning[result.status];
+  if (result.kind === "planning") {
+    if (result.status === "resolved") return "这些术语来自当前已发布业务目录。只有通过可回答性检查的模板可以执行。";
+    if (result.status === "ready") return "参数满足已审核查询口径。当前只检查了可回答性，尚未读取 CRM 记录。";
+    return "无法按现有审核口径回答全部问题。请告诉用户下列缺项并保留已知口径和其原有限定条件。";
+  }
+  const messages = {
+    matched: "找到授权范围内符合口径的开放商机。",
+    empty: "当前授权范围内 CRM 无符合口径的开放商机。",
+    truncated: "符合口径的开放商机超过返回上限。列表不是完整结果或总数，请缩小授权查询范围。",
+    forbidden: "当前运行没有该范围内的查询权限。",
+    error: "CRM 查询失败，无法判断是否有匹配记录。",
+  };
+  const caveat = "此口径只检查返回商机在窗口内是否缺少已完成约见记录，无法据此判断从未跟进。";
+  return "coverage" in result && result.coverage === "partial" ? `${messages[result.status]}${caveat}` : messages[result.status];
+}
+
 export async function mountWorkbenchOntologyTool(
   db: Queryable,
-  scope: Omit<RunScope, "leadId"> & { leadId: string | null },
+  scope: OntologyScope,
   tools: Record<string, unknown>,
 ) {
   const observations = new Map<string, WorkbenchOntologyObservation>();
-  const { leadId, organizationId, runId } = scope;
-  if (!leadId) return observations;
-  const authorized = await db.query(AUTHORIZED_LEAD_SQL, [organizationId, runId, leadId])
-    .then(({ rows }) => rows.length > 0).catch(() => false);
-  if (!authorized) return observations;
+  if (!await hasWorkbenchLeadOntologyAccess(db, scope)) return observations;
   if (WORKBENCH_ONTOLOGY_TOOL in tools) throw new Error("workbench_ontology_tool_name_collision");
 
   tools[WORKBENCH_ONTOLOGY_TOOL] = {
     ...tool({
-      description: "只读查询当前所选商机的已完成约见。唯一模板为 completed_appointments（v1）。" +
-        "按活动 performed_at 查询含起点、不含终点的 UTC 时间窗，最多 31 天，最多返回 25 条。" +
-        "排期、取消和未到场不算已完成。用户未给出明确时间窗、或所问指标超出模板时，先澄清。" +
-        "matched 的真实活动可作为阶段提案依据。truncated 时请缩小时间窗后重查。empty 表示 CRM 在此窗内没有匹配记录，" +
-        "error 和 forbidden 则无法判断。需要以约见为提案依据时，先读取本工具结果，再决定是否提案。" +
+      description: "查询审核过的 CRM 业务口径。resolve 查术语，plan 判断可回答性，query 只读执行。" +
+        "开放商机使用 open_leads，所选商机的已完成约见使用 completed_appointments，" +
+        "开放商机中未找到已完成约见记录使用 open_leads_without_completed_appointments。" +
+        "plan、开放商机和组合查询必须提供 question，使用带全部限定条件的原始业务查询。" +
+        "高潜、跟进不足等条件没有已审核定义时用 plan 澄清，勿省略条件或猜测。" +
+        "约见与组合需要明确含 Z 的起止 UTC 时间，含起点、不含终点，最多 31 天。排期、取消和未到场不算已完成。" +
+        "查询读取运行当前授权范围，最多 25 条。用返回值区分空结果、截断、部分覆盖、禁止和失败。" +
+        "只有 matched 的已完成约见实际活动可作为所选商机的阶段提案依据。" +
         "用本工具作为阶段提案依据时，在阶段提案的 reason 中写入原始 toolCallId 与实际活动 ID。",
       inputSchema: workbenchOntologyInputSchema,
       execute: async (args, { toolCallId }) => {
-        const result = await queryWorkbenchOntology(db, { organizationId, runId, leadId }, args);
+        const result = await executeWorkbenchOntology(db, scope, args);
         observations.set(toolCallId, result);
         return {
-          content: JSON.stringify({ ...result, toolCallId, message: meaning[result.status] }),
+          content: JSON.stringify({ ...result, toolCallId, message: meaningFor(result) }),
           details: result,
           isError: result.status === "error" || result.status === "forbidden",
         };

@@ -249,7 +249,8 @@ export async function runResumedWorkbenchTurn(input: {
       }
     }
     const ontologyObservations = await mountWorkbenchOntologyTool(getRequestPool(), {
-      organizationId, runId, leadId: input.scope.leadId,
+      organizationId, runId, leadId: input.scope.leadId, contactId: input.scope.contactId,
+      pipelineId: input.scope.pipelineId,
     }, gatedTools);
     if (WORKBENCH_ONTOLOGY_TOOL in gatedTools)
       effectByTool.set(WORKBENCH_ONTOLOGY_TOOL, workbenchToolEffect(WORKBENCH_ONTOLOGY_TOOL)!);
