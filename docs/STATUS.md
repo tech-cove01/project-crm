@@ -2,6 +2,14 @@
 
 更新：2026-11-17（Asia/Shanghai）。
 
+## 已发布 · GitHub 展示同步业务本体与记忆闭环（待用户体验验收）
+
+主仓 README `7c53567` 已发布。Pages 内容提交 `cfe63c9` 同步首页、详情、架构说明和演示入口。详情增加商机筛查与客户记忆各五步的案例讲解，说明授权、确认与实际回查。2026-11-01 历史验证保留原记录并链接当前对照结果，旧验证口径保持原样。产品与评测没有重新执行。
+
+本机完整回归 30/30、最终文案与截图检查 19/19、线上检查 25/25。核对桌面与窄屏、两块步骤、旧锚点及既有四场景入口。本机实走批准、拒绝与知识回查，确认状态保护。GitHub Pages 构建成功，6 项线上资源与 `cfe63c9` 字节一致，16 个公开文件链接均返回 200。首页及两块新讲解的桌面与窄屏截图、逐项检查见共同工作区 `.reviews/crm-pages-ontology-1117/README.md`。
+
+[线上首页](https://tech-cove01.github.io/project-crm/) · [商机筛查与口径](https://tech-cove01.github.io/project-crm/details.html#ontology-walkthrough) · [客户记忆提取与确认](https://tech-cove01.github.io/project-crm/details.html#memory-lifecycle) · [验证方法与结果](https://tech-cove01.github.io/project-crm/details.html#validation)
+
 ## 已验收 · CRM-029 业务语义层
 
 目录与规划 `0f32e7f`、Workbench 授权查询与取证 `d78526a`、所选商机原文误拒修复 `0a520c2` 均已推送。目录 `1.0.0` 统一开放商机与已完成约见口径。真实 Pi 回读开放 3 条、组合 1 条，与 SQL 一致。高潜和有效跟进缺定义时明确澄清并保持只读。31 项 SQL 对照、45 项定向单测和 Chrome 刷新通过。[实施票据](implementation-plan.md#crm-029workbench-业务语义层) · [验收原件与用量](evidence/CRM-029-ontology-layer.md)
