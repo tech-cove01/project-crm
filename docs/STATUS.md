@@ -2,7 +2,17 @@
 
 更新：2026-11-17。本页仅记录 `gh-pages` 静态展示，正式 CRM 已有功能和验收仍以 `main` 为准。
 
-## 当前交付：GitHub 介绍同步（已发布，待用户验收）
+## 当前交付：业务口径与客户记忆展示（已发布，待用户体验验收）
+
+页面内容提交 `cfe63c9`。首页按四项设计更新介绍，详解增加商机筛查与记忆确认各五步的合成案例，并同步工具侧架构。`verification.html` 标注为 2026-11-01 历史验证，原记录保留，新增通往现有对照结果的入口。审批和知识静态场景增加对应讲解链接，沿用原导览。
+
+本机完整 Chrome 回归 30 项、最终文案及截图 19 项、线上 25 项全部通过。覆盖桌面和窄屏、旧锚点、两个新讲解、历史跳转和四个静态场景首操作。本机另复查完整批准、拒绝、知识回查和导览状态保护。公开链接 16/16 返回 200。旧量化验证正文与上一轮发布一致。
+
+GitHub Pages 于 15:33:12（Asia/Shanghai）报告构建成功。首页、详情、样式、历史页、演示入口和场景说明脚本六项线上资源与 `cfe63c9` 字节一致。首页及两块新讲解的桌面、窄屏截图和逐项报告见共同工作区 `.reviews/crm-pages-ontology-1117/README.md`。本轮只更新介绍及导览链接，案例讲解和既有模拟均在静态页面呈现。
+
+[线上首页](https://tech-cove01.github.io/project-crm/) · [商机筛查与口径](https://tech-cove01.github.io/project-crm/details.html#ontology-walkthrough) · [客户记忆提取与确认](https://tech-cove01.github.io/project-crm/details.html#memory-lifecycle) · [历史验证](https://tech-cove01.github.io/project-crm/verification.html)
+
+## 上一轮交付：GitHub 介绍同步（已发布，待用户验收）
 
 首页与详情已更新为销售审批、跨会话记忆、企业知识检索及效果观测四项设计。保留业务案例、架构与完整技术栈；详情新增「验证方法与结果」，公开源链接说明实际检索、记忆、泛化、审批和观测的样本与边界。
 
