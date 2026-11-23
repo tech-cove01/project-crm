@@ -1,8 +1,15 @@
-import { dateWindow, deals, events, routes } from "./data.js";
+import { deals, events, routes } from "./data.js";
+import { agentScreens, handleAgent, handleAgentInput, readAgentState } from "./agent.js";
+import { crmScreens, handleCrm, handleCrmChange, handleCrmInput, readCrmState } from "./crm.js";
+import { handleLab, handleLabChange, labScreens, readLabState, resetLabControls } from "./lab.js";
 
 const storeKey = "pi-crm-showcase-workspace-v1";
 const page = document.querySelector("#workspace-content");
 const dialog = document.querySelector("#reset-dialog");
+const searchDialog = document.querySelector("#search-dialog");
+const searchInput = document.querySelector("#workspace-search");
+const searchResults = document.querySelector("#search-results");
+const railToggle = document.querySelector(".rail-toggle");
 const announcement = document.querySelector("#announcement");
 const caseById = Object.fromEntries(deals.map((deal) => [deal.id, deal]));
 const proposalStates = ["none", "blocked", "pending", "approved", "rejected", "executed", "verified"];
@@ -16,6 +23,9 @@ function freshState() {
       proposal: "none", memory: "none", closed: false, taskDone: false, reading: null,
     }])),
     logs: [],
+    agent: readAgentState(),
+    crm: readCrmState(),
+    lab: readLabState(),
   };
 }
 
@@ -25,6 +35,9 @@ function readState() {
     const previous = JSON.parse(sessionStorage.getItem(storeKey));
     if (!previous || !previous.cases) return fallback;
     if (Object.hasOwn(caseById, previous.selected)) fallback.selected = previous.selected;
+    fallback.agent = readAgentState(previous.agent);
+    fallback.crm = readCrmState(previous.crm);
+    fallback.lab = readLabState(previous.lab);
     for (const { id } of deals) {
       const entry = previous.cases[id];
       if (!entry) continue;
@@ -47,15 +60,33 @@ function readState() {
 }
 
 let state = readState();
-let survey = "open";
-let pipelineFilter = "all";
-
 function save() {
   try {
     sessionStorage.setItem(storeKey, JSON.stringify(state));
   } catch {
     // The workspace still works if the browser has disabled storage.
   }
+}
+
+function selectCase(id, route) {
+  if (!Object.hasOwn(caseById, id)) return false;
+  state.selected = id;
+  // Cross-page links must make the selected customer visible in the target list.
+  if (route === "#inbox") {
+    state.crm.inboxFilter = "all";
+    state.crm.inboxQuery = "";
+  }
+  if (route === "#contacts") state.crm.directoryQuery = "";
+  if (route === "#pipeline") state.crm.pipelineStage = "all";
+  if (route === "#tasks") state.crm.taskFilter = "all";
+  return true;
+}
+
+const entryUrl = new URL(location.href);
+if (selectCase(entryUrl.searchParams.get("case"), entryUrl.hash)) {
+  entryUrl.searchParams.delete("case");
+  history.replaceState(history.state, "", entryUrl);
+  save();
 }
 
 function activeRoute() {
@@ -106,6 +137,13 @@ function overview() {
   const pending = queues.filter((entry) => entry.proposal === "pending").length;
   const memoryQueue = queues.filter((entry) => entry.memory === "pending").length;
   const stageCount = deals.filter((deal) => stageFor(deal) === "技术评估").length;
+  const ridge = state.cases.ridge;
+  const journeyStep = { none: 0, pending: 1, approved: 1, executed: 2, verified: 3, blocked: 0, rejected: 1 }[ridge.proposal];
+  const path = [
+    { title: "核对约见与客户原话", route: "workbench" },
+    { title: "由负责人决定提案", route: "workbench" },
+    { title: "核对回执和实际阶段", route: "runs" },
+  ];
   return `${heading("工作区概览", "查看商机、客户会话与当前等待你处理的事项。", '<a class="button button-primary" href="#workbench">进入 Agent 工作台</a>')}
     <div class="metrics">
       <a class="metric" href="#pipeline"><span>开放商机金额</span><strong>${money.format(deals.reduce((sum, deal) => sum + deal.amount, 0))}</strong><small>${deals.length} 笔开放商机</small></a>
@@ -115,14 +153,14 @@ function overview() {
     </div>
     <div class="overview-grid">
       <article class="feature-case">
-        <div><span class="feature-kicker">建议先体验</span><h2>储能试点要推进到哪一步？</h2>
-        <p>栖岭能源已完成技术访谈。先查原始记录，再走一次阶段提案、人工审批与结果回查。</p>
-        <a class="button button-mint" href="#workbench" data-select="ridge">打开储能试点</a></div>
-        <div class="journey" aria-label="建议、审批和回查示例">
-          <span><i aria-hidden="true"></i>技术访谈已完成</span>
-          <span><i aria-hidden="true"></i>审批阶段提案</span>
-          <span><i aria-hidden="true"></i>回查实际阶段</span>
-        </div>
+        <div><span class="feature-kicker">栖岭能源 · 储能站点试点</span><h2>访谈之后，商机怎么推进？</h2>
+        <p>从技术访谈取证到执行回查，跟着一笔商机看完整链路。</p>
+        <div class="overview-actions"><a class="button button-mint" href="#workbench" data-select="ridge">打开储能试点</a>
+        <a href="../about/#run-states">查看 Run 状态图</a></div></div>
+        <ol class="journey" aria-label="当前商机处理进度">
+          ${path.map(({ title, route }, index) => `<li class="${index < journeyStep ? "journey-done" : ""}">
+            <a href="#${route}" data-select="ridge"><i aria-hidden="true"></i><span>${title}</span>${index < journeyStep ? '<span class="sr-only">（已通过此步骤）</span>' : ""}</a></li>`).join("")}
+        </ol>
       </article>
       <article class="panel pipeline-summary">
         <div class="panel-heading"><h2>管道分布</h2><a href="#pipeline">查看管道</a></div>
@@ -135,192 +173,32 @@ function overview() {
     </div>
     <section class="panel"><div class="panel-heading"><h2>开放商机</h2><span class="muted">2026 年 11 月 · 演示数据</span></div>
       ${dealRows(deals)}
-    </section>`;
-}
-
-const proposalLabels = {
-  none: ["尚未生成", "neutral"], blocked: ["缺少依据", "gold"], pending: ["待人工审批", "gold"],
-  approved: ["已批准 · 待执行", "green"], rejected: ["已拒绝", "red"],
-  executed: ["已执行", "green"], verified: ["已回查", "green"],
-};
-
-function proposalPanel(deal, current) {
-  const [name, variant] = proposalLabels[current.proposal];
-  const body = {
-    none: "核对所选商机的约见记录后，由工作台生成阶段提案。",
-    blocked: "该商机在示例时间窗内没有已完成约见记录。请补足依据后再推进。",
-    pending: "请核对依据后决定是否推进。当前商机阶段保持原状。",
-    approved: "批准已记录。执行后才会改变商机阶段。",
-    rejected: "已记录拒绝决定。当前商机阶段和执行回执均保持原状。",
-    executed: "阶段变更已写入本地演示数据。核对回执与当前商机阶段。",
-    verified: "回执记录的目标阶段与当前商机阶段一致。",
-  };
-  let actions = "";
-  if (current.proposal === "none") actions = button("propose", "生成阶段提案", "button-primary");
-  if (current.proposal === "pending") actions = button("approve", "批准提案", "button-primary") + button("reject", "拒绝提案");
-  if (current.proposal === "approved") actions = button("execute", "执行已批准动作", "button-primary");
-  if (current.proposal === "executed") actions = button("verify", "回查商机与回执", "button-primary");
-  const hasProposal = !["none", "blocked"].includes(current.proposal);
-  return `<article class="panel proposal-panel">
-      <div class="panel-heading"><h2>阶段提案</h2>${label(name, variant)}</div>
-      ${hasProposal ? '<div class="transition"><span>初步接洽</span><b aria-hidden="true">→</b><span>技术评估</span></div>' : ""}
-      <p>${body[current.proposal]}</p>
-      <div class="business-state"><span>当前商机阶段</span>${stageBadge(stageFor(deal))}</div>
-      ${actions ? `<div class="button-row">${actions}</div>` : ""}
-    </article>`;
-}
-
-function receipt(deal, current) {
-  const issued = ["executed", "verified"].includes(current.proposal);
-  return `<section class="panel"><div class="panel-heading"><h2>执行回执</h2><span class="muted">${issued ? "1 条回执" : "0 条回执"}</span></div>
-    ${issued ? `<dl class="key-values">
-      <div><dt>变更编号</dt><dd>DEMO-EXEC-1124</dd></div>
-      <div><dt>选中商机</dt><dd>${deal.title}</dd></div>
-      <div><dt>实际变更</dt><dd>初步接洽 → 技术评估</dd></div>
-      <div><dt>核对状态</dt><dd>${current.proposal === "verified" ? "当前阶段与回执一致" : "待回查"}</dd></div>
-    </dl>` : '<p class="empty-note">执行获批动作后，回执将出现在这里。</p>'}
-  </section>`;
-}
-
-function workbench(deal, current) {
-  return `${heading("Agent 工作台", "核对已完成约见的证据，再决定是否推进商机。")}
-    ${caseSelect(deal, "选择商机")}
-    <div class="two-columns">
-      <section class="panel">
-        <div class="panel-heading"><h2>当前任务取证</h2>${label(deal.meeting ? "已找到依据" : "无匹配记录", deal.meeting ? "green" : "gold")}</div>
-        <div class="case-head">${avatar(deal)}<div><strong>${deal.title}</strong><p>${deal.company} · ${money.format(deal.amount)}</p></div></div>
-        <div class="source-note">
-          <small>已完成约见 · ${dateWindow}</small>
-          <h3>${deal.meeting?.title ?? "没有已完成约见记录"}</h3>
-          <p>${deal.meeting?.note ?? "结果只代表这个时间窗里的 CRM 记录。"}</p>
-          ${deal.meeting ? `<small>${deal.meeting.id} · ${deal.meeting.date}</small>` : ""}
-        </div>
-        <a class="table-link" href="#ontology">查看约见口径</a>
-      </section>
-      ${proposalPanel(deal, current)}
-    </div>
-    ${receipt(deal, current)}`;
-}
-
-function pipeline() {
-  const filters = { all: "全部阶段", first: "初步接洽", review: "技术评估" };
-  const filtered = deals.filter((deal) => pipelineFilter === "all" || stageFor(deal) === filters[pipelineFilter]);
-  return `${heading("销售管道", "选择一笔开放商机，查看依据、阶段与审批状态。")}
-    <section class="panel"><div class="panel-heading"><h2>开放商机 · ${filtered.length} 笔</h2>
-      <label class="selector compact"><span class="sr-only">筛选阶段</span><select data-control="pipeline">
-      ${Object.entries(filters).map(([id, name]) => `<option value="${id}" ${pipelineFilter === id ? "selected" : ""}>${name}</option>`).join("")}
-      </select></label>
-    </div>${dealRows(filtered)}</section>`;
-}
-
-function inbox(deal, current) {
-  return `${heading("客户会话", "查看合成历史消息。结束单聊后，可以在客户记忆审核原话。")}
-    <div class="inbox-layout">
-      <section class="panel inbox-list"><div class="panel-heading"><h2>历史单聊</h2></div>
-        ${deals.map((item) => `<button type="button" class="inbox-item ${item.id === deal.id ? "is-selected" : ""}" data-action="select-inbox" data-select="${item.id}" aria-pressed="${item.id === deal.id}">
-          ${avatar(item)}<span><strong>${item.contact}</strong><small>${item.company}</small></span>
-          ${state.cases[item.id].closed ? label("已结束") : ""}
-        </button>`).join("")}
-      </section>
-      <section class="panel"><div class="panel-heading"><h2>${deal.contact} · ${deal.company}</h2>${label(current.closed ? "会话已结束" : "历史会话", current.closed ? "green" : "neutral")}</div>
-        <p class="muted">${deal.role} · ${deal.message.date}</p>
-        <div class="chat-message">${avatar(deal)}<blockquote><p>${deal.message.quote}</p><cite>${deal.contact} · ${deal.message.id}</cite></blockquote></div>
-        <div class="button-row">${current.closed ? '<a class="button button-primary" href="#memory">去审核客户记忆</a>' : button("close", "结束会话", "button-primary")}</div>
-      </section>
-    </div>`;
-}
-
-function tasks() {
-  return `${heading("跟进任务", "跟踪业务待办。任务完成后，相关客户原话可进入记忆审核。")}
-    <section class="panel"><div class="panel-heading"><h2>近期跟进</h2></div><div class="task-list">
-      ${deals.map((deal) => `<article class="task"><span class="task-icon" aria-hidden="true">${state.cases[deal.id].taskDone ? "✓" : "○"}</span>
-        <div><h3>${deal.task.label}</h3><p>${deal.company} · ${deal.task.owner} · ${deal.task.due}</p></div>
-        ${state.cases[deal.id].taskDone
-          ? label("已完成", "green")
-          : `<button type="button" class="button button-small" data-action="task" data-case="${deal.id}" aria-label="完成任务：${deal.task.label}">标记完成</button>`}
-      </article>`).join("")}
-    </div></section>`;
-}
-
-function candidateCard(deal, current) {
-  const strings = {
-    none: ["尚无候选", "结束单聊、完成关联的跟进任务，或主动从当前原文提取。", "neutral"],
-    pending: ["待人工审核", "确认后才会在新会话读到这条记忆。", "gold"],
-    confirmed: ["已确认", "这条偏好现在可以在新会话复用。", "green"],
-    rejected: ["已驳回", "本候选已从可用记忆中排除。", "neutral"],
-    withdrawn: ["已撤回", "下一次召回会跳过这条偏好。", "neutral"],
-  };
-  const [title, description, variant] = strings[current.memory];
-  const output = ["pending", "confirmed"].includes(current.memory)
-    ? `<div class="source-note"><small>沟通偏好</small><p class="memory-fact">${deal.message.fact}</p></div>` : "";
-  const actions = {
-    none: button("extract", "从历史消息提取", "button-primary"),
-    pending: button("remember", "确认候选", "button-primary") + button("dismiss", "驳回候选"),
-    confirmed: button("withdraw", "撤回记忆"), rejected: "", withdrawn: "",
-  };
-  return `<section class="panel"><div class="panel-heading"><h2>记忆候选</h2>${label(title, variant)}</div>
-      <p>${description}</p>${output}${actions[current.memory] ? `<div class="button-row">${actions[current.memory]}</div>` : ""}
-    </section>`;
-}
-
-function memory(deal, current) {
-  const reading = current.reading === null ? "" : current.reading
-    ? `<div class="result-box"><strong>已读回 1 条确认事实</strong><p>${deal.message.fact}</p></div>`
-    : '<div class="result-box"><strong>读回 0 条确认事实</strong><p>当前没有可供这个会话使用的已确认偏好。</p></div>';
-  return `${heading("客户记忆", "保留可追溯的原话，由人审核哪些偏好能在新会话复用。")}
-    ${caseSelect(deal, "选择客户")}
-    <div class="two-columns">
-      <section class="panel"><div class="panel-heading"><h2>授权历史原文</h2>${label("入站消息")}</div>
-        <div class="case-head">${avatar(deal)}<div><strong>${deal.contact}</strong><p>${deal.company} · ${deal.role}</p></div></div>
-        <blockquote class="memory-quote"><p>${deal.message.quote}</p><cite>${deal.message.date} · ${deal.message.id}</cite></blockquote>
-        <a class="table-link" href="#inbox">查看会话</a>
-      </section>
-      ${candidateCard(deal, current)}
-    </div>
-    <section class="panel"><div class="panel-heading"><h2>新会话召回</h2>${button("recall", "新会话读取", "button-small")}</div>
-      <p>按当前客户和确认状态读取。</p>${reading}
-    </section>`;
-}
-
-function ontology() {
-  const filters = { open: "开放商机", missing: "近 30 天无已完成约见", undefined: "高潜客户" };
-  const matched = survey === "missing" ? deals.filter((deal) => !deal.meeting) : deals;
-  return `${heading("业务口径", "按明确的状态和活动规则查询销售记录。")}
-    <section class="panel"><div class="panel-heading"><h2>选择查询</h2></div>
-      <div class="filters">${Object.entries(filters).map(([id, text]) =>
-        `<button class="button ${survey === id ? "button-filter-selected" : ""}" type="button" data-action="survey" data-filter="${id}" aria-pressed="${survey === id}">${text}</button>`).join("")}</div>
-      ${survey === "undefined"
-        ? '<div class="result-box"><strong>需要补充「高潜」定义</strong><p>请选择团队已审核的判断口径，例如某个阶段或已完成活动。</p></div>'
-        : `<p class="subtle-line">${survey === "missing"
-          ? `${dateWindow} · 仅统计 CRM 中标为已完成的约见活动。`
-          : "开放范围包含初步接洽和技术评估阶段。"} </p>
-          ${dealRows(matched)}`}
-    </section>`;
-}
-
-function runs() {
-  const rows = [...state.logs].reverse();
-  return `${heading("运行记录", "按倒序查看当前标签页的取证、决定、执行与回查。")}
-    <section class="panel"><div class="panel-heading"><h2>操作轨迹</h2><span class="muted">${rows.length} 条记录</span></div>
-      ${rows.length ? `<ol class="event-list">${rows.map((entry) => {
-        const [type, description] = events[entry.kind];
-        return `<li><span class="event-pin" aria-hidden="true"></span><div><strong>${type} · ${caseById[entry.id].title}</strong><p>${description}</p></div></li>`;
-      }).join("")}</ol>` : '<p class="empty-note">当前还没有记录。<a class="table-link" href="#workbench">从工作台开始一项任务</a>。</p>'}
     </section>
-    <div class="further"><a href="../details.html#validation">项目验证方法和真实结果</a><a href="../demo/index.html?scenario=evaluation&amp;guide=1#/app/ai/workbench">深入体验评测与失败回放</a></div>`;
+    <section class="panel overview-queue"><div class="panel-heading"><h2>最近的跟进任务</h2><a href="#tasks">查看任务列表</a></div>
+      ${deals.map((deal) => `<article>${avatar(deal)}<div><a href="#inbox" data-select="${deal.id}">${deal.task.label}</a><small>${deal.company} · ${deal.task.owner} · ${deal.task.due}</small></div>
+        ${state.cases[deal.id].taskDone ? label("已完成", "green") : label("未完成")}</article>`).join("")}
+    </section>`;
 }
 
-const screens = { overview, workbench, pipeline, inbox, tasks, memory, ontology, runs };
+const screens = { overview, ...crmScreens, ...agentScreens, ...labScreens };
+
+function getModel() {
+  const deal = caseById[state.selected];
+  return {
+    state, deal, current: state.cases[deal.id], deals, stageFor, stageBadge, money,
+    heading, label, avatar, button, log, makeCandidate, changeProposal, caseSelect, dealRows,
+  };
+}
 
 function render() {
   const slug = activeRoute();
-  const deal = caseById[state.selected];
   document.querySelector("#workspace-location").textContent = routes[slug];
   for (const item of document.querySelectorAll("[data-route]")) {
     if (item.dataset.route === slug) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
   }
-  page.innerHTML = screens[slug](deal, state.cases[deal.id]);
+  document.title = `${routes[slug]} · Pi Native CRM`;
+  page.innerHTML = screens[slug](getModel());
 }
 
 function makeCandidate(deal, current) {
@@ -353,26 +231,6 @@ function changeProposal(action, deal, current) {
 function handleAction(action, control) {
   const deal = caseById[control.dataset.case] ?? caseById[state.selected];
   const current = state.cases[deal.id];
-  if (action === "survey") {
-    survey = control.dataset.filter;
-    return "已更新查询结果。";
-  }
-  if (action === "select-inbox") {
-    state.selected = control.dataset.select;
-    return "已打开所选单聊。";
-  }
-  if (action === "close" && !current.closed) {
-    current.closed = true;
-    log(deal, "closed");
-    makeCandidate(deal, current);
-    return "会话已结束。";
-  }
-  if (action === "task" && !current.taskDone) {
-    current.taskDone = true;
-    log(deal, "taskDone");
-    makeCandidate(deal, current);
-    return "跟进任务已完成。";
-  }
   if (action === "extract") {
     makeCandidate(deal, current);
     return "候选已进入待审核。";
@@ -394,13 +252,15 @@ function handleAction(action, control) {
     log(deal, "recalled");
     return current.reading ? "读回一条确认事实。" : "读回零条确认事实。";
   }
-  return changeProposal(action, deal, current);
+  return handleAgent(action, control, getModel()) ??
+    handleCrm(action, control, getModel()) ?? handleLab(action, control, getModel());
 }
 
 document.addEventListener("click", (event) => {
   const link = event.target.closest("a[data-select]");
   if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
-    state.selected = link.dataset.select;
+    if (searchDialog.open) searchDialog.close();
+    if (!selectCase(link.dataset.select, link.hash)) return;
     save();
     if (link.hash === location.hash) render();
   }
@@ -411,17 +271,19 @@ document.addEventListener("click", (event) => {
     dialog.showModal();
     return;
   }
+  if (control.dataset.action === "search") {
+    openSearch();
+    return;
+  }
   const message = handleAction(control.dataset.action, control);
   if (!message) return;
   const prevTop = window.scrollY;
   save();
   render();
   window.scrollTo(0, prevTop);
+  const keys = Object.keys(control.dataset);
   const replacement = [...page.querySelectorAll("button[data-action]")].find((item) =>
-    item.dataset.action === control.dataset.action &&
-    item.dataset.select === control.dataset.select &&
-    item.dataset.filter === control.dataset.filter &&
-    item.dataset.case === control.dataset.case,
+    keys.every((key) => item.dataset[key] === control.dataset[key]),
   );
   (replacement ?? page).focus({ preventScroll: true });
   announcement.textContent = message;
@@ -429,12 +291,26 @@ document.addEventListener("click", (event) => {
 
 page.addEventListener("change", (event) => {
   const control = event.target.dataset.control;
-  if (control === "selected") state.selected = event.target.value;
-  else if (control === "pipeline") pipelineFilter = event.target.value;
-  else return;
+  if (control === "selected") {
+    if (!Object.hasOwn(caseById, event.target.value)) return;
+    state.selected = event.target.value;
+  } else {
+    const result = handleCrmChange(event, getModel());
+    if (result === true) {
+      save();
+      return;
+    }
+    if (typeof result === "string") announcement.textContent = result;
+    else if (!handleLabChange(event, getModel())) return;
+  }
   save();
   render();
-  page.querySelector(`select[data-control="${control}"]`).focus({ preventScroll: true });
+  page.querySelector(`[data-control="${control}"]`)?.focus({ preventScroll: true });
+});
+
+page.addEventListener("input", (event) => {
+  const model = getModel();
+  if (handleCrmInput(event, model) || handleAgentInput(event, model)) save();
 });
 
 document.querySelector(".skip-link").addEventListener("click", (event) => {
@@ -442,7 +318,42 @@ document.querySelector(".skip-link").addEventListener("click", (event) => {
   page.focus();
 });
 
+function renderSearchResults() {
+  const query = searchInput.value.trim().toLowerCase();
+  const matchingDeals = deals.filter((deal) => `${deal.company} ${deal.contact} ${deal.title}`.toLowerCase().includes(query));
+  const matchingViews = Object.entries(routes).filter(([, title]) => title.toLowerCase().includes(query));
+  searchResults.innerHTML = matchingDeals.length || matchingViews.length
+    ? `${matchingDeals.length ? `<h3>客户与商机</h3>${matchingDeals.map((deal) =>
+      `<a href="#inbox" data-select="${deal.id}">${avatar(deal)}<span><strong>${deal.company} · ${deal.contact}</strong><small>${deal.title}</small></span></a>`).join("")}` : ""}
+      ${matchingViews.length ? `<h3>页面</h3>${matchingViews.map(([route, title]) =>
+        `<a href="#${route}">${title}</a>`).join("")}` : ""}`
+    : '<p class="muted">没有找到匹配的客户、商机或页面。</p>';
+}
+
+function openSearch() {
+  if (searchDialog.open || dialog.open) return;
+  searchInput.value = "";
+  renderSearchResults();
+  searchDialog.showModal();
+  searchInput.focus();
+}
+
+searchInput.addEventListener("input", renderSearchResults);
+searchResults.addEventListener("click", (event) => {
+  if (event.target.closest("a:not([data-select])") && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) searchDialog.close();
+});
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    openSearch();
+  }
+});
+railToggle.addEventListener("click", () => {
+  railToggle.setAttribute("aria-expanded", railToggle.getAttribute("aria-expanded") === "true" ? "false" : "true");
+});
+
 window.addEventListener("hashchange", () => {
+  railToggle.setAttribute("aria-expanded", "false");
   render();
   window.scrollTo(0, 0);
   page.focus({ preventScroll: true });
@@ -451,8 +362,7 @@ window.addEventListener("hashchange", () => {
 dialog.addEventListener("close", () => {
   if (dialog.returnValue !== "confirm") return;
   state = freshState();
-  survey = "open";
-  pipelineFilter = "all";
+  resetLabControls();
   save();
   render();
   announcement.textContent = "演示已重置。";

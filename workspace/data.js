@@ -49,9 +49,12 @@ export const routes = {
   workbench: "Agent 工作台",
   pipeline: "销售管道",
   inbox: "客户会话",
+  contacts: "联系人",
+  risk: "风险提醒",
   tasks: "跟进任务",
   memory: "客户记忆",
   ontology: "业务口径",
+  followups: "跟进流程",
   runs: "运行记录",
 };
 

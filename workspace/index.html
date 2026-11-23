@@ -7,6 +7,9 @@
   <meta name="description" content="在浏览器里体验 Pi Native CRM 的商机、Agent 审批、客户记忆和执行回查。">
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
   <link rel="stylesheet" href="./workspace.css">
+  <link rel="stylesheet" href="./crm.css">
+  <link rel="stylesheet" href="./agent.css">
+  <link rel="stylesheet" href="./lab.css">
   <script type="module" src="./app.js"></script>
   <title>销售工作区 · Pi Native CRM</title>
 </head>
@@ -18,14 +21,21 @@
         <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
         <span>Pi Native CRM<small>销售工作区</small></span>
       </a>
-      <nav class="workspace-nav" aria-label="工作区导航">
+      <button type="button" class="rail-toggle" aria-expanded="false" aria-controls="workspace-nav">导航</button>
+      <nav class="workspace-nav" aria-label="工作区导航" id="workspace-nav">
         <div class="nav-group">
           <p>工作区</p>
           <a href="#overview" data-route="overview"><i class="nav-icon" aria-hidden="true">▦</i> 概览</a>
           <a href="#workbench" data-route="workbench"><i class="nav-icon" aria-hidden="true">✧</i> Agent 工作台</a>
           <a href="#pipeline" data-route="pipeline"><i class="nav-icon" aria-hidden="true">▥</i> 销售管道</a>
+        </div>
+        <div class="nav-group">
+          <p>客户经营</p>
           <a href="#inbox" data-route="inbox"><i class="nav-icon" aria-hidden="true">▣</i> 客户会话</a>
+          <a href="#contacts" data-route="contacts"><i class="nav-icon" aria-hidden="true">⊙</i> 联系人</a>
+          <a href="#risk" data-route="risk"><i class="nav-icon" aria-hidden="true">◉</i> 风险提醒</a>
           <a href="#tasks" data-route="tasks"><i class="nav-icon" aria-hidden="true">✓</i> 跟进任务</a>
+          <a href="#followups" data-route="followups"><i class="nav-icon" aria-hidden="true">↳</i> 跟进流程</a>
         </div>
         <div class="nav-group">
           <p>证据与规则</p>
@@ -42,7 +52,11 @@
     <div class="workspace-main">
       <header class="workspace-bar">
         <div class="workspace-path" aria-label="当前位置"><span>销售工作区</span><span aria-hidden="true">/</span><strong id="workspace-location">概览</strong></div>
-        <div class="bar-actions"><span class="demo-label">静态演示</span><button type="button" class="button button-small" data-action="reset">重置</button></div>
+        <div class="bar-actions">
+          <button type="button" class="button button-small search-trigger" data-action="search" aria-keyshortcuts="Control+K Meta+K">搜索 <kbd>Ctrl K</kbd></button>
+          <span class="demo-label" title="所有操作仅处理合成数据">演示环境</span>
+          <button type="button" class="button button-small" data-action="reset">重置</button>
+        </div>
       </header>
       <main class="content" id="workspace-content" tabindex="-1"></main>
       <noscript><p class="content">启用 JavaScript 后即可体验工作台。<a href="../about/">阅读项目说明</a></p></noscript>
@@ -56,6 +70,12 @@
       <button class="button" value="cancel" autofocus>取消</button>
       <button class="button button-primary" value="confirm">重置示例</button>
     </form>
+  </dialog>
+  <dialog class="search-dialog" id="search-dialog" aria-labelledby="search-title">
+    <form method="dialog" class="search-top"><h2 id="search-title">搜索工作区</h2><button type="submit" class="button button-small">关闭</button></form>
+    <label class="sr-only" for="workspace-search">输入客户、商机或页面名</label>
+    <input type="search" id="workspace-search" placeholder="输入客户、商机或页面名" autofocus>
+    <div id="search-results" class="search-results"></div>
   </dialog>
 </body>
 </html>

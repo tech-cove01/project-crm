@@ -19,6 +19,7 @@ button { cursor: pointer; }
 p { line-height: 1.65; }
 :focus-visible { outline: 2px solid #298263; outline-offset: 4px; }
 .rail :focus-visible { outline-color: var(--mint); }
+.rail-toggle { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .skip-link { position: fixed; z-index: 5; inset: 12px auto auto 12px; transform: translateY(-150%); padding: 10px 14px; background: var(--mint); color: var(--forest); }
 .skip-link:focus { transform: none; }
@@ -34,10 +35,10 @@ p { line-height: 1.65; }
 .brand-mark { width: 37px; height: 37px; flex: 0 0 auto; display: grid; place-content: center; gap: 3px; border-radius: 11px; background: var(--mint); }
 .brand-mark i { display: block; width: 16px; height: 5px; border-radius: 3px; background: var(--forest); transform: skewX(-22deg); }
 .brand-mark i:last-child { width: 11px; }
-.workspace-nav { display: grid; gap: 27px; margin-top: 36px; }
+.workspace-nav { display: grid; gap: 17px; margin-top: 24px; margin-bottom: 12px; }
 .nav-group { display: grid; gap: 4px; }
 .nav-group p { margin: 0 0 4px 11px; color: #bbd1c5; font-size: 12px; font-weight: 650; letter-spacing: .04em; }
-.nav-group a { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 11px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 650; }
+.nav-group a { display: flex; align-items: center; gap: 8px; min-height: 37px; padding: 7px 11px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 650; }
 .nav-group a:hover { background: #28503f; }
 .nav-group a[aria-current] { background: var(--mint); color: var(--forest); }
 .nav-icon { width: 21px; flex: 0 0 auto; font-family: "Segoe UI Symbol", system-ui, sans-serif; font-size: 18px; font-style: normal; text-align: center; }
@@ -92,10 +93,18 @@ p { line-height: 1.65; }
 .feature-case h2 { margin: 8px 0 0; font-size: clamp(20px, 2.1vw, 28px); line-height: 1.3; letter-spacing: -.025em; }
 .feature-case p { margin: 10px 0 15px; color: #deefe3; font-size: 14px; max-width: 32ch; }
 .feature-kicker { color: #c6edcf; font-size: 13px; font-weight: 650; }
-.journey { display: grid; gap: 10px; padding: 15px; border: 1px solid #83af97; border-radius: 11px; background: #12372b85; }
-.journey span { display: flex; align-items: center; gap: 9px; font-size: 13px; }
-.journey i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 100%; background: var(--mint); }
-.journey span:not(:first-child) i { background: transparent; border: 1px solid #a6cdb4; }
+.overview-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.overview-actions > a:not(.button) { color: #d9f0df; font-size: 13px; text-underline-offset: 3px; }
+.journey { display: grid; gap: 10px; padding: 13px; margin: 0; list-style: none; border: 1px solid #83af97; border-radius: 11px; background: #12372b85; }
+.journey a { display: flex; align-items: center; gap: 8px; font-size: 13px; text-decoration: none; }
+.journey a:hover { text-decoration: underline; }
+.journey i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 100%; border: 1px solid #a6cdb4; }
+.journey-done i { background: var(--mint); }
+.overview-queue article { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 11px 0; }
+.overview-queue article:last-child { padding-bottom: 0; }
+.overview-queue article .pill { margin-left: auto; white-space: nowrap; }
+.overview-queue article a { display: inline-block; text-underline-offset: 3px; color: var(--pine); font-size: 14px; font-weight: 680; }
+.overview-queue article small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
 
 .panel { min-width: 0; padding: clamp(16px, 2.2vw, 26px); }
 .panel + .panel, .two-columns + .panel { margin-top: 16px; }
@@ -185,11 +194,28 @@ p { line-height: 1.65; }
 .reset-dialog h2 { margin: 0; font-size: 21px; }
 .reset-dialog p { color: var(--muted); }
 .reset-dialog form { justify-content: flex-end; }
+.search-trigger { gap: 9px; }
+.search-trigger kbd {
+  border: 1px solid #d9e5dc; border-radius: 4px; padding: 3px 4px; background: #f6f9f3;
+  color: #536b5d; font: 11px/1.15 "Segoe UI", sans-serif;
+}
+.search-dialog {
+  width: min(92vw, 590px); max-height: min(76vh, 690px); padding: 20px;
+  border: 1px solid #c9ded0; border-radius: 13px; color: var(--ink);
+}
+.search-dialog::backdrop { background: #112b22a9; }
+.search-top { display: flex; justify-content: space-between; align-items: center; gap: 9px; margin: 0 0 12px; }
+.search-top h2 { margin: 0; font-size: 20px; }
+.search-dialog input { width: 100%; min-height: 43px; border: 1px solid #bdcfc3; border-radius: 8px; padding: 9px 10px; color: var(--ink); }
+.search-results h3 { margin: 14px 0 4px; font-size: 13px; color: var(--muted); }
+.search-results a { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 6px; text-decoration: none; font-size: 14px; }
+.search-results a:hover, .search-results a:focus-visible { background: #e9f3e8; }
+.search-results small { display: block; color: var(--muted); margin-top: 4px; }
 
 @media (max-height: 760px) and (min-width: 761px) {
   .rail { padding-top: 20px; }
-  .workspace-nav { margin-top: 20px; gap: 18px; }
-  .nav-group a { min-height: 37px; }
+  .workspace-nav { margin-top: 16px; gap: 12px; }
+  .nav-group a { min-height: 34px; }
 }
 
 @media (max-width: 1100px) {
@@ -209,7 +235,13 @@ p { line-height: 1.65; }
   .rail { position: static; max-height: none; min-height: 0; padding: 15px; }
   .brand { padding-left: 0; }
   .brand small { display: none; }
-  .workspace-nav { gap: 5px; margin-top: 11px; }
+  .rail-toggle {
+    display: block; position: absolute; top: 17px; right: 79px;
+    padding: 6px 9px; border: 1px solid #6f9483; border-radius: 6px;
+    background: transparent; color: #f0faf2; font-size: 13px;
+  }
+  .workspace-nav { display: none; gap: 5px; margin-top: 11px; margin-bottom: 0; }
+  .rail-toggle[aria-expanded="true"] + .workspace-nav { display: grid; }
   .nav-group { display: flex; flex-wrap: wrap; gap: 2px; }
   .nav-group p { display: none; }
   .nav-group a { padding: 5px 7px; min-height: 34px; font-size: 13px; gap: 4px; }
@@ -217,6 +249,7 @@ p { line-height: 1.65; }
   .rail-footer { position: absolute; top: 21px; right: 15px; padding: 0; border: 0; }
   .rail-user { display: none; }
   .workspace-bar { min-height: 53px; padding: 8px 15px; }
+  .search-trigger kbd { display: none; }
   .content { padding: 23px 15px 34px; }
   .page-heading { align-items: flex-start; margin-bottom: 18px; }
   .overview-grid, .two-columns, .inbox-layout { gap: 10px; }
