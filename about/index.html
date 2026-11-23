@@ -8,6 +8,7 @@
   <title>项目介绍 · Pi Native CRM</title>
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
   <link rel="stylesheet" href="./about.css">
+  <script type="module" src="./architecture.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">跳到主要内容</a>
@@ -57,7 +58,36 @@
       </aside>
     </section>
 
-    <section class="experience" aria-labelledby="experience-title">
+    <nav class="reading-nav" aria-label="介绍页章节">
+      <a href="#architecture">系统架构</a>
+      <a href="#run-states">运行与审批状态</a>
+      <a href="#business-cases">业务案例</a>
+      <a href="#evidence">真实验证</a>
+    </nav>
+
+    <section class="architecture" id="architecture" aria-labelledby="architecture-title">
+      <div class="section-heading diagram-heading">
+        <div><h2 id="architecture-title">权限、执行与数据怎样连接</h2>
+          <p>以一次商机跟进任务为例，选择图中的节点查看它接收什么、交给谁以及在哪里校验。</p></div>
+        <a class="detail-link" href="../details.html#architecture">技术说明与结构</a>
+      </div>
+      <figure class="diagram system-diagram" id="architecture-board" aria-label="从工作台、队列和工具到数据与评测的系统图">
+        <p class="diagram-fallback">工作台限定当前用户和商机范围，队列交给 Worker 领取。Pi 通过许可工具读取事实及资料，阶段变更经人审后执行，再回到 SQL 核对状态。<a href="../details.html#architecture">查看系统架构说明</a></p>
+      </figure>
+    </section>
+
+    <section class="architecture run-states" id="run-states" aria-labelledby="run-title">
+      <div class="section-heading diagram-heading">
+        <div><h2 id="run-title">一条 Run 怎么完成，何时停下来</h2>
+          <p>沿着只读、人审或异常路径看状态变化。批准以后，Worker 仍要核验授权，并回读实际业务结果。</p></div>
+        <a class="detail-link" href="../details.html#controlled-execution">执行与审批设计</a>
+      </div>
+      <figure class="diagram run-diagram" id="run-board" aria-label="Run 队列、提案审批与异常分支图">
+        <p class="diagram-fallback">只读任务可以直接完成。需要写入时先生成提案，获批后才执行。缺证、拒绝或写入效果不明时停在对应状态。<a href="../details.html#controlled-execution">查看执行路径</a></p>
+      </figure>
+    </section>
+
+    <section class="experience" id="business-cases" aria-labelledby="experience-title">
       <div class="section-heading">
         <h2 id="experience-title">沿一笔商机看三件事</h2>
         <p>先读依据，再决定动作。客户偏好可以留给下一次会话继续使用。</p>
@@ -67,56 +97,21 @@
           <span class="card-tag">日程与商机</span>
           <h3>已完成，才算约见证据</h3>
           <p>用所选商机和指定时间窗查询 CRM 日程。访谈已完成才能支持提案，只有排期或结果为空时要如实说明。</p>
-          <a href="../details.html#ontology-walkthrough">查看业务口径</a>
+          <div class="case-links"><a href="../workspace/#ontology">操作口径查询</a><a href="../details.html#ontology-walkthrough">读真实案例</a></div>
         </article>
         <article class="experience-card">
           <span class="card-tag">客户记忆</span>
           <h3>夜间告警优先走邮件</h3>
           <p>从栖岭能源的历史单聊提取偏好，核对客户原话再确认。新会话可读回已确认的事实，待审和撤回的内容不会进入结果。</p>
-          <a href="../details.html#memory-lifecycle">查看记忆确认过程</a>
+          <div class="case-links"><a href="../workspace/#memory">打开记忆审核</a><a href="../details.html#memory-lifecycle">读真实案例</a></div>
         </article>
         <article class="experience-card">
           <span class="card-tag">审批与回查</span>
           <h3>批准后才推进阶段</h3>
           <p>审批人与执行结果分别有记录。待批时阶段保持初步接洽，执行后才可核对阶段变更和实际回执。</p>
-          <a href="../details.html#controlled-execution">查看受控执行设计</a>
+          <div class="case-links"><a href="../workspace/#workbench">体验审批回查</a><a href="../details.html#controlled-execution">读执行设计</a></div>
         </article>
       </div>
-    </section>
-
-    <section class="architecture" id="architecture" aria-labelledby="architecture-title">
-      <div class="section-heading">
-        <h2 id="architecture-title">正式应用怎样运转</h2>
-        <p>Web 处理交互，Worker 承接排队任务，SQL 保存业务事实和运行记录。</p>
-      </div>
-      <ol class="architecture-flow" aria-label="正式应用的四层执行路径">
-        <li>
-          <p class="system-name">Next.js</p>
-          <h3>Web 与 API</h3>
-          <p>接收请求，校验身份、角色和当前业务对象。</p>
-        </li>
-        <li>
-          <p class="system-name">Node.js</p>
-          <h3>队列与 Worker</h3>
-          <p>持久化任务，按租约领取并处理已获批的动作。</p>
-        </li>
-        <li>
-          <p class="system-name">Pi</p>
-          <h3>模型与工具</h3>
-          <p>通过许可的工具查询、取证、生成提案及回查。</p>
-        </li>
-        <li>
-          <p class="system-name">PostgreSQL</p>
-          <h3>业务事实与审计</h3>
-          <p>保存授权记录、确认记忆、审批与执行回执。</p>
-        </li>
-      </ol>
-      <dl class="integrations">
-        <div><dt>Mem0</dt><dd>辅助给记忆排序，命中仍用 SQL 核验。</dd></div>
-        <div><dt>WeKnora</dt><dd>检索企业资料，引用前回读当前原文。</dd></div>
-        <div><dt>Langfuse</dt><dd>关联脱敏轨迹、耗时和评分。</dd></div>
-      </dl>
-      <a class="detail-link" href="../details.html#stack">完整技术栈与设计取舍</a>
     </section>
 
     <section class="evidence" id="evidence" aria-labelledby="evidence-title">
