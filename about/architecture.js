@@ -257,13 +257,14 @@ function boardMarkup(board, lanes, paths) {
         <h3></h3><p></p>
       </div>
       <div class="diagram-evidence">
-        <p></p><div class="case-links"></div>
+        <p></p>${board.hasAttribute("data-inline") ? "" : '<div class="case-links"></div>'}
       </div>
     </figcaption>`;
 }
 
 function mountDiagram(selector, definitions, lanes, edges, defaultNode, paths) {
   const board = document.querySelector(selector);
+  if (!board) return;
   board.innerHTML = boardMarkup(board, lanes, paths);
   const map = board.querySelector(".diagram-map");
   const wires = board.querySelector(".diagram-wires");
@@ -282,12 +283,14 @@ function mountDiagram(selector, definitions, lanes, edges, defaultNode, paths) {
     detailTitle.textContent = definition.title;
     detailText.textContent = definition.detail;
     fact.textContent = definition.fact;
-    links.replaceChildren(...definition.links.map(([text, href]) => {
-      const link = document.createElement("a");
-      link.href = href;
-      link.textContent = text;
-      return link;
-    }));
+    if (links) {
+      links.replaceChildren(...definition.links.map(([text, href]) => {
+        const link = document.createElement("a");
+        link.href = href;
+        link.textContent = text;
+        return link;
+      }));
+    }
   }
 
   function renderPath(id) {
