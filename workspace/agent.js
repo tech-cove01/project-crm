@@ -1,11 +1,12 @@
-import { deals, events } from "./data.js";
+import { deals, events, pipelineStages } from "./data.js";
 import { proposalActions, proposalCopy, proposalInfo, publicEvidence, taskOptions, taskWindow } from "./agent-data.js";
 
 const subjects = Object.fromEntries(deals.map((deal) => [deal.id, deal]));
+const knownSourceIds = new Set(deals.flatMap(({ meeting, message }) => meeting ? [meeting.id, message.id] : [message.id]));
 const modes = { controlled: "受控行动", read: "只读调查" };
 const writableStage = "初步接洽";
 const resultingStage = "技术评估";
-const stageOptions = new Set(deals.map((deal) => deal.stage).concat(resultingStage));
+const stageOptions = new Set(pipelineStages.map(({ name }) => name));
 const own = Object.hasOwn;
 
 export function readAgentState(previous) {
@@ -18,13 +19,15 @@ export function readAgentState(previous) {
     runs: [],
     draft: typeof previous?.draft === "string" ? previous.draft.slice(0, 120) : "",
     draftError: previous?.draftError === true,
+    draftScopeError: false,
+    executionPaused: previous?.executionPaused === true,
   };
   const seen = new Set();
   for (const saved of Array.isArray(previous?.runs) ? previous.runs : []) {
     if (!saved || !Number.isSafeInteger(saved.no) || saved.no < 1 || seen.has(saved.no)) continue;
     if (!own(subjects, saved.caseId) || !own(taskOptions, saved.kind) || !own(modes, saved.mode)) continue;
     seen.add(saved.no);
-    next.runs.push({
+    const record = {
       no: saved.no,
       caseId: saved.caseId,
       kind: saved.kind,
@@ -34,7 +37,12 @@ export function readAgentState(previous) {
       proposal: saved.kind === "ontology" && saved.mode === "controlled" && own(proposalInfo, saved.proposal) ? saved.proposal : "none",
       memoryMatch: saved.memoryMatch === true,
       continued: saved.continued === true,
-    });
+    };
+    const stored = saved.source;
+    record.source = own(saved, "source")
+      ? (own(subjects, stored?.caseId) && knownSourceIds.has(stored.id) ? { caseId: stored.caseId, id: stored.id } : null)
+      : sourceFor(record);
+    next.runs.push(record);
   }
   for (const name of ["workbench", "runs"]) {
     const saved = previous?.inspection?.[name];
@@ -42,6 +50,13 @@ export function readAgentState(previous) {
       next.inspection[name] = { no: saved.no, step: saved.step };
   }
   return next;
+}
+
+function sourceFor(run) {
+  if (run.continued) return null;
+  const deal = subjects[run.caseId];
+  const id = run.kind === "memory" ? (run.memoryMatch ? deal.message.id : null) : deal.meeting?.id;
+  return id ? { caseId: run.caseId, id } : null;
 }
 
 function safeText(value) {
@@ -223,15 +238,17 @@ function taskComposer(m) {
       ${m.button("agent-start", primary, "button-primary")}
     </div>
     <details class="agent-command" ${agent.draftError || agent.draft ? "open" : ""}>
-      <summary>输入预设任务</summary>
-      <div class="agent-command-body">
-        <label for="agent-command">仅匹配上面的两项固定任务</label>
+      <summary>用一句话发起任务</summary>
+      <form class="agent-command-body" data-agent-command>
+        <label for="agent-command">支持已完成约见和已确认客户偏好这两类示例</label>
         <div><input maxlength="120" id="agent-command" data-agent-input autocomplete="off" name="agent-command"
-          placeholder="例如：${taskOptions.memory.title}" value="${safeText(agent.draft)}" ${agent.draftError ? 'aria-invalid="true" aria-describedby="agent-command-error"' : ""}>
-          ${m.button("agent-command", "运行任务")}
+          placeholder="例如：查一下周谨已确认的沟通偏好" value="${safeText(agent.draft)}" ${agent.draftError ? 'aria-invalid="true" aria-describedby="agent-command-error"' : ""}>
+          <button type="submit" class="button">运行任务</button>
         </div>
-        ${agent.draftError ? '<p id="agent-command-error" class="agent-error">这句指令未匹配。请直接选择上面的商机取证或客户记忆预设。</p>' : ""}
-      </div>
+        ${agent.draftError ? `<p id="agent-command-error" class="agent-error">${agent.draftScopeError
+          ? "指令中的客户与上方选定范围不同，请先切换商机。"
+          : "无法明确匹配一个任务。请写明要查「已完成约见」或「已确认客户偏好」，并核对上方商机范围。"}</p>` : ""}
+      </form>
     </details>
   </section>`;
 }
@@ -277,8 +294,11 @@ function inspector(m, run, area, selected, steps) {
 function transitionPanel(m, run, area) {
   if (run.kind !== "ontology" || ["none", "blocked"].includes(run.proposal)) return "";
   const canAct = area === "workbench" && m.current.proposal === run.proposal;
+  const hold = canAct && run.proposal === "approved" && m.state.agent.executionPaused;
   const buttons = canAct
-    ? (proposalActions[run.proposal] ?? []).map(([action, text, classes]) => m.button(`agent-${action}`, text, classes)).join("")
+    ? (proposalActions[run.proposal] ?? []).map(([action, text, classes]) => (hold && action === "execute")
+      ? `<button type="button" class="button ${classes}" disabled>${text}</button>`
+      : m.button(`agent-${action}`, text, classes)).join("")
     : "";
   const deal = subjects[run.caseId];
   const { label, tone } = proposalInfo[run.proposal];
@@ -290,6 +310,7 @@ function transitionPanel(m, run, area) {
       area === "workbench" ? "当前商机阶段" : "本次运行结束时的阶段",
       area === "workbench" ? m.stageFor(deal) : hasReceipt(run) ? resultingStage : run.before,
     ], ["执行回执", hasReceipt(run) ? `1 条回执 · ${code(executionId(run))}` : "0 条回执"]])}
+    ${hold ? '<p class="agent-hold-notice">工作区已暂停执行。可以恢复后继续同一条审批，等待期间阶段和回执均保持原样。</p>' : ""}
     ${buttons ? `<div class="agent-action-buttons">${buttons}</div>` : ""}
   </section>`;
 }
@@ -321,6 +342,12 @@ function workbench(m) {
         </div>`}
       </div>
       <div class="agent-side">
+        <section class="agent-object agent-guard" aria-labelledby="agent-guard-title">
+          <div class="agent-action-header"><h3 id="agent-guard-title">工作区执行护栏</h3>
+            ${m.label(agent.executionPaused ? "执行暂停" : "允许获批动作", agent.executionPaused ? "gold" : "green")}</div>
+          <p>影响待执行的本地阶段变更。读取、审阅和历史回放仍可用。</p>
+          ${m.button("agent-toggle-execution", agent.executionPaused ? "恢复执行" : "暂停执行", "button-small")}
+        </section>
         <section class="agent-object" aria-label="业务范围">
           <div class="agent-object-head">${m.avatar(m.deal)}<div><p>${m.deal.company}</p><h2>${m.deal.title}</h2></div></div>
           ${fields([["商机金额", m.money.format(m.deal.amount)], ["当前商机阶段", stage], ["选定客户", m.deal.contact]])}
@@ -414,6 +441,7 @@ function addRun(m, kind, mode, initial = {}) {
     continued: false,
     ...initial,
   };
+  record.source = sourceFor(record);
   agent.runs.push(record);
   agent.historyId = record.no;
   delete agent.inspection.workbench;
@@ -444,6 +472,7 @@ function handleDecision(action, m) {
   const allowed = { approve: "pending", reject: "pending", execute: "approved", verify: "executed" };
   if (m.state.agent.preset !== "ontology" || liveMode(m.state.agent) !== "controlled" || m.current.proposal !== allowed[action])
     return "当前状态下无法处理该决定。";
+  if (action === "execute" && m.state.agent.executionPaused) return "执行已暂停。请先恢复工作区执行。";
   const run = ownedProposal(m) ?? addRun(m, "ontology", "controlled", {
     continued: true, before: m.deal.stage, proposal: m.current.proposal,
   });
@@ -459,6 +488,27 @@ export function handleAgentInput(event, m) {
   if (!event.target.matches("[data-agent-input]")) return false;
   m.state.agent.draft = event.target.value.slice(0, 120);
   return true;
+}
+
+export function handleAgentSubmit(event, m) {
+  if (!event.target.matches("[data-agent-command]")) return undefined;
+  event.preventDefault();
+  const { agent } = m.state;
+  const text = (event.target.elements.namedItem("agent-command")?.value ?? "").trim();
+  const ontology = /约见|访谈|推进商机|阶段提案|appointment/i.test(text);
+  const memory = /记忆|偏好|复用事实|memory/i.test(text);
+  const outside = deals.some((deal) => deal.id !== m.deal.id && [deal.company, deal.contact, deal.title].some((name) => text.includes(name)));
+  if (ontology === memory || outside) {
+    agent.draft = text.slice(0, 120);
+    agent.draftError = true;
+    agent.draftScopeError = outside;
+    return outside ? "请先切换到指令中的客户。" : "未匹配唯一的演示任务。";
+  }
+  agent.preset = ontology ? "ontology" : "memory";
+  agent.draftError = false;
+  agent.draft = "";
+  if (ontology && /只读|只查|仅查询|不.{0,3}(更改|修改|推进)/.test(text)) agent.mode = "read";
+  return startTask(m, agent.preset);
 }
 
 export function handleAgent(action, control, m) {
@@ -477,22 +527,14 @@ export function handleAgent(action, control, m) {
       return `当前模式：${modes[select]}。`;
     case "agent-start":
       return startTask(m, agent.preset);
+    case "agent-toggle-execution":
+      agent.executionPaused = !agent.executionPaused;
+      return agent.executionPaused ? "已暂停执行，原提案与阶段保持。" : "已恢复执行，可继续已批准的提案。";
     case "agent-open-memory":
       agent.preset = "memory";
       agent.draftError = false;
       window.location.hash = "#workbench";
       return "已打开该客户的记忆取证任务。";
-    case "agent-command": {
-      const task = Object.keys(taskOptions).find((key) => taskOptions[key].title === agent.draft.trim());
-      if (!task) {
-        agent.draftError = true;
-        return "未匹配演示任务。";
-      }
-      agent.preset = task;
-      agent.draftError = false;
-      agent.draft = "";
-      return startTask(m, task);
-    }
     case "agent-step": {
       const { case: area, run: raw } = control.dataset;
       if (!["workbench", "runs"].includes(area)) return undefined;

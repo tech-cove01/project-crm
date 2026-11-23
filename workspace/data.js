@@ -1,4 +1,10 @@
 export const dateWindow = "2026-10-26 至 2026-11-24（UTC）";
+export const pipelineStages = [
+  { id: "first", name: "初步接洽", note: "确认需求和联系人" },
+  { id: "review", name: "技术评估", note: "查验活动与约束" },
+  { id: "proposal", name: "方案复核", note: "核对交付范围与方案" },
+  { id: "settled", name: "已定方案", note: "记录确认与交接" },
+];
 export const deals = [
   {
     id: "ridge",
@@ -51,11 +57,16 @@ export const routes = {
   inbox: "客户会话",
   contacts: "联系人",
   risk: "风险提醒",
+  agenda: "日程预约",
+  replies: "快捷回复",
   tasks: "跟进任务",
   memory: "客户记忆",
   ontology: "业务口径",
   followups: "跟进流程",
   runs: "运行记录",
+  evaluation: "演示检查",
+  analytics: "工作区指标",
+  settings: "工作区设置",
 };
 
 export const events = {
@@ -73,4 +84,5 @@ export const events = {
   recalled: ["召回", "新会话已按当前确认状态读取。"],
   withdrawn: ["撤回", "已停止使用这条确认记忆。"],
   taskDone: ["任务", "该跟进任务已完成。"],
+  manualStage: ["商机", "负责人手动调整了本地阶段。"],
 };

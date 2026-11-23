@@ -21,8 +21,8 @@ p { line-height: 1.65; }
 .rail :focus-visible { outline-color: var(--mint); }
 .rail-toggle { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.skip-link { position: fixed; z-index: 5; inset: 12px auto auto 12px; transform: translateY(-150%); padding: 10px 14px; background: var(--mint); color: var(--forest); }
-.skip-link:focus { transform: none; }
+.skip-link { position: fixed; z-index: 5; inset: 12px auto auto 12px; clip-path: inset(50%); padding: 10px 14px; background: var(--mint); color: var(--forest); }
+.skip-link:focus { clip-path: none; }
 
 .workspace-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
 .rail {
@@ -117,12 +117,12 @@ p { line-height: 1.65; }
 .muted { color: var(--muted); font-size: 13px; }
 .distribution { display: flex; gap: 3px; margin: 20px 0; }
 .distribution i { height: 11px; flex: var(--portion); min-width: 0; border-radius: 3px; background: #94af9e; }
-.distribution i + i { background: #326c53; }
-.distribution i[style="--portion:0"] { display: none; }
+.distribution i.stage-tone-1, .stage-summary .stage-tone-1 dt::before { background: #326c53; }
+.distribution i.stage-tone-2, .stage-summary .stage-tone-2 dt::before { background: #356b81; }
+.distribution i.stage-tone-3, .stage-summary .stage-tone-3 dt::before { background: #9b7a38; }
 .stage-summary { display: grid; gap: 13px; margin: 0; }
 .stage-summary div { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .stage-summary dt::before { display: inline-block; content: ""; width: 9px; height: 9px; margin-right: 8px; background: #94af9e; border-radius: 3px; }
-.stage-summary div + div dt::before { background: #326c53; }
 .stage-summary dd { margin: 0; font-weight: 650; }
 
 .deal-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
@@ -211,6 +211,30 @@ p { line-height: 1.65; }
 .search-results a { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 6px; text-decoration: none; font-size: 14px; }
 .search-results a:hover, .search-results a:focus-visible { background: #e9f3e8; }
 .search-results small { display: block; color: var(--muted); margin-top: 4px; }
+.agent-guard h3 { margin: 0; font-size: 16px; }
+.agent-guard p, .agent-hold-notice { margin: 9px 0; color: var(--muted); font-size: 13px; }
+.agent-hold-notice { border-inline-start: 3px solid #9b7138; padding: 7px 10px; background: var(--canvas); }
+.board-drag { margin-left: auto; padding: 6px; color: var(--muted); cursor: grab; font-size: 18px; line-height: 1; }
+.board-drag:active { cursor: grabbing; }
+.crm-board-column.is-drop-target { outline: 2px solid #478b64; outline-offset: -2px; }
+.board-guard, .board-status { font-size: 13px; color: var(--muted); }
+.board-status { margin: 0 0 8px; min-height: 1.1em; }
+.board-status:empty { display: none; }
+.board-adjust { font-size: 13px; margin: 8px 0; }
+.board-adjust summary { cursor: pointer; font-weight: 700; color: var(--pine); }
+.board-adjust form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.board-adjust select { flex: 1; min-width: 105px; min-height: 35px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; color: var(--ink); }
+.review-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 11px 20px; margin: 14px 0; }
+.review-controls .selector { margin: 0; }
+.review-omit { align-self: center; font-size: 14px; }
+.review-omit input { accent-color: #347554; }
+.review-result h3, .review-evidence h3 { margin: 0; font-size: 16px; }
+.review-result ul { margin: 0; padding: 0; list-style: none; }
+.review-result li { display: flex; gap: 9px; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding: 11px 0; }
+.review-result li p, .review-evidence p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.review-evidence { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 11px; }
+.review-evidence article { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.review-evidence a { display: block; margin-top: 7px; color: var(--pine); font-size: 13px; }
 
 @media (max-height: 760px) and (min-width: 761px) {
   .rail { padding-top: 20px; }

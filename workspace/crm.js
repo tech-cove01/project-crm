@@ -1,4 +1,5 @@
 import { crmProfiles, crmTemplates } from "./crm-data.js";
+import { pipelineStages } from "./data.js";
 
 const inboxFilters = [
   ["all", "全部"],
@@ -7,12 +8,6 @@ const inboxFilters = [
   ["assist", "智能辅助"],
 ];
 const taskFilters = [["all", "全部"], ["open", "待完成"], ["done", "已完成"]];
-const pipelineStages = [
-  { id: "first", name: "初步接洽", note: "确认需求和联系人" },
-  { id: "review", name: "技术评估", note: "查验活动与约束" },
-  { id: "proposal", name: "方案复核", note: "核对交付范围与方案" },
-  { id: "settled", name: "已定方案", note: "记录确认与交接" },
-];
 const messageLimit = 500;
 const crmKeys = Object.keys(crmProfiles);
 const crmMemoryNames = {
@@ -48,6 +43,20 @@ export function readCrmState(previous) {
 function getCrm(m) {
   m.state.crm ??= readCrmState();
   return m.state.crm;
+}
+
+function availableTemplates(m) {
+  return m.state.desk?.templates ?? crmTemplates;
+}
+
+export function addToCrmReplyDraft(m, caseId, text) {
+  const customer = getCrm(m).byCase[caseId];
+  if (!customer || m.state.cases[caseId].closed) return { error: "当前会话已结束，无法插入回复草稿。" };
+  const draft = [customer.drafts.reply, text].filter((part) => part.trim()).join("\n\n");
+  if (draft.length > messageLimit) return { error: `插入后会超过 ${messageLimit} 字，请先缩短草稿。` };
+  customer.drafts.reply = draft;
+  customer.mode = "reply";
+  return { draft };
 }
 
 function profile(deal) {
@@ -134,7 +143,7 @@ function messageMarkup(message, deal) {
   </li>`;
 }
 
-function composer(customer, closed) {
+function composer(customer, closed, templates) {
   if (closed) return '<div class="crm-composer crm-closed-note">会话已结束。后续核对可以从跟进任务或客户记忆继续。</div>';
   const isNote = customer.mode === "note";
   const draft = customer.drafts[customer.mode];
@@ -143,9 +152,11 @@ function composer(customer, closed) {
       ${filters([["reply", "回复客户"], ["note", "内部备注"]], customer.mode, "内容类型", "crm-composer-mode")}
       ${isNote ? "" : `<label class="crm-select crm-template"><span class="sr-only">插入快捷回复</span>
         <select data-crm-control="template"><option value="">插入快捷回复</option>
-          ${crmTemplates.map(({ id, label }) => `<option value="${id}">${label}</option>`).join("")}
+          ${templates.map(({ id, label }) => `<option value="${escape(id)}">${escape(label)}</option>`).join("")}
         </select></label>`}
+      <a class="table-link crm-library-link" href="#replies">管理快捷回复</a>
     </div>
+    <p class="crm-template-feedback" data-crm-template-feedback role="status" hidden></p>
     <label class="sr-only" for="crm-draft">${isNote ? "内部备注内容" : "回复草稿"}</label>
     <textarea id="crm-draft" data-crm-control="draft" rows="3" maxlength="${messageLimit}"
       placeholder="${isNote ? "例如：等待对方补充试点范围。" : "写一条演示回复，或插入快捷回复。"}">${escape(draft)}</textarea>
@@ -216,7 +227,7 @@ function inbox(m) {
         <ol class="crm-messages" aria-label="示例消息">
           ${[...initialMessages(deal), ...selected.entries].map((message) => messageMarkup(message, deal)).join("")}
         </ol>
-        ${composer(selected, current.closed)}
+        ${composer(selected, current.closed, availableTemplates(m))}
         <div class="crm-thread-footer">${current.closed
           ? caseLink(deal, "memory", "查看本次会话的记忆候选")
           : buttonAction("crm-close", "结束会话并提取候选", "", "crm-text-button")}</div>
@@ -232,11 +243,29 @@ function riskFor(deal, current) {
   return { detail: info.risk, action: current.taskDone ? "已完成相关跟进任务，可复核最新情况。" : deal.task.label };
 }
 
+function manualStageControl(deal, m) {
+  const blocked = ["pending", "approved", "executed"].includes(m.state.cases[deal.id].proposal);
+  const old = m.state.cases[deal.id].manualChange;
+  if (blocked) return '<p class="board-guard">这笔商机有未结案的提案，需先在工作台处理。</p>';
+  return `<details class="board-adjust">
+    <summary>调整阶段</summary>
+    <form data-board-stage="${deal.id}">
+      <label class="sr-only" for="stage-${deal.id}">${deal.title}的目标阶段</label>
+      <select id="stage-${deal.id}" name="stage" required>
+        <option value="">选择目标</option>
+        ${pipelineStages.filter(({ name }) => name !== m.stageFor(deal)).map(({ name }) => `<option value="${name}">${name}</option>`).join("")}
+      </select>
+      <button class="button button-small" type="submit">确认调整</button>
+    </form>
+    ${old ? `<p class="board-guard">上一次人工调整 · ${old.from} → ${old.to}</p>` : ""}
+  </details>`;
+}
+
 function pipeline(m) {
   const crm = getCrm(m);
   const stages = pipelineStages.filter((stage) => crm.pipelineStage === "all" || crm.pipelineStage === stage.id);
   const active = m.deals.filter((deal) => stages.some((stage) => m.stageFor(deal) === stage.name));
-  return `${m.heading("销售管道", "按阶段查看当前商机。需要推进的商机进入 Agent 工作台核对证据与审批。")}
+  return `${m.heading("销售管道", "拖动卡片或手动选择阶段；等待执行和回查的提案由 Agent 工作台处理。")}
     <div class="crm-board-toolbar">
       <div><strong>${active.length} 笔商机</strong><span>${m.money.format(active.reduce((amount, deal) => amount + deal.amount, 0))}</span></div>
       <label class="crm-select"><span>筛选阶段</span><select data-crm-control="pipeline-stage">
@@ -244,19 +273,23 @@ function pipeline(m) {
           `<option value="${id}" ${crm.pipelineStage === id ? "selected" : ""}>${name}</option>`).join("")}
       </select></label>
     </div>
+    <p class="board-status" data-board-status tabindex="-1" role="status"></p>
     <div class="crm-board${stages.length === 1 ? " crm-board-filtered" : ""}">
       ${stages.map((stage) => {
         const cases = active.filter((deal) => m.stageFor(deal) === stage.name);
-        return `<section class="crm-board-column crm-board-${stage.id}" aria-label="${stage.name}">
+        return `<section class="crm-board-column crm-board-${stage.id}" aria-label="${stage.name}" data-board-drop="${stage.name}">
           <div class="crm-board-heading"><h2>${stage.name}</h2><small>${cases.length} 笔</small></div>
           <p>${stage.note}</p><strong class="crm-stage-amount">${m.money.format(cases.reduce((amount, deal) => amount + deal.amount, 0))}</strong>
           <div class="crm-board-cards">${cases.map((deal) => {
             const risk = riskFor(deal, m.state.cases[deal.id]);
-            return `<article class="crm-board-card">
-              <div class="crm-board-card-top">${m.avatar(deal)}<div><h3>${deal.title}</h3><p>${deal.company}</p></div></div>
+            const movable = !["pending", "approved", "executed"].includes(m.state.cases[deal.id].proposal);
+            return `<article class="crm-board-card" data-board-card="${deal.id}">
+              <div class="crm-board-card-top">${m.avatar(deal)}<div><h3>${deal.title}</h3><p>${deal.company}</p></div>
+                ${movable ? '<span class="board-drag" draggable="true" title="拖到其他阶段" aria-hidden="true">⠿</span>' : ""}</div>
               <strong>${m.money.format(deal.amount)}</strong>
               <div class="crm-board-card-tags">${risk ? m.label("需要跟进", "gold") : m.label("跟进中")}
                 ${deal.meeting ? m.label("有约见依据", "green") : ""}</div>
+              ${manualStageControl(deal, m)}
               <div class="crm-board-card-actions">${caseLink(deal, "workbench", "查看商机")}${caseLink(deal, "inbox", "客户会话")}</div>
             </article>`;
           }).join("") || '<div class="crm-board-empty"><small>暂无商机</small></div>'}</div>
@@ -448,12 +481,18 @@ export function handleCrmChange(event, m) {
   const { target } = event;
   const name = target.dataset.crmControl;
   if (name === "template") {
-    const selected = crmTemplates.find(({ id }) => id === target.value);
+    const selected = availableTemplates(m).find(({ id }) => id === target.value);
     const input = document.querySelector("#crm-draft");
     if (selected && input) {
-      input.value = selected.text;
-      handleCrmInput({ target: input }, m);
-      input.focus();
+      const result = addToCrmReplyDraft(m, m.deal.id, selected.text);
+      const notice = document.querySelector("[data-crm-template-feedback]");
+      notice.hidden = false;
+      notice.textContent = result.error || "已插入快捷回复，草稿仍可编辑。";
+      if (!result.error) {
+        input.value = result.draft;
+        handleCrmInput({ target: input }, m);
+        input.focus();
+      }
     }
     target.value = "";
     return true;

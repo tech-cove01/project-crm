@@ -1,7 +1,10 @@
-import { deals, events, routes } from "./data.js";
-import { agentScreens, handleAgent, handleAgentInput, readAgentState } from "./agent.js";
+import { deals, events, pipelineStages, routes } from "./data.js";
+import { agentScreens, handleAgent, handleAgentInput, handleAgentSubmit, readAgentState } from "./agent.js";
 import { crmScreens, handleCrm, handleCrmChange, handleCrmInput, readCrmState } from "./crm.js";
-import { handleLab, handleLabChange, labScreens, readLabState, resetLabControls } from "./lab.js";
+import { deskScreens, handleDesk, handleDeskChange, handleDeskSubmit, readDeskState } from "./desk.js";
+import { handleLab, handleLabChange, labScreens, resetLabControls } from "./lab.js";
+import { handleWorkflow, handleWorkflowChange, workflowScreens, readWorkflowState } from "./workflow.js";
+import { handleReview, handleReviewChange, reviewScreen, resetReview } from "./review.js";
 
 const storeKey = "pi-crm-showcase-workspace-v1";
 const page = document.querySelector("#workspace-content");
@@ -14,6 +17,7 @@ const announcement = document.querySelector("#announcement");
 const caseById = Object.fromEntries(deals.map((deal) => [deal.id, deal]));
 const proposalStates = ["none", "blocked", "pending", "approved", "rejected", "executed", "verified"];
 const memoryStates = ["none", "pending", "confirmed", "rejected", "withdrawn"];
+const stageNames = new Set(pipelineStages.map(({ name }) => name));
 const money = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 });
 
 function freshState() {
@@ -25,7 +29,8 @@ function freshState() {
     logs: [],
     agent: readAgentState(),
     crm: readCrmState(),
-    lab: readLabState(),
+    desk: readDeskState(),
+    workflow: readWorkflowState(),
   };
 }
 
@@ -37,7 +42,8 @@ function readState() {
     if (Object.hasOwn(caseById, previous.selected)) fallback.selected = previous.selected;
     fallback.agent = readAgentState(previous.agent);
     fallback.crm = readCrmState(previous.crm);
-    fallback.lab = readLabState(previous.lab);
+    fallback.desk = readDeskState(previous.desk);
+    fallback.workflow = readWorkflowState(previous.workflow, previous.lab);
     for (const { id } of deals) {
       const entry = previous.cases[id];
       if (!entry) continue;
@@ -47,6 +53,9 @@ function readState() {
       current.closed = entry.closed === true;
       current.taskDone = entry.taskDone === true;
       if (typeof entry.reading === "boolean") current.reading = entry.reading;
+      if (stageNames.has(entry.manualStage)) current.manualStage = entry.manualStage;
+      if (stageNames.has(entry.manualChange?.from) && stageNames.has(entry.manualChange?.to))
+        current.manualChange = { from: entry.manualChange.from, to: entry.manualChange.to };
     }
     if (Array.isArray(previous.logs)) {
       fallback.logs = previous.logs.filter((item) =>
@@ -60,6 +69,8 @@ function readState() {
 }
 
 let state = readState();
+let stageFeedback = "";
+let draggedCase = null;
 function save() {
   try {
     sessionStorage.setItem(storeKey, JSON.stringify(state));
@@ -99,7 +110,23 @@ function log(deal, kind) {
 }
 
 function stageFor(deal) {
-  return ["executed", "verified"].includes(state.cases[deal.id].proposal) ? "技术评估" : deal.stage;
+  const current = state.cases[deal.id];
+  return current.manualStage ?? (["executed", "verified"].includes(current.proposal) ? "技术评估" : deal.stage);
+}
+
+function moveStage(id, target) {
+  if (!Object.hasOwn(caseById, id) || !stageNames.has(target)) return "请选择有效商机和阶段。";
+  const deal = caseById[id];
+  const current = state.cases[id];
+  if (["pending", "approved", "executed"].includes(current.proposal))
+    return "这笔商机有未结案的提案，请在工作台处理后再调整阶段。";
+  const from = stageFor(deal);
+  if (from === target) return "这笔商机已在该阶段。";
+  current.manualStage = target;
+  current.manualChange = { from, to: target };
+  state.crm.pipelineStage = "all";
+  log(deal, "manualStage");
+  return `${deal.title} · ${from} → ${target}`;
 }
 
 const stageBadge = (stage) => `<span class="pill ${stage === "技术评估" ? "pill-green" : "pill-neutral"}">${stage}</span>`;
@@ -136,7 +163,7 @@ function overview() {
   const openTasks = queues.filter((entry) => !entry.taskDone).length;
   const pending = queues.filter((entry) => entry.proposal === "pending").length;
   const memoryQueue = queues.filter((entry) => entry.memory === "pending").length;
-  const stageCount = deals.filter((deal) => stageFor(deal) === "技术评估").length;
+  const distribution = pipelineStages.map(({ name }) => ({ name, count: deals.filter((deal) => stageFor(deal) === name).length }));
   const ridge = state.cases.ridge;
   const journeyStep = { none: 0, pending: 1, approved: 1, executed: 2, verified: 3, blocked: 0, rejected: 1 }[ridge.proposal];
   const path = [
@@ -165,10 +192,10 @@ function overview() {
       <article class="panel pipeline-summary">
         <div class="panel-heading"><h2>管道分布</h2><a href="#pipeline">查看管道</a></div>
         <p>当前开放商机按阶段统计</p>
-        <div class="distribution" aria-label="初步接洽 ${deals.length - stageCount} 笔，技术评估 ${stageCount} 笔">
-          <i style="--portion:${deals.length - stageCount}"></i><i style="--portion:${stageCount}"></i>
+        <div class="distribution" aria-label="${distribution.map(({ name, count }) => `${name} ${count} 笔`).join("，")}">
+          ${distribution.map(({ count }, index) => `<i class="stage-tone-${index}" style="--portion:${count}"${count === 0 ? " hidden" : ""}></i>`).join("")}
         </div>
-        <dl class="stage-summary"><div><dt>初步接洽</dt><dd>${deals.length - stageCount} 笔</dd></div><div><dt>技术评估</dt><dd>${stageCount} 笔</dd></div></dl>
+        <dl class="stage-summary">${distribution.map(({ name, count }, index) => `<div class="stage-tone-${index}"><dt>${name}</dt><dd>${count} 笔</dd></div>`).join("")}</dl>
       </article>
     </div>
     <section class="panel"><div class="panel-heading"><h2>开放商机</h2><span class="muted">2026 年 11 月 · 演示数据</span></div>
@@ -180,7 +207,7 @@ function overview() {
     </section>`;
 }
 
-const screens = { overview, ...crmScreens, ...agentScreens, ...labScreens };
+const screens = { overview, ...crmScreens, ...agentScreens, ...labScreens, ...deskScreens, ...workflowScreens, evaluation: reviewScreen };
 
 function getModel() {
   const deal = caseById[state.selected];
@@ -198,7 +225,10 @@ function render() {
     else item.removeAttribute("aria-current");
   }
   document.title = `${routes[slug]} · Pi Native CRM`;
+  document.documentElement.dataset.deskTheme = state.desk.theme;
   page.innerHTML = screens[slug](getModel());
+  const boardStatus = page.querySelector("[data-board-status]");
+  if (boardStatus) boardStatus.textContent = stageFeedback;
 }
 
 function makeCandidate(deal, current) {
@@ -223,6 +253,11 @@ function changeProposal(action, deal, current) {
   }
   const rule = rules[action];
   if (!rule || current.proposal !== rule[0]) return "";
+  if (action === "execute") {
+    if (state.agent.executionPaused) return "当前暂停执行。";
+    if (stageFor(deal) !== "初步接洽") return "当前商机阶段与提案不一致，请重新核对。";
+    delete current.manualStage;
+  }
   current.proposal = rule[1];
   log(deal, rule[1]);
   return events[rule[1]][1];
@@ -252,8 +287,10 @@ function handleAction(action, control) {
     log(deal, "recalled");
     return current.reading ? "读回一条确认事实。" : "读回零条确认事实。";
   }
-  return handleAgent(action, control, getModel()) ??
-    handleCrm(action, control, getModel()) ?? handleLab(action, control, getModel());
+  const model = getModel();
+  return handleAgent(action, control, model) ?? handleCrm(action, control, model) ??
+    handleLab(action, control, model) ?? handleDesk(action, control, model) ??
+    handleWorkflow(action, control, model) ?? handleReview(action, control, model);
 }
 
 document.addEventListener("click", (event) => {
@@ -295,17 +332,24 @@ page.addEventListener("change", (event) => {
     if (!Object.hasOwn(caseById, event.target.value)) return;
     state.selected = event.target.value;
   } else {
-    const result = handleCrmChange(event, getModel());
-    if (result === true) {
+    const model = getModel();
+    const crmResult = handleCrmChange(event, model);
+    if (crmResult === true) {
       save();
       return;
     }
+    const result = crmResult || handleDeskChange(event, model) || handleWorkflowChange(event, model) ||
+      handleLabChange(event, model) || handleReviewChange(event, model);
     if (typeof result === "string") announcement.textContent = result;
-    else if (!handleLabChange(event, getModel())) return;
+    else if (!result) return;
   }
   save();
   render();
-  page.querySelector(`[data-control="${control}"]`)?.focus({ preventScroll: true });
+  const name = Object.keys(event.target.dataset).find((key) => key === "control" || key.endsWith("Control"));
+  if (name) {
+    const attribute = `data-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+    page.querySelector(`[${attribute}="${CSS.escape(event.target.dataset[name])}"]`)?.focus({ preventScroll: true });
+  }
 });
 
 page.addEventListener("input", (event) => {
@@ -313,6 +357,61 @@ page.addEventListener("input", (event) => {
   if (handleCrmInput(event, model) || handleAgentInput(event, model)) save();
 });
 
+function finishForm(message, focusSelector) {
+  if (!message) return;
+  const top = window.scrollY;
+  save();
+  render();
+  window.scrollTo(0, top);
+  (page.querySelector(focusSelector) ?? page).focus({ preventScroll: true });
+  announcement.textContent = message;
+}
+
+page.addEventListener("submit", (event) => {
+  const model = getModel();
+  if (event.target.matches("[data-board-stage]")) {
+    event.preventDefault();
+    stageFeedback = moveStage(event.target.dataset.boardStage, new FormData(event.target).get("stage"));
+    finishForm(stageFeedback, "[data-board-status]");
+    return;
+  }
+  const message = handleAgentSubmit(event, model) ?? handleDeskSubmit(event, model);
+  finishForm(message, "[aria-invalid='true']");
+});
+
+page.addEventListener("dragstart", (event) => {
+  const handle = event.target.closest(".board-drag");
+  if (!handle) return;
+  draggedCase = handle.closest("[data-board-card]").dataset.boardCard;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", draggedCase);
+});
+
+page.addEventListener("dragover", (event) => {
+  const column = event.target.closest("[data-board-drop]");
+  if (!draggedCase || !column) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  const last = page.querySelector(".is-drop-target");
+  if (last !== column) {
+    last?.classList.remove("is-drop-target");
+    column.classList.add("is-drop-target");
+  }
+});
+
+page.addEventListener("drop", (event) => {
+  const column = event.target.closest("[data-board-drop]");
+  if (!draggedCase || !column) return;
+  event.preventDefault();
+  stageFeedback = moveStage(draggedCase, column.dataset.boardDrop);
+  draggedCase = null;
+  finishForm(stageFeedback, "[data-board-status]");
+});
+
+page.addEventListener("dragend", () => {
+  draggedCase = null;
+  page.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
+});
 document.querySelector(".skip-link").addEventListener("click", (event) => {
   event.preventDefault();
   page.focus();
@@ -363,6 +462,8 @@ dialog.addEventListener("close", () => {
   if (dialog.returnValue !== "confirm") return;
   state = freshState();
   resetLabControls();
+  resetReview();
+  stageFeedback = "";
   save();
   render();
   announcement.textContent = "演示已重置。";
