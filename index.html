@@ -3,100 +3,134 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f8fc">
-  <meta name="description" content="面向销售团队的 AI-native CRM。按已审核口径筛选开放商机和约见记录，从授权历史单聊提取可审核的记忆，在新会话复用确认事实。">
-  <title>AI Native CRM — 客户管理与销售协作</title>
-  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css?v=ontology-memory-20261117">
-  <script src="./script.js?v=overview-20261102" defer></script>
+  <meta name="theme-color" content="#f4f6ef">
+  <meta name="description" content="在 Pi Native CRM 的交互工作台里，体验带原文的客户记忆、经批准的商机推进以及执行回查。">
+  <title>Pi Native CRM · 销售协作工作台</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./home.css">
 </head>
-<body data-page="overview">
+<body>
   <a class="skip-link" href="#main">跳到主要内容</a>
   <header class="site-header">
-    <div class="nav-wrap container">
-      <a class="brand" href="./index.html" aria-label="AI Native CRM 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>CRM<span class="brand-suffix"> / AI NATIVE</span></span></a>
-      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span></span><span></span><span class="sr-only">打开导航菜单</span></button>
-      <nav class="primary-nav" id="primary-nav" aria-label="主导航">
-        <a href="#context">业务背景</a><a href="#highlights">项目亮点</a><a href="./details.html#architecture">系统架构</a><a href="./details.html#stack">完整技术栈</a>
-        <a class="text-link" href="./details.html">项目详解 <span aria-hidden="true">↗</span></a>
+    <div class="frame site-nav">
+      <a class="brand" href="./" aria-label="Pi Native CRM 首页">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+        <span>Pi Native <strong>CRM</strong></span>
+      </a>
+      <nav class="wide-nav" aria-label="主导航">
+        <a href="#highlights">演示场景</a>
+        <a href="./about/">关于项目</a>
+        <a href="./details.html#validation">验证记录</a>
       </nav>
+      <a class="button button-small top-action" href="./workspace/#overview">进入工作台</a>
+      <details class="mobile-nav">
+        <summary>菜单</summary>
+        <nav aria-label="移动端导航">
+          <a href="#highlights">演示场景</a>
+          <a href="./about/">关于项目</a>
+          <a href="./details.html#validation">验证记录</a>
+        </nav>
+      </details>
     </div>
   </header>
   <main id="main">
-    <section class="overview-hero container" id="context" aria-labelledby="overview-title">
-      <p class="eyebrow">AI-native CRM · 客户管理与销售协作</p>
-      <h1 id="overview-title">筛选开放商机，<br>复用客户偏好。</h1>
-      <p class="overview-lead">面向销售团队的 AI-native 客户经营与协作系统。Agent 按已审核的业务口径筛选商机和约见记录，也可从授权历史单聊提取带原文的偏好候选。负责人确认后，新会话可以复用这些事实。阶段变更经人工批准后执行，并回查 CRM 中的实际结果。</p>
-      <nav class="overview-actions" aria-label="项目主要入口">
-        <div class="overview-primary-actions">
-          <a class="button overview-workflow-action" href="./details.html#workflow">业务流程与案例</a>
-          <a class="button overview-demo-action" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">模拟审批与回查</a>
+    <section class="hero frame" id="context" aria-labelledby="main-title">
+      <div class="hero-copy">
+        <p class="hero-label"><span aria-hidden="true"></span> AI 销售协作工作台</p>
+        <h1 id="main-title">从客户原话，<br>到商机推进。</h1>
+        <p class="hero-description">让 Agent 查证据、整理建议。你可以核对客户原话、批准阶段变更，再回查这一步是否真的执行。</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="./workspace/#overview">打开交互工作台</a>
+          <a class="button button-secondary" href="./about/">了解项目</a>
         </div>
-        <div class="overview-secondary-actions">
-          <a class="overview-action-link" href="#highlights" aria-label="查看四项项目亮点">四项<wbr>项目亮点</a>
-          <a class="overview-action-link" href="./details.html#architecture" aria-label="架构与设计取舍">架构与<wbr>设计取舍</a>
-          <a class="overview-action-link" href="./details.html#stack">完整技术栈</a>
+        <p class="demo-note">使用虚构数据，打开即用。</p>
+      </div>
+      <div class="preview" aria-label="销售工作台预览">
+        <div class="preview-top">
+          <span class="preview-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>Pi Native CRM</span>
+          <span class="preview-tag">演示工作区</span>
         </div>
-      </nav>
-      <p class="overview-scene"><strong>典型场景</strong>从授权管道里找出指定时间窗内没有已完成约见记录的开放商机，再结合已确认偏好准备跟进。</p>
-    </section>
-    <section class="overview-problems container" id="difficulties" aria-labelledby="difficulties-title">
-      <h2 id="difficulties-title">Agent 怎样协助跟进</h2>
-      <div class="overview-comparison" id="agent-help">
-        <div class="overview-comparison-head" aria-hidden="true"><span>业务难点</span><span>Agent 的帮助</span></div>
-        <article><div><h3>历史消息里的偏好容易漏掉</h3><p>隔天跟进或换人交接时，销售还得回到历史会话找客户原话。</p></div><div><h3>确认后在新会话复用</h3><p>从授权单聊提取候选并附原文。负责人确认后，Agent 才能把它作为客户事实读取。</p></div></article>
-        <article><div><h3>同一个筛选条件，理解可能不同</h3><p>怎么看开放商机、哪些算完成约见，需要先对齐口径。</p></div><div><h3>统一口径，按证据筛查</h3><p>Agent 按已审核口径查询授权范围内的记录。遇到未定义的高潜或有效跟进标准，先澄清所缺条件。</p></div></article>
-        <article><div><h3>有了建议，还要判断能否执行</h3><p>客户期望不等于公司承诺，模型说“完成”也不能代替业务结果。</p></div><div><h3>关键动作由人决定，执行后核对</h3><p>需要确认的阶段变更先形成提案，批准后执行，再用回执与实际状态核对结果。</p></div></article>
+        <div class="preview-body">
+          <nav class="preview-menu" aria-label="工作台预览入口">
+            <span class="preview-menu-title">销售协作</span>
+            <a href="./workspace/#overview" class="selected"><span class="nav-icon nav-grid" aria-hidden="true"></span>工作总览</a>
+            <a href="./workspace/#pipeline"><span class="nav-icon nav-pipeline" aria-hidden="true"></span>商机管道</a>
+            <a href="./workspace/#workbench"><span class="nav-icon nav-agent" aria-hidden="true"></span>Agent 工作台</a>
+            <a href="./workspace/#memory"><span class="nav-icon nav-memory" aria-hidden="true"></span>客户记忆</a>
+          </nav>
+          <div class="preview-content">
+            <div class="preview-heading">
+              <div><p>销售视图</p><h2>工作总览</h2></div>
+              <a href="./workspace/#pipeline">查看商机</a>
+            </div>
+            <div class="preview-deals">
+              <div class="preview-deals-heading"><strong>近期商机</strong><span>合成数据</span></div>
+              <ul class="deal-list">
+                <li><span class="deal-avatar amber" aria-hidden="true">栖</span><span><strong>储能站点试点</strong><small>栖岭能源 · 周谨</small></span><b>¥186,000</b></li>
+                <li><span class="deal-avatar mint" aria-hidden="true">渡</span><span><strong>冷链异常预警</strong><small>渡桥物流 · 罗曼宁</small></span><span class="deal-marker">跟进中</span></li>
+                <li><span class="deal-avatar blue" aria-hidden="true">澜</span><span><strong>展馆预约改造</strong><small>澜室文旅 · 孟乔</small></span><span class="deal-marker">待回访</span></li>
+              </ul>
+            </div>
+            <a href="./workspace/#workbench" class="preview-receipt">
+              <span class="receipt-icon" aria-hidden="true"></span>
+              <span><strong>技术访谈已完成</strong><small>核对访谈证据，再决定是否推进到技术评估。</small></span>
+              <span class="receipt-action">查看审批</span>
+            </a>
+          </div>
+        </div>
       </div>
-      <a class="text-link overview-case-link" href="./details.html#workflow">查看年度服务合同的跟进案例 <span aria-hidden="true">↗</span></a>
     </section>
-    <section class="overview-highlights" id="highlights" aria-labelledby="highlights-title"><div class="container">
-      <div class="overview-section-heading"><h2 id="highlights-title">销售跟进背后的四项设计</h2><a class="text-link overview-validation-link" href="./details.html#validation">查看验证方法与结果</a></div>
-      <div class="overview-highlight-grid">
-        <article class="overview-highlight-card">
-          <h3>Pi 内核与业务本体建模</h3>
-          <p class="overview-highlight-value">销售可以筛选授权管道内的开放商机，再查看指定时间窗内没有已完成约见记录的商机。缺少高潜或有效跟进标准时，Agent 先澄清。</p>
-          <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
-            <li><strong>口径与查询</strong>版本化业务本体目录统一商机、活动及其关系。服务端限制可查口径和授权范围，保留查询证据。</li>
-            <li><strong>人工决定</strong>Pi 负责模型与工具循环。所选商机的已完成约见可作为提案依据，负责人批准后由 Worker 执行并回查阶段。</li>
-          </ul><p><a class="text-link" href="./details.html#controlled-execution">了解执行与审批设计</a></p></details>
-          <div class="overview-highlight-links"><a href="./details.html#ontology-walkthrough">看商机筛查与口径说明</a><a class="scenario-entry" data-scenario-link="execution" href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench">模拟批准、拒绝与回查</a></div>
-        </article>
-        <article class="overview-highlight-card">
-          <h3>客户记忆提取与跨会话复用</h3>
-          <p class="overview-highlight-value">销售可从授权历史单聊提取沟通偏好，查看原话并确认。下一次打开新会话时，Agent 可读回已确认的偏好，待审和已撤回内容均不可召回。</p>
-          <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
-            <li><strong>来源与审核</strong>服务端核验候选引用的原文。重复确认只产生一条 SQL 事实和一个同步事件。更新时先撤回旧事实，再确认新值。</li>
-            <li><strong>事实回读</strong>SQL 保存当前确认事实。Mem0 可辅助排序，使用前仍回读 SQL，Mem0 不可用时回退到 SQL。</li>
-          </ul><p><a class="text-link" href="./details.html#memory-comparison">查看真实跨会话对照</a></p></details>
-          <div class="overview-highlight-links"><a href="./details.html#memory-lifecycle">看记忆提取与确认步骤</a><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟查看 SQL 事实来源</a></div>
-        </article>
-        <article class="overview-highlight-card">
-          <h3>知识检索优化与证据约束</h3>
-          <p class="overview-highlight-value">销售可以从建议追到授权原文。资料改版或撤回后，Agent 需要重新核对有效版本，资料缺失时保留待确认项。</p>
-          <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
-            <li><strong>检索候选</strong>WeKnora 使用主题词回退、有界候选扩展和标题、正文排序。</li>
-            <li><strong>引用核验</strong>回读原文并检查权限、发布状态和版本，再判断资料能否支持具体结论。</li>
-          </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="knowledge" href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench">模拟资料改版与旧引用拒绝</a><a href="./details.html#knowledge-retrieval">了解检索与引用设计</a></div>
-        </article>
-        <article class="overview-highlight-card">
-          <h3>Agent 业务评测与运行观测</h3>
-          <p class="overview-highlight-value">分开检查资料是否找全、回答是否有据、动作是否落地。遇到问题时可以沿运行轨迹回查。</p>
-          <details class="scenario-design"><summary>查看设计取舍</summary><ul class="overview-highlight-points">
-            <li><strong>同题对照</strong>对照单 Agent、三位专家以及不同记忆方案的结果、耗时和 Token。</li>
-            <li><strong>问题定位</strong>规则核对字段与引用，按需由 Judge 复核语义。Langfuse 关联脱敏轨迹、耗时、Token 与评分。</li>
-          </ul></details>
-          <div class="overview-highlight-links"><a class="scenario-entry" data-scenario-link="evaluation" href="./demo/index.html?scenario=evaluation&amp;guide=1#/app/ai/workbench">体验错引判定与失败回放</a><a data-scenario-link="collaboration" href="./demo/index.html?scenario=collaboration&amp;guide=1#/app/ai/workbench">模拟专家取证与冲突复核</a></div>
-        </article>
+
+    <section class="cases" id="highlights" aria-labelledby="cases-title">
+      <div class="frame cases-inner" id="difficulties">
+        <div class="section-head" id="agent-help">
+          <div><h2 id="cases-title">从一个销售任务开始</h2><p>任选一个场景，直接进入工作台操作。</p></div>
+          <a class="text-link" href="./workspace/#overview">浏览全部工作区</a>
+        </div>
+        <div class="case-grid">
+          <a class="case" href="./workspace/#workbench">
+            <span class="case-icon c-approval"><span aria-hidden="true" class="nav-icon nav-pipeline"></span></span>
+            <div><h3>推进栖岭能源的商机</h3><p>读完技术访谈记录，批准阶段变更，再核对执行回执。</p></div>
+            <span class="case-enter" aria-hidden="true">试用审批</span>
+          </a>
+          <a class="case" href="./workspace/#memory">
+            <span class="case-icon c-memory"><span aria-hidden="true" class="nav-icon nav-memory"></span></span>
+            <div><h3>审核一条客户偏好</h3><p>查看「夜间告警优先邮件」的原文，确认后在新会话读回。</p></div>
+            <span class="case-enter" aria-hidden="true">试用记忆</span>
+          </a>
+          <a class="case" href="./workspace/#tasks">
+            <span class="case-icon c-task"><span aria-hidden="true" class="nav-icon nav-grid"></span></span>
+            <div><h3>处理跟进待办</h3><p>查看客户消息与跟进任务，完成待办后核对任务状态。</p></div>
+            <span class="case-enter" aria-hidden="true">查看任务</span>
+          </a>
+        </div>
       </div>
-    </div></section>
-    <section class="overview-implementation container" id="implementation" aria-labelledby="implementation-title">
-      <div class="overview-section-heading"><h2 id="implementation-title">支撑销售工作流的技术实现。</h2></div>
-      <dl class="overview-stack"><div><dt>应用与接口</dt><dd>Next.js · React · TypeScript</dd></div><div><dt>执行与业务数据</dt><dd>Node.js Worker · Pi · PostgreSQL / Supabase</dd></div><div><dt>记忆、知识与观测</dt><dd>Mem0 · WeKnora · Langfuse</dd></div></dl>
-      <div class="overview-evidence"><p>应用提供客户档案、工作台和审批交互。Pi 调用 CRM 工具，业务本体目录约束查询口径，服务端处理授权、候选审核和持久任务。完整 Agent 流程由本机 CRM 承载，在线演示使用固定示例。</p></div>
+    </section>
+
+    <section class="frame evidence" id="implementation" aria-labelledby="evidence-title">
+      <div>
+        <h2 id="evidence-title">了解真实系统</h2>
+        <p>演示中的数据与状态保存在浏览器。项目验证记录包含实际 CRM 的工具回执、SQL 结果和适用范围。</p>
+        <a class="text-link" href="./details.html#validation">查看验证记录</a>
+      </div>
+      <div class="evidence-links">
+        <a href="./about/#architecture"><span>系统架构</span><small>Pi、业务本体与 Worker 如何配合</small></a>
+        <a href="./details.html#stack"><span>技术栈与设计</span><small>应用、数据库及外部集成</small></a>
+        <a href="./demo/index.html?scenario=execution&amp;guide=1#/app/ai/workbench"><span>既有审批导览</span><small>逐步体验批准、拒绝与回查</small></a>
+        <a href="./demo/index.html?scenario=knowledge&amp;guide=1#/app/ai/workbench"><span>资料与知识导览</span><small>体验版本变更与引用核验</small></a>
+        <a href="./demo/index.html?scenario=collaboration&amp;guide=1#/app/ai/workbench"><span>专家协作导览</span><small>查看冲突如何进入人工复核</small></a>
+        <a href="./demo/index.html?scenario=evaluation&amp;guide=1#/app/ai/workbench"><span>评测与回放导览</span><small>核对引用和结果判定</small></a>
+      </div>
     </section>
   </main>
-  <footer class="site-footer container"><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>AI Native CRM</span></a><div><a href="./details.html">项目详解</a><a href="./demo/index.html#/app/ai/workbench">交互演示</a></div></footer>
+  <footer class="frame footer">
+    <a class="brand" href="./"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span><span>Pi Native <strong>CRM</strong></span></a>
+    <nav aria-label="页脚导航">
+      <a href="./about/">关于</a>
+      <a href="./details.html">项目详解</a>
+      <a href="https://github.com/tech-cove01/project-crm">GitHub</a>
+    </nav>
+  </footer>
 </body>
 </html>
