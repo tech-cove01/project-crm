@@ -140,7 +140,7 @@ const avatar = (deal) => `<span class="case-avatar avatar-${deal.color}" aria-hi
 const button = (action, text, mode = "") => `<button type="button" class="button ${mode}" data-action="${action}">${text}</button>`;
 
 function heading(title, detail, action = "") {
-  return `<div class="page-heading"><div><h1>${title}</h1><p>${detail}</p></div>${action}</div>`;
+  return `<div class="page-heading"><div><h1>${title}</h1>${detail ? `<p>${detail}</p>` : ""}</div>${action}</div>`;
 }
 
 function caseSelect(deal, prompt) {
