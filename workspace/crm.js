@@ -160,27 +160,31 @@ function messageMarkup(message, deal) {
   </li>`;
 }
 
-function composer(customer, closed, templates) {
-  if (closed) return '<div class="crm-composer crm-closed-note">会话已结束。后续核对可以从跟进任务或客户记忆继续。</div>';
+function composer(customer, closed, templates, deal) {
+  if (closed) return `<div class="crm-composer crm-closed-note"><span>会话已结束。</span>
+    ${caseLink(deal, "memory", "查看本次会话的记忆候选")}</div>`;
   const isNote = customer.mode === "note";
   const draft = customer.drafts[customer.mode];
   return `<div class="crm-composer">
     <div class="crm-composer-tools">
       ${filters([["reply", "回复客户"], ["note", "内部备注"]], customer.mode, "内容类型", "crm-composer-mode")}
-      ${isNote ? "" : `<label class="crm-select crm-template"><span class="sr-only">插入快捷回复</span>
+      ${isNote ? "" : `<div class="crm-composer-shortcuts"><label class="crm-select crm-template"><span class="sr-only">插入快捷回复</span>
         <select data-crm-control="template"><option value="">插入快捷回复</option>
           ${templates.map(({ id, label }) => `<option value="${escape(id)}">${escape(label)}</option>`).join("")}
-        </select></label>`}
-      <a class="table-link crm-library-link" href="#replies">管理快捷回复</a>
+        </select></label><a class="table-link crm-library-link" href="#replies">管理快捷回复</a></div>`}
+      ${isNote ? '<a class="table-link crm-library-link" href="#replies">管理快捷回复</a>' : ""}
     </div>
     <p class="crm-template-feedback" data-crm-template-feedback role="status" hidden></p>
-    <label class="sr-only" for="crm-draft">${isNote ? "内部备注内容" : "回复草稿"}</label>
-    <textarea id="crm-draft" data-crm-control="draft" rows="3" maxlength="${messageLimit}"
-      placeholder="${isNote ? "例如：等待对方补充试点范围。" : "写一条演示回复，或插入快捷回复。"}">${escape(draft)}</textarea>
-    <div class="crm-composer-actions">
-      <small>保存在当前标签页，页面刷新后可读回。</small>
+    <div class="crm-composer-entry">
+      <label class="sr-only" for="crm-draft">${isNote ? "内部备注内容" : "回复草稿"}</label>
+      <textarea id="crm-draft" data-crm-control="draft" rows="2" maxlength="${messageLimit}"
+        placeholder="${isNote ? "例如：等待对方补充试点范围。" : "写一条演示回复，或插入快捷回复。"}">${escape(draft)}</textarea>
       <button type="button" class="button button-primary button-small" data-action="crm-save-message"
         ${draft.trim() ? "" : "disabled"}>${isNote ? "保存内部备注" : "记录演示回复"}</button>
+    </div>
+    <div class="crm-composer-meta">
+      <small>保存在当前标签页，页面刷新后可读回。</small>
+      ${buttonAction("crm-close", "结束会话并提取候选", "", "crm-text-button")}
     </div>
   </div>`;
 }
@@ -218,7 +222,7 @@ function inbox(m) {
   const { deal, current } = m;
   const selected = crm.byCase[deal.id];
   const items = inboxItems(m);
-  return `${m.heading("会话收件箱", "把客户原话、人工接管、商机和跟进放在同一处。")}
+  return `${m.heading("会话收件箱", "")}
     <div class="crm-inbox">
       <section class="crm-inbox-list" aria-label="历史单聊列表">
         <div class="crm-list-header">
@@ -244,10 +248,7 @@ function inbox(m) {
         <ol class="crm-messages" aria-label="示例消息">
           ${[...initialMessages(deal), ...selected.entries].map((message) => messageMarkup(message, deal)).join("")}
         </ol>
-        ${composer(selected, current.closed, availableTemplates(m))}
-        <div class="crm-thread-footer">${current.closed
-          ? caseLink(deal, "memory", "查看本次会话的记忆候选")
-          : buttonAction("crm-close", "结束会话并提取候选", "", "crm-text-button")}</div>
+        ${composer(selected, current.closed, availableTemplates(m), deal)}
       </section>
       ${contactContext(m)}
     </div>`;
@@ -318,14 +319,17 @@ function boardCard(deal, m) {
       <div><h3>${escape(deal.title)}</h3><p>${escape(deal.company)}</p></div>
       ${guarded ? "" : '<span class="board-drag" draggable="true" title="拖到其他阶段" aria-hidden="true">⠿</span>'}
     </div>
-    <strong>${m.money.format(deal.amount)}</strong>
-    <div class="crm-board-card-tags">${current
-      ? (riskFor(deal, current) ? m.label("需要跟进", "gold") : m.label("跟进中"))
-      : m.label("手动创建")}
-      ${deal.meeting ? m.label("有约见依据", "green") : ""}
+    <div class="crm-board-card-value"><strong>${m.money.format(deal.amount)}</strong>
+      <div class="crm-board-card-tags">${current
+        ? (riskFor(deal, current) ? m.label("需要跟进", "gold") : m.label("跟进中"))
+        : m.label("手动创建")}
+        ${deal.meeting ? m.label("有约见依据", "green") : ""}
+      </div>
     </div>
-    ${guarded ? '<p class="board-guard">这笔商机有未结案的提案，需先在工作台处理。</p>' : manualStageControl(deal, m)}
-    ${current ? `<div class="crm-board-card-actions">${caseLink(deal, "workbench", "查看商机")}${caseLink(deal, "inbox", "客户会话")}</div>` : ""}
+    <div class="crm-board-card-footer">
+      ${current ? `<div class="crm-board-card-actions">${caseLink(deal, "workbench", "查看商机")}${caseLink(deal, "inbox", "客户会话")}</div>` : ""}
+      ${guarded ? '<p class="board-guard">这笔商机有未结案的提案，需先在工作台处理。</p>' : manualStageControl(deal, m)}
+    </div>
   </article>`;
 }
 
@@ -334,7 +338,7 @@ function pipeline(m) {
   const stages = pipelineStages.filter((stage) => crm.pipelineStage === "all" || crm.pipelineStage === stage.id);
   const active = [...crm.opportunities].reverse().concat(m.deals)
     .filter((deal) => stages.some((stage) => m.stageFor(deal) === stage.name));
-  return `${m.heading("销售管道", "拖动卡片或手动选择阶段；等待执行和回查的提案由 Agent 工作台处理。",
+  return `${m.heading("销售管道", "拖动卡片右侧把手，或用「调整阶段」。",
     buttonAction("crm-board-open", "新建商机", 'aria-haspopup="dialog" aria-controls="board-create-dialog"', "button button-primary"))}
     ${opportunityDialog()}
     <div class="crm-board-toolbar">
@@ -349,13 +353,13 @@ function pipeline(m) {
       ${stages.map((stage) => {
         const cases = active.filter((deal) => m.stageFor(deal) === stage.name);
         return `<section class="crm-board-column crm-board-${stage.id}" aria-label="${stage.name}" data-board-drop="${stage.name}">
-          <div class="crm-board-heading"><h2>${stage.name}</h2><small>${cases.length} 笔</small></div>
-          <p>${stage.note}</p><strong class="crm-stage-amount">${m.money.format(cases.reduce((amount, deal) => amount + deal.amount, 0))}</strong>
+          <div class="crm-board-heading"><div><h2>${stage.name}</h2><small>${cases.length} 笔</small></div>
+            <strong class="crm-stage-amount">${m.money.format(cases.reduce((amount, deal) => amount + deal.amount, 0))}</strong>
+          </div>
           <div class="crm-board-cards">${cases.map((deal) => boardCard(deal, m)).join("") || '<div class="crm-board-empty"><small>暂无商机</small></div>'}</div>
         </section>`;
       }).join("")}
-    </div>
-    <p class="crm-board-foot">人工批准与执行后的商机阶段会同步显示在看板。</p>`;
+    </div>`;
 }
 
 function directoryItems(m) {
