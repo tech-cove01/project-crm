@@ -6,7 +6,9 @@ Chrome 本轮重新打开参考 `/about` 和旧公开首页，分别检查 1440 
 
 本机集成 4/4 组通过，覆盖 1440、768、390、320px，核对章节顺序、旧锚点、唯一主入口、实拍载入和跳转。键盘切换系统图的审批节点，状态图切换只读与停止路径并核对效果未知的说明。桌面确认原 About 图继续可读。独立排版 4/4，两张图各自 4/4，均为同源静态请求，未见脚本异常。
 
-本机原件在共同工作区 `.reviews/crm-home-story-1124/`，含 `reference/live-audit.json`、`independent/independent-home-review.json`、`integrated-local/report.json` 和桌面、手机截图。图表定向报告见 `.reviews/crm-home-map-1124/` 和 `.reviews/crm-home-run-1124/`。
+GitHub Pages 于 11:34:51（Asia/Shanghai）构建 `32d90e5c9e5cd72a7ea2ffe412a8e6f075e36632` 成功。公开站复跑 4/4 组通过，7/7 项资源与发布提交字节一致，包括工作台 JPEG 截图。
+
+原件在共同工作区 `.reviews/crm-home-story-1124/`，含 `reference/live-audit.json`、`independent/independent-home-review.json`、`integrated-local/report.json`、`integrated-public/report.json`、`release-bytes.json` 和桌面、手机截图。图表定向报告见 `.reviews/crm-home-map-1124/` 和 `.reviews/crm-home-run-1124/`。
 
 ## 演示台版式与 Agent 工作台（2026-11-24）
 
