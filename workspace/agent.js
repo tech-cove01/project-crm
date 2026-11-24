@@ -196,60 +196,65 @@ function traceFor(run) {
 
 function selectedStep(m, run, area, steps) {
   const selection = m.state.agent.inspection[area];
-  return (selection?.no === run.no && steps.find((step) => step.id === selection.step)) || steps.at(-1);
+  const selected = selection?.no === run.no && steps.find((step) => step.id === selection.step);
+  const showSource = area === "workbench" && !hasReceipt(run) && run.proposal !== "rejected";
+  return selected || (showSource && steps.find(({ id }) => id === "query" || id === "recall")) || steps.at(-1);
 }
 
 function taskPicker(m) {
   const { agent } = m.state;
-  return `<section class="agent-task-picker" aria-label="任务场景">
-    ${Object.entries(taskOptions).map(([name, task]) => `<button type="button" class="agent-preset" data-action="agent-preset" data-select="${name}" aria-pressed="${agent.preset === name}">
-      <span class="agent-preset-mark" aria-hidden="true">${name === "ontology" ? "≋" : "◇"}</span>
-      <span><strong>${task.label}</strong><small>${task.description}</small></span>
-    </button>`).join("")}
-  </section>`;
-}
-
-function workbenchControls(m) {
-  const { agent } = m.state;
-  const mode = liveMode(agent);
-  return `<div class="agent-toolbar">
-    <label class="selector agent-scope"><span id="agent-scope-label">选择商机</span><select data-control="selected" aria-labelledby="agent-scope-label">
-      ${m.deals.map((deal) => `<option value="${deal.id}" ${m.deal.id === deal.id ? "selected" : ""}>${deal.company} · ${deal.title}</option>`).join("")}
-    </select></label>
-    <div class="agent-mode" role="group" aria-label="访问模式">
-      ${Object.entries(modes).map(([id, name]) => `<button type="button" data-action="agent-mode" data-select="${id}" aria-pressed="${mode === id}" ${agent.preset === "memory" && id === "controlled" ? "disabled" : ""}>${name}</button>`).join("")}
+  return `<div class="agent-toolbar-field">
+    <span id="agent-task-label" class="agent-control-label">任务场景</span>
+    <div class="agent-mode" role="group" aria-labelledby="agent-task-label">
+      ${Object.entries(taskOptions).map(([name, task]) => `<button type="button" data-action="agent-preset" data-select="${name}" aria-pressed="${agent.preset === name}">${task.label}</button>`).join("")}
     </div>
   </div>`;
 }
 
-function taskComposer(m) {
+function workbenchControls(m) {
   const { agent } = m.state;
   const { preset } = agent;
-  const task = taskOptions[preset];
   const mode = liveMode(agent);
   const primary = preset === "memory" ? "运行客户记忆读取"
     : mode === "read" ? "运行只读查询"
     : m.current.proposal === "blocked" ? "查看取证结果"
     : m.current.proposal !== "none" ? "继续现有提案"
     : "生成阶段提案";
-  return `<section class="agent-launch" aria-labelledby="agent-launch-title">
-    <div class="agent-launch-header">
-      <div><span class="agent-kicker">${task.agent}</span><h2 id="agent-launch-title">${task.title}</h2></div>
-      ${m.button("agent-start", primary, "button-primary")}
+  return `<div class="agent-toolbar">
+    ${taskPicker(m)}
+    <label class="agent-toolbar-field agent-scope"><span id="agent-scope-label" class="agent-control-label">选择商机</span><select data-control="selected" aria-labelledby="agent-scope-label">
+      ${m.deals.map((deal) => `<option value="${deal.id}" ${m.deal.id === deal.id ? "selected" : ""}>${deal.company} · ${deal.title}</option>`).join("")}
+    </select></label>
+    <div class="agent-toolbar-field">
+      <span id="agent-mode-label" class="agent-control-label">访问模式</span>
+      <div class="agent-mode" role="group" aria-labelledby="agent-mode-label">
+        ${Object.entries(modes).map(([id, name]) => `<button type="button" data-action="agent-mode" data-select="${id}" aria-pressed="${mode === id}" ${agent.preset === "memory" && id === "controlled" ? "disabled" : ""}>${name}</button>`).join("")}
+      </div>
     </div>
-    <details class="agent-command" ${agent.draftError || agent.draft ? "open" : ""}>
-      <summary>用一句话发起任务</summary>
-      <form class="agent-command-body" data-agent-command>
-        <label for="agent-command">支持已完成约见和已确认客户偏好这两类示例</label>
-        <div><input maxlength="120" id="agent-command" data-agent-input autocomplete="off" name="agent-command"
-          placeholder="例如：查一下周谨已确认的沟通偏好" value="${safeText(agent.draft)}" ${agent.draftError ? 'aria-invalid="true" aria-describedby="agent-command-error"' : ""}>
-          <button type="submit" class="button">运行任务</button>
-        </div>
-        ${agent.draftError ? `<p id="agent-command-error" class="agent-error">${agent.draftScopeError
-          ? "指令中的客户与上方选定范围不同，请先切换商机。"
-          : "无法明确匹配一个任务。请写明要查「已完成约见」或「已确认客户偏好」，并核对上方商机范围。"}</p>` : ""}
-      </form>
-    </details>
+    ${m.button("agent-start", primary, "button-primary agent-start")}
+  </div>`;
+}
+
+function taskComposer(m, run) {
+  const { agent } = m.state;
+  const task = taskOptions[agent.preset];
+  return `<section class="agent-launch${run ? " agent-launch-compact" : ""}" aria-labelledby="${run ? "agent-command-label" : "agent-launch-title"}">
+    ${run ? "" : `<div class="agent-launch-header">
+      <span class="agent-kicker">${task.agent}</span><h2 id="agent-launch-title">${task.title}</h2>
+      <p>${task.description}</p>
+    </div>`}
+    <form class="agent-command" data-agent-command>
+      <label id="agent-command-label" for="agent-command">用一句话发起任务</label>
+      <div><input maxlength="120" id="agent-command" data-agent-input autocomplete="off" name="agent-command"
+        placeholder="例如：只查已完成约见" value="${safeText(agent.draft)}"
+        aria-describedby="agent-command-hint${agent.draftError ? " agent-command-error" : ""}" ${agent.draftError ? 'aria-invalid="true"' : ""}>
+        <button type="submit" class="button">运行任务</button>
+      </div>
+      <p id="agent-command-hint">支持已完成约见和已确认客户偏好两类任务。</p>
+      ${agent.draftError ? `<p id="agent-command-error" class="agent-error">${agent.draftScopeError
+        ? "指令中的客户与上方选定范围不同，请先切换商机。"
+        : "无法明确匹配一个任务。请写明要查「已完成约见」或「已确认客户偏好」，并核对上方商机范围。"}</p>` : ""}
+    </form>
   </section>`;
 }
 
@@ -270,7 +275,7 @@ function traceList(m, run, area, selected, steps) {
     ${steps.map((step, index) => `<li><button type="button" data-action="agent-step" data-case="${area}" data-select="${step.id}" data-run="${run.no}"
       aria-pressed="${step.id === selected.id}">
       <span class="agent-step-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>
-      <span class="agent-step-name"><strong>${step.title}</strong><small>${step.id === selected.id ? "正在检查回执" : "查看这一步"}</small></span>
+      <strong class="agent-step-name">${step.title}</strong>
       ${m.label(step.badge, step.tone)}
     </button></li>`).join("")}
   </ol>`;
@@ -322,26 +327,26 @@ function workbench(m) {
   const steps = run ? traceFor(run) : [];
   const step = run ? selectedStep(m, run, "workbench", steps) : null;
   const stage = m.stageFor(m.deal);
-  return `<div class="agent-page">
-    ${m.heading("Agent 工作台", "选择客户和任务后，逐步核对工具回执、人工决定和业务结果。", '<a class="button agent-history-link" href="#runs">检查历史运行</a>')}
+  return `<div class="agent-page agent-workbench">
+    ${m.heading("Agent 工作台", "选择任务与商机，核对工具结果、人工决定和执行回执。", '<a class="button button-small agent-history-link" href="#runs">检查历史运行</a>')}
     ${workbenchControls(m)}
-    ${taskPicker(m)}
     <div class="agent-workspace">
       <div class="agent-console">
-        ${taskComposer(m)}
         ${run ? `<section class="agent-run-card" aria-labelledby="agent-run-title" tabindex="-1">
           <div class="agent-run-head">
-            <div><span class="agent-kicker">${runName(run)} · ${modes[run.mode]}</span><h3 id="agent-run-title">运行轨迹</h3></div>
+            <div><span class="agent-kicker">${runName(run)} · ${modes[run.mode]}</span><h2 id="agent-run-title">运行轨迹</h2></div>
             ${m.label(statusFor(run).label, statusFor(run).tone)}
           </div>
           <p class="agent-run-summary">${resultText(run)}</p>
-          ${traceList(m, run, "workbench", step, steps)}
-        </section>${transitionPanel(m, run, "workbench")}` : `<div class="agent-empty-trace">
-          <span class="agent-empty-mark" aria-hidden="true">⌁</span>
-          <div><strong>等待运行</strong><p>开始任务后，这里会按顺序记录工具调用、业务依据和处理结果。</p></div>
-        </div>`}
+          <div class="agent-run-grid">
+            <div>${traceList(m, run, "workbench", step, steps)}</div>
+            ${inspector(m, run, "workbench", step, steps)}
+          </div>
+        </section>` : ""}
+        ${taskComposer(m, run)}
       </div>
       <div class="agent-side">
+        ${run ? transitionPanel(m, run, "workbench") : ""}
         <section class="agent-object agent-guard" aria-labelledby="agent-guard-title">
           <div class="agent-action-header"><h3 id="agent-guard-title">工作区执行护栏</h3>
             ${m.label(agent.executionPaused ? "执行暂停" : "允许获批动作", agent.executionPaused ? "gold" : "green")}</div>
@@ -353,14 +358,9 @@ function workbench(m) {
           ${fields([["商机金额", m.money.format(m.deal.amount)], ["当前商机阶段", stage], ["选定客户", m.deal.contact]])}
           <div class="agent-links"><a href="#inbox" data-select="${m.deal.id}">客户会话</a><a href="#memory" data-select="${m.deal.id}">客户记忆</a></div>
         </section>
-        ${step ? inspector(m, run, "workbench", step, steps) : `<aside class="agent-inspector agent-inspector-idle">
-          <span class="agent-kicker">执行边界</span><h3>${modes[liveMode(agent)]}</h3>
-          <p>${liveMode(agent) === "controlled" ? "阶段变更要经人工决定。批准后执行才会写入本地示例。" : "该任务会保存读取轨迹，原商机和客户事实保持不变。"}</p>
-          <a href="${publicEvidence[agent.preset]}">查看对应的产品证据</a>
-        </aside>`}
+        <p class="agent-demo-note">本地模拟调用 ${code(task.tool)}。<a href="${publicEvidence[agent.preset]}">查看对应的产品证据</a></p>
       </div>
     </div>
-    <p class="agent-demo-note">合成数据与本地回执 · 演示当前使用 ${code(task.tool)} 的固定情境</p>
   </div>`;
 }
 
@@ -458,6 +458,7 @@ function startTask(m, kind) {
       : "已有阶段决定可继续查看。切换只读模式可以再次核对约见。";
   }
   const run = addRun(m, kind, mode);
+  focusPanel(".agent-run-card");
   if (kind === "memory") {
     m.log(m.deal, "recalled");
     return resultText(run);
