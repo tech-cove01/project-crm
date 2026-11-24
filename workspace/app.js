@@ -224,6 +224,9 @@ function getModel() {
 
 function render() {
   const slug = activeRoute();
+  const scrollOffsets = Object.fromEntries([...page.querySelectorAll("[data-workbench-scroll]")].map((panel) => [
+    panel.dataset.workbenchScroll, panel.scrollTop,
+  ]));
   document.querySelector("#workspace-location").textContent = routes[slug];
   for (const item of document.querySelectorAll("[data-route]")) {
     if (item.dataset.route === slug) item.setAttribute("aria-current", "page");
@@ -232,6 +235,9 @@ function render() {
   document.title = `${routes[slug]} · Pi Native CRM`;
   document.documentElement.dataset.deskTheme = state.desk.theme;
   page.innerHTML = screens[slug](getModel());
+  for (const panel of page.querySelectorAll("[data-workbench-scroll]")) {
+    panel.scrollTop = scrollOffsets[panel.dataset.workbenchScroll] ?? 0;
+  }
   const boardStatus = page.querySelector("[data-board-status]");
   if (boardStatus) boardStatus.textContent = stageFeedback;
 }

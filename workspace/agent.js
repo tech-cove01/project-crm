@@ -235,27 +235,56 @@ function workbenchControls(m) {
   </div>`;
 }
 
-function taskComposer(m, run) {
-  const { agent } = m.state;
-  const task = taskOptions[agent.preset];
-  return `<section class="agent-launch${run ? " agent-launch-compact" : ""}" aria-labelledby="${run ? "agent-command-label" : "agent-launch-title"}">
-    ${run ? "" : `<div class="agent-launch-header">
-      <span class="agent-kicker">${task.agent}</span><h2 id="agent-launch-title">${task.title}</h2>
-      <p>${task.description}</p>
+function taskIntro(m) {
+  const task = taskOptions[m.state.agent.preset];
+  return `<section class="agent-launch" aria-labelledby="agent-launch-title">
+    <span class="agent-kicker">${task.agent}</span><h2 id="agent-launch-title">${task.title}</h2>
+    <p>${task.description}</p>
+  </section>`;
+}
+
+function memoryExample(m, compact) {
+  const { company, contact, message } = m.deal;
+  return `<section class="agent-launch agent-memory-example">
+    ${compact ? "" : `<div class="agent-example-intro">
+      <span class="agent-kicker">内置案例 · ${company}</span>
+      <h2>客户记忆示例</h2>
+      <p>“准备回访${contact}时，夜间告警应该怎么联系？”</p>
     </div>`}
-    <form class="agent-command" data-agent-command>
-      <label id="agent-command-label" for="agent-command">用一句话发起任务</label>
-      <div><input maxlength="120" id="agent-command" data-agent-input autocomplete="off" name="agent-command"
-        placeholder="例如：只查已完成约见" value="${safeText(agent.draft)}"
-        aria-describedby="agent-command-hint${agent.draftError ? " agent-command-error" : ""}" ${agent.draftError ? 'aria-invalid="true"' : ""}>
-        <button type="submit" class="button">运行任务</button>
+    <details>
+      <summary class="button button-small">播放记忆示例</summary>
+      <div class="agent-example-result">
+        <div class="agent-action-header"><h3>示例回放</h3><span class="pill pill-green">只读 · 1 条确认事实</span></div>
+        <ol>
+          <li><strong>定位客户</strong><p>${company} · ${contact}。记忆读取限定在这位客户。</p></li>
+          <li><strong>核对原话</strong><p>“${message.quote}” ${code(message.id)}</p></li>
+          <li><strong>给出回访提示</strong><p>${message.fact}</p></li>
+        </ol>
+        <p class="agent-example-note">回放使用已确认的示例快照。当前标签页的记忆以客户记忆页的审核状态为准。</p>
+        <a class="table-link" href="#memory" data-select="${m.deal.id}">查看当前客户记忆</a>
       </div>
-      <p id="agent-command-hint">支持已完成约见和已确认客户偏好两类任务。</p>
+    </details>
+  </section>`;
+}
+
+function taskComposer(m) {
+  const { agent } = m.state;
+  return `<div class="agent-command-dock">
+    <form class="agent-command" data-agent-command aria-labelledby="agent-command-label">
+      <div class="agent-command-heading">
+        <label id="agent-command-label" for="agent-command">用一句话发起任务</label>
+        <p id="agent-command-hint">支持已完成约见和已确认客户偏好两类任务。</p>
+      </div>
+      <div class="agent-command-input"><input maxlength="120" id="agent-command" data-agent-input autocomplete="off" name="agent-command"
+        placeholder="${agent.preset === "memory" ? "例如：查询已确认的沟通偏好" : "例如：只查已完成约见"}" value="${safeText(agent.draft)}"
+        aria-describedby="agent-command-hint${agent.draftError ? " agent-command-error" : ""}" ${agent.draftError ? 'aria-invalid="true"' : ""}>
+        <button type="submit" class="button button-primary">运行任务</button>
+      </div>
       ${agent.draftError ? `<p id="agent-command-error" class="agent-error">${agent.draftScopeError
         ? "指令中的客户与上方选定范围不同，请先切换商机。"
         : "无法明确匹配一个任务。请写明要查「已完成约见」或「已确认客户偏好」，并核对上方商机范围。"}</p>` : ""}
     </form>
-  </section>`;
+  </div>`;
 }
 
 function resultText(run) {
@@ -327,39 +356,45 @@ function workbench(m) {
   const steps = run ? traceFor(run) : [];
   const step = run ? selectedStep(m, run, "workbench", steps) : null;
   const stage = m.stageFor(m.deal);
+  const starter = m.deal.id === "ridge"
+    ? memoryExample(m, Boolean(run) || m.current.proposal !== "none")
+    : run ? "" : taskIntro(m);
   return `<div class="agent-page agent-workbench">
     ${m.heading("Agent 工作台", "选择任务与商机，核对工具结果、人工决定和执行回执。", '<a class="button button-small agent-history-link" href="#runs">检查历史运行</a>')}
     ${workbenchControls(m)}
     <div class="agent-workspace">
-      <div class="agent-console">
-        ${run ? `<section class="agent-run-card" aria-labelledby="agent-run-title" tabindex="-1">
-          <div class="agent-run-head">
-            <div><span class="agent-kicker">${runName(run)} · ${modes[run.mode]}</span><h2 id="agent-run-title">运行轨迹</h2></div>
-            ${m.label(statusFor(run).label, statusFor(run).tone)}
-          </div>
-          <p class="agent-run-summary">${resultText(run)}</p>
-          <div class="agent-run-grid">
-            <div>${traceList(m, run, "workbench", step, steps)}</div>
-            ${inspector(m, run, "workbench", step, steps)}
-          </div>
-        </section>` : ""}
-        ${taskComposer(m, run)}
+      <div class="agent-viewport" data-workbench-scroll="viewport">
+        <div class="agent-console" data-workbench-scroll="run" tabindex="0" role="region" aria-label="运行和案例">
+          ${run ? `<section class="agent-run-card" aria-labelledby="agent-run-title" tabindex="-1">
+            <div class="agent-run-head">
+              <div><span class="agent-kicker">${runName(run)} · ${modes[run.mode]}</span><h2 id="agent-run-title">运行轨迹</h2></div>
+              ${m.label(statusFor(run).label, statusFor(run).tone)}
+            </div>
+            <p class="agent-run-summary">${resultText(run)}</p>
+            <div class="agent-run-grid">
+              <div>${traceList(m, run, "workbench", step, steps)}</div>
+              ${inspector(m, run, "workbench", step, steps)}
+            </div>
+          </section>` : ""}
+          ${starter}
+        </div>
+        <div class="agent-side" data-workbench-scroll="context">
+          ${run ? transitionPanel(m, run, "workbench") : ""}
+          <section class="agent-object agent-guard" aria-labelledby="agent-guard-title">
+            <div class="agent-action-header"><h3 id="agent-guard-title">工作区执行护栏</h3>
+              ${m.label(agent.executionPaused ? "执行暂停" : "允许获批动作", agent.executionPaused ? "gold" : "green")}</div>
+            <p>影响待执行的本地阶段变更。读取、审阅和历史回放仍可用。</p>
+            ${m.button("agent-toggle-execution", agent.executionPaused ? "恢复执行" : "暂停执行", "button-small")}
+          </section>
+          <section class="agent-object" aria-label="业务范围">
+            <div class="agent-object-head">${m.avatar(m.deal)}<div><p>${m.deal.company}</p><h2>${m.deal.title}</h2></div></div>
+            ${fields([["商机金额", m.money.format(m.deal.amount)], ["当前商机阶段", stage], ["选定客户", m.deal.contact]])}
+            <div class="agent-links"><a href="#inbox" data-select="${m.deal.id}">客户会话</a><a href="#memory" data-select="${m.deal.id}">客户记忆</a></div>
+          </section>
+          <p class="agent-demo-note">本地模拟调用 ${code(task.tool)}。<a href="${publicEvidence[agent.preset]}">查看对应的产品证据</a></p>
+        </div>
       </div>
-      <div class="agent-side">
-        ${run ? transitionPanel(m, run, "workbench") : ""}
-        <section class="agent-object agent-guard" aria-labelledby="agent-guard-title">
-          <div class="agent-action-header"><h3 id="agent-guard-title">工作区执行护栏</h3>
-            ${m.label(agent.executionPaused ? "执行暂停" : "允许获批动作", agent.executionPaused ? "gold" : "green")}</div>
-          <p>影响待执行的本地阶段变更。读取、审阅和历史回放仍可用。</p>
-          ${m.button("agent-toggle-execution", agent.executionPaused ? "恢复执行" : "暂停执行", "button-small")}
-        </section>
-        <section class="agent-object" aria-label="业务范围">
-          <div class="agent-object-head">${m.avatar(m.deal)}<div><p>${m.deal.company}</p><h2>${m.deal.title}</h2></div></div>
-          ${fields([["商机金额", m.money.format(m.deal.amount)], ["当前商机阶段", stage], ["选定客户", m.deal.contact]])}
-          <div class="agent-links"><a href="#inbox" data-select="${m.deal.id}">客户会话</a><a href="#memory" data-select="${m.deal.id}">客户记忆</a></div>
-        </section>
-        <p class="agent-demo-note">本地模拟调用 ${code(task.tool)}。<a href="${publicEvidence[agent.preset]}">查看对应的产品证据</a></p>
-      </div>
+      ${taskComposer(m)}
     </div>
   </div>`;
 }

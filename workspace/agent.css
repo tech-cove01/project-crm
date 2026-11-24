@@ -18,6 +18,26 @@
   align-self: center;
 }
 
+.workspace-shell:has(.agent-workbench) {
+  height: 100dvh;
+  min-height: 470px;
+}
+
+.workspace-main:has(.agent-workbench),
+.content:has(.agent-workbench),
+.agent-workbench {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.content:has(.agent-workbench),
+.agent-workbench { flex: 1 1 0; }
+.content:has(.agent-workbench) { padding-bottom: 10px; }
+.workspace-main:has(.agent-workbench) > .workspace-bar,
+.agent-workbench > :is(.page-heading, .agent-toolbar) { flex: 0 0 auto; }
+
 .agent-toolbar {
   display: flex;
   align-items: flex-end;
@@ -123,6 +143,28 @@
   gap: 13px;
 }
 
+.agent-workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 7px 13px;
+}
+
+.agent-viewport { display: contents; }
+
+.agent-workbench :is(.agent-console, .agent-side) {
+  overflow-y: auto;
+  min-height: 0;
+  align-content: start;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+.agent-workbench .agent-console { grid-area: 1 / 1; }
+.agent-workbench .agent-side { grid-area: 1 / 2 / 3; }
+.agent-command-dock { grid-area: 2 / 1; }
+
 .agent-console,
 .agent-side,
 .agent-history-detail {
@@ -167,11 +209,11 @@
   gap: 8px 12px;
 }
 
-.agent-launch-header h2 {
+.agent-launch h2 {
   font-size: clamp(18px, 1.55vw, 23px);
 }
 
-.agent-launch-header p {
+.agent-launch p {
   margin: 4px 0 0;
   color: var(--agent-amplitude);
   font-size: 14px;
@@ -211,15 +253,14 @@
 .agent-command {
   display: grid;
   gap: 6px;
-  border-top: 1px solid var(--agent-divider);
-  margin-top: 12px;
-  padding-top: 10px;
 }
 
-.agent-launch-compact .agent-command {
-  margin: 0;
-  padding: 0;
-  border: 0;
+.agent-command-dock {
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--agent-divider);
+  border-radius: var(--agent-radius);
+  background: var(--agent-panel);
 }
 
 .agent-command label {
@@ -228,11 +269,13 @@
   color: var(--agent-text);
 }
 
-.agent-command > div {
+.agent-command-heading,
+.agent-command-input {
   display: flex;
   gap: 7px;
 }
 
+.agent-command-heading { align-items: baseline; flex-wrap: wrap; }
 .agent-command input {
   flex: 1 1 0;
   min-width: 0;
@@ -254,6 +297,31 @@
 .agent-command .agent-error {
   color: #95523e;
 }
+
+.agent-example-intro { margin-bottom: 14px; }
+
+.agent-memory-example summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-memory-example summary::-webkit-details-marker { display: none; }
+.agent-memory-example summary::after { content: "↓"; margin-inline-start: 3px; }
+.agent-memory-example details[open] summary::after { content: "↑"; }
+
+.agent-example-result {
+  margin-top: 13px;
+  padding: 12px;
+  border: 1px solid var(--agent-divider);
+  border-radius: 8px;
+  background: var(--agent-mist);
+}
+
+.agent-example-result h3 { margin: 0; font-size: 16px; }
+.agent-example-result .agent-action-header { flex-wrap: wrap; }
+.agent-example-result ol { margin: 10px 0; padding-inline-start: 22px; font-size: 14px; }
+.agent-example-result li + li { margin-top: 8px; }
+.agent-example-result .agent-example-note { margin-bottom: 7px; font-size: 13px; }
 
 .agent-empty-trace {
   display: flex;
@@ -611,6 +679,21 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .agent-viewport {
+    grid-area: 1 / 1;
+    display: grid;
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .agent-workbench :is(.agent-console, .agent-side) {
+    grid-area: auto;
+    overflow: visible;
+  }
+
   .agent-workbench .agent-side {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -619,6 +702,12 @@
   .agent-workbench .agent-demo-note {
     grid-column: 1 / -1;
   }
+}
+
+@media (max-width: 760px) {
+  .workspace-shell:has(.agent-workbench) { display: flex; flex-direction: column; }
+  .workspace-main:has(.agent-workbench) { flex: 1 1 0; }
+  .workspace-shell:has(.agent-workbench) > .rail { flex: 0 0 auto; align-self: stretch; }
 }
 
 @media (max-width: 720px) {
@@ -646,6 +735,9 @@
   .agent-toolbar .agent-start {
     margin-left: 0;
   }
+
+  .agent-command-dock { padding: 7px 9px; }
+  .agent-command-heading { gap: 1px 7px; }
 
   .agent-workbench .agent-side {
     grid-template-columns: minmax(0, 1fr);
