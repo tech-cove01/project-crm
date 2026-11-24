@@ -1,105 +1,78 @@
-# AI Native CRM
+# Pi Native CRM
 
-面向销售团队的 AI 原生客户经营与协作系统。销售可以在 Agent 工作台筛选授权管道里的开放商机，核对指定时间内的已完成约见记录，再根据证据决定是否推进某笔商机。授权历史单聊中的客户偏好经人工确认后，可在新会话复用。工作台保留取证依据、审批记录和执行结果，方便销售回查。
+面向销售团队的 AI 原生 CRM。Agent 从授权范围内的客户会话、商机和企业资料取证，生成带来源的销售建议。负责人决定是否推进，Worker 执行获批动作，再回查实际业务状态。
 
-[项目展示](https://tech-cove01.github.io/project-crm/) · [业务流程与技术详解](https://tech-cove01.github.io/project-crm/details.html) · [跟做商机审批（静态演示）](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=execution&guide=1#/app/ai/workbench)
+**[打开在线工作台](https://tech-cove01.github.io/project-crm/workspace/#workbench)** · [项目主页与交互架构](https://tech-cove01.github.io/project-crm/) · [业务与技术详解](https://tech-cove01.github.io/project-crm/details.html)
 
-## 项目亮点
+在线工作台使用浏览器内的合成数据。真实应用的运行方式见[本地启动](#本地启动)。
 
-### Pi 内核与业务本体建模
+## 一个销售场景
 
-销售可以问“授权管道里哪些开放商机在指定时间窗内没有已完成约见记录？”其他渠道的跟进情况仍需另行核对。遇到“高潜”或“有效跟进”等缺少审核定义的条件，Agent 会先请销售补充标准。
+在合成演示中，栖岭能源的储能站点试点处于「初步接洽」。周谨在会话里提到，夜间告警优先用邮件，紧急故障才打电话。销售还要判断这笔商机能否进入「技术评估」。
 
-Pi 负责模型与工具循环。CRM 工具侧的业务本体（Ontology Lite）用版本化目录统一商机、活动及其关系和词义。服务端按审核口径、对象授权和时间窗执行许可查询，并保存可回查的版本与来源。对单笔已选商机，已完成约见记录可成为阶段提案依据。人工批准后由独立 Worker 执行，Agent 续跑并读回实际阶段。拒绝时保留原阶段。
+- **取证。** Agent 按所选商机和 UTC 时间窗查询已完成约见，找到技术访谈回执 `ACT-1121`，把这条依据带入阶段提案。
+- **审批与回查。** 负责人核对依据并决定。待批和待执行时保持原阶段，获批动作执行后由原 Run 回读阶段与回执。
+- **跨会话记忆。** 客户偏好带着原话 `MSG-1122` 进入待审候选。确认后，新会话可读取这条已确认事实来准备回访。
 
-[看商机筛查与口径说明](https://tech-cove01.github.io/project-crm/details.html#ontology-walkthrough)
+[跟做商机审批](https://tech-cove01.github.io/project-crm/demo/index.html?scenario=execution&guide=1#/app/ai/workbench)
 
-### 客户记忆提取与跨会话复用
+## 功能亮点
 
-销售可在新会话读到已确认的客户偏好。获授权的经理或管理员从客户历史单聊提取记忆候选，核对原文后确认或驳回。服务端校验引文及来源归属，待审候选不参与召回。重复确认同一候选只写一条事实和一条同步事件。
+| 能力                   | 实现                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **业务本体与许可查询** | Ontology Lite 用版本化目录解释开放商机、已完成约见等审核口径，绑定组织、对象与时间窗后执行参数化查询。口径不明确时先澄清，结果保留范围与查询依据。                |
+| **Pi 运行与人工审批**  | Pi 负责模型与工具循环。PostgreSQL 持久化 Run、队列、提案和执行回执，独立 Worker 按租约领取并续跑。需要交叉核对时，可以用只读专家子任务分别取证。                  |
+| **可追溯的客户记忆**   | 获授权的经理或管理员核对原文后确认或驳回候选。受同一客户范围约束，有效的 SQL 事实可跨会话复用，撤回后停止召回。Mem0 可辅助排序，服务异常时仍可使用本地 SQL 事实。 |
+| **企业知识与运行复盘** | 原生 RAG 和 WeKnora 支持读取企业资料。引用前核验授权、发布状态、版本与原文。确定性规则检查引用与动作，按需做语义复核。Langfuse 可关联脱敏轨迹、耗时、用量与评分。 |
 
-SQL 保存当前有效事实，读取时核对客户归属和事实状态。撤回后的事实停止召回，更新时先撤回旧事实，再确认新事实。启用 Mem0 时可辅助排序，异常时回退到本地 SQL 事实。
-
-[看记忆提取与确认步骤](https://tech-cove01.github.io/project-crm/details.html#memory-lifecycle)
-
-### 知识检索优化与证据约束
-
-销售可以打开回答引用的企业资料核对出处。项目接入原生 RAG 和 WeKnora Wiki。字面查询没有候选时，WeKnora 可回退到主题词，在限定窗口内按标题与正文排序。返回引用前核验权限、发布状态和版本，已撤回或过期的资料无法继续作为依据。
-
-### Agent 业务评测与运行观测
-
-用同题对照比较单 Agent、三专家及不同记忆方案的任务结果、耗时和 Token 用量。评估时分别核对资料是否找全、回答是否有据、动作是否执行。SQL 记录运行事实，确定性规则检查引用和执行约束，按需使用 LLM Judge 复核答复语义。Langfuse 将脱敏轨迹、模型用量与评分关联起来，便于回查失败发生在哪一步。
-
-## 核心功能
-
-| 模块 | 功能 |
-| --- | --- |
-| 客户管理 | 管理客户档案与沟通记录，从授权历史单聊提取带引文的记忆候选，支持人审、跨会话读取和撤回 |
-| 商机协作 | 通过看板管理销售阶段，按开放商机和已完成约见等审核口径筛查，支持阶段提案、人工审批、执行回执与续跑回查 |
-| 知识问答 | 查询产品资料、FAQ 和企业 Wiki，展示引用片段、来源与版本信息 |
-| Agent 工作台 | 创建任务，查看业务查询的口径、范围、证据与待审动作，支持取消与恢复；只读专家子任务可分别取证并汇总 |
-| 运行复盘 | 查看模型和工具观测、审批记录及评估结果，追溯答案依据与业务变更 |
-| 组织权限 | 结合登录身份、组织作用域、角色和知识源授权控制数据与工具访问 |
-
-## 技术栈
-
-| 层次 | 技术与用途 |
-| --- | --- |
-| 前端 | Next.js 16、React 19、TypeScript、Tailwind CSS 4 |
-| 交互与表单 | Radix UI、TanStack Query、React Hook Form、Zod |
-| 可视化 | React Flow、Recharts、商机看板拖拽 |
-| 后端与任务 | Node.js、Next.js API、独立 Agent Worker、PostgreSQL 持久队列 |
-| 数据与认证 | PostgreSQL、Supabase Auth / Storage / Realtime、RLS；Redis 用于可选缓存与运行辅助 |
-| Agent 与工具 | Pi Agent Core / Pi AI 0.86.1、模型网关、MCP、工具权限与人工审批 |
-| 模型与向量 | 百炼 Qwen、text-embedding-v4、pgvector |
-| 记忆与知识 | CRM 确认事实、Mem0、原生 RAG、WeKnora Wiki |
-| 观测与评估 | SQL 运行记录、Langfuse、确定性 Eval、按需 LLM Judge |
-| 工程工具 | pnpm、Docker Compose、数据库迁移、Vitest、Testing Library、Playwright、ESLint |
+[商机筛查与审批](https://tech-cove01.github.io/project-crm/details.html#ontology-walkthrough) · [客户记忆提取与确认](https://tech-cove01.github.io/project-crm/details.html#memory-lifecycle)
 
 ## 系统架构
 
-```mermaid
-flowchart LR
-    UI[CRM / Agent 工作台] --> API[Next.js API]
-    API --> DB[(PostgreSQL / Supabase)]
-    API --> Queue[持久任务队列]
-    Queue --> Worker[独立 Agent Worker]
-    Worker --> Pi[Pi Runtime / 模型网关]
-    Pi --> LLM[百炼 Qwen]
-    Pi --> Tools["CRM / MCP 工具（业务本体、权限与审批）"]
-    Tools --> DB
-    Tools --> Memory[可选 Mem0 记忆排序]
-    Tools --> Knowledge[pgvector / WeKnora]
-    Worker --> Events[SQL 运行事件 / Eval]
-    Events --> Outbox[集成投递队列]
-    Outbox --> Langfuse[Langfuse]
+![Pi Native CRM 系统架构。工作台提交任务，持久队列交给 Worker，Pi 通过许可工具取证，人工审批后执行并回查，运行事件用于观测和评测。](docs/architecture/crm-overview.png)
+
+工作台和 API 承接登录、业务范围和人工决定。Worker 运行 Pi，模型网关按组织管理供应商凭据与预算。PostgreSQL 保存业务事实、有效记忆和运行状态，外部适配器按需参与记忆排序、企业知识检索或观测。
+
+[在主页查看交互架构图](https://tech-cove01.github.io/project-crm/#architecture) · [运行与审批状态机](https://tech-cove01.github.io/project-crm/#run-states) · [Pi 运行时设计](docs/architecture/pi-native-runtime.md)
+
+## 技术栈
+
+| 层次             | 技术                                                                   |
+| ---------------- | ---------------------------------------------------------------------- |
+| Web 与交互       | Next.js 16、React 19、TypeScript、Tailwind CSS 4、Radix UI、React Flow |
+| API 与异步执行   | Next.js API、Node.js Worker、PostgreSQL 持久队列、SSE                  |
+| 数据与身份       | PostgreSQL、Supabase Auth / Storage / Realtime、RLS                    |
+| Agent 与模型     | Pi Agent Core / Pi AI 0.86.1、模型网关、MCP，支持百炼 Qwen             |
+| 检索、记忆与观测 | pgvector、Mem0、WeKnora、Langfuse                                      |
+| 工程             | pnpm、Docker Compose、数据库迁移、Vitest、Playwright                   |
+
+## 本地启动
+
+需要 **Node.js 22+、pnpm 9.15.9 和 Docker**。首次克隆请先按[本地运行文档](docs/local-development.md)准备 Supabase、登录与模型配置。数据库和所需依赖就绪后，在仓库根目录执行以下命令。
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm local:status
+pnpm local:start
 ```
 
-版本化业务本体随 CRM 工具发布。工具识别已审核口径、绑定授权范围并执行参数化查询，工作台通过 SSE 展示取证和执行事件。CRM API 核验客户记忆的引文与来源，收到有权人员确认后才写为 SQL 事实。业务数据、任务、审批与有效客户记忆均以 SQL 为准。
+启动后访问 [本地 Agent 工作台](http://localhost:3000/app/ai/workbench)。结束演示时运行 `pnpm local:stop`，停止受管 Web、Worker 和集成队列消费者，保留数据库和数据卷。
 
-Web、Agent Worker 与集成消费者分工运行。Worker 通过 PostgreSQL 持久队列与租约领取任务，并恢复审批后的运行。Mem0、WeKnora 和 Langfuse 按需配置。模型网关按组织解析可用凭据与供应商配置，Supabase Auth、RLS 和服务端权限检查共同控制数据访问。
+使用已有 Windows 共享工作区时，也可在外层 `agent` 目录双击 `启动_CRM_真实应用.cmd` 或 `关闭_CRM_真实应用.cmd`。独立克隆使用上方仓库内命令。更多步骤见[销售演示手册](docs/sales-demo.md)和[可选集成配置](infra/local-agent-services/README.md)。
 
-## 本地运行
-
-环境要求：**Node.js 22+、pnpm、Docker Compose**，以及数据库、认证和模型配置。
-
-- [本地环境与服务启动](docs/local-development.md)
-- [客户、知识与商机审批演示](docs/sales-demo.md)
-- [Mem0、WeKnora 与 Langfuse 配置](infra/local-agent-services/README.md)
-- [Pi Agent 运行时设计](docs/architecture/pi-native-runtime.md)
-
-## 目录
+## 仓库结构
 
 ```text
-app/          页面、API 与工作台入口
-components/   共享界面组件
-lib/          CRM 业务、Agent 运行时、工具与集成
-workers/      独立 Agent Worker
-supabase/     数据库迁移与访问策略
-infra/        容器与外部服务配置
-docs/         架构与运行说明
+app/                 Web 页面、API 和工作台
+components/          交互界面与共享组件
+lib/agent-runtime/   Pi 运行时适配
+lib/ontology/        版本化的业务本体目录与许可查询
+lib/ai/              Agent 工具、记忆、知识和观测
+workers/             独立 Agent Worker
+supabase/            数据库迁移与访问策略
+infra/               本机容器和可选集成
 ```
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE)。第三方组件及相关声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[MIT License](LICENSE) · [第三方声明](THIRD_PARTY_NOTICES.md)
