@@ -4,7 +4,9 @@
 
 本机 Chrome 定向检查 3/3 组通过。桌面检查空白名称拦截、取消后恢复焦点、筛选时新建、初步接洽列出现一张卡片、拖到方案复核后刷新保留名称和金额。390px 触屏模式检查新建、下拉调整阶段、刷新和横向布局。预设商机的待审提案仍锁定拖动和阶段下拉。独立检查 2/2 组通过，另核对特殊字符按原文显示、浏览器新上下文隔离。
 
-本机原件位于共同工作区 `.reviews/crm-board-create-1124/`，包括 `local-report.json`、`independent-local-report.json` 及桌面、手机截图。
+GitHub Pages 于 10:49:26（Asia/Shanghai）构建 `b8f2f08ca93787a49a06d99516a584674d14d3e9` 成功。公开站 Chrome 重跑 3/3 组通过，三个改动的 JS/CSS 资源与提交字节一致。Chrome 检查仅发起同源 GET，无脚本或资源错误。Git HTTPS 因 TLS 中断，使用 GitHub API 非强制快进，发布树与本机验证版本一致。
+
+原件位于共同工作区 `.reviews/crm-board-create-1124/`，包括 `local-report.json`、`independent-local-report.json`、`public-report.json`、`release-bytes.json` 及桌面、手机截图。
 
 ## 首页架构与演示操作（2026-11-24）
 
