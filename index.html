@@ -4,47 +4,125 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f6ef">
-  <meta name="description" content="Pi Native CRM 的系统架构与 Run 状态图。在演示台操作客户会话、Agent 取证与审批回查。">
+  <meta name="description" content="用一次销售跟进看 Pi Native CRM 如何取证、提交审批、执行并回查。页内查看架构、状态机和演示工作台。">
   <title>Pi Native CRM · 项目展示</title>
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./about/about.css">
-  <link rel="stylesheet" href="./home.css?v=intro-cta">
-  <script type="module" src="./about/architecture.js?v=inline-architecture"></script>
+  <link rel="stylesheet" href="./home.css?v=case-story">
+  <link rel="stylesheet" href="./home-architecture.css?v=layers">
+  <link rel="stylesheet" href="./home-run.css?v=paths">
+  <script type="module" src="./home-architecture.js?v=layers"></script>
+  <script type="module" src="./home-run.js?v=paths"></script>
 </head>
 <body class="project-home">
   <a class="skip-link" href="#main">跳到主要内容</a>
   <header class="topbar">
-    <div class="home-topbar home-width" id="context">
+    <div class="home-topbar home-width">
       <span class="brand"><span class="brand-mark" aria-hidden="true"></span>Pi Native CRM</span>
+      <nav class="home-nav" aria-label="首页章节">
+        <a href="#architecture">架构全景</a>
+        <a href="#run-states">状态机</a>
+        <a href="#implementation">界面与工程</a>
+      </nav>
     </div>
   </header>
   <main class="home-width" id="main">
-    <section class="home-intro" id="difficulties" aria-labelledby="main-title">
-      <h1 id="main-title">销售跟进的 Agent 工作区</h1>
-      <p>从会话和商机取证。阶段变更经人工批准，执行后读取实际业务结果。</p>
-      <a class="button button-primary demo-entry" href="./workspace/#overview">打开演示台</a>
+    <section class="home-intro" id="context" aria-labelledby="main-title">
+      <div class="home-intro-copy">
+        <p class="home-kicker">AI 原生 CRM</p>
+        <h1 id="main-title">销售跟进，<br>每一步都有依据</h1>
+        <p>把客户原话、商机记录和企业资料放进同一次判断。Agent 找依据、提建议，负责人决定是否推进。执行后再回查实际结果。</p>
+        <a class="button button-primary demo-entry" href="./workspace/#overview">打开演示台 <span aria-hidden="true">↗</span></a>
+        <small>合成业务数据 · 在浏览器中体验</small>
+      </div>
+      <article class="home-case" aria-labelledby="home-case-title">
+        <div class="home-case-head">
+          <div><p>演示场景 · 栖岭能源</p><h2 id="home-case-title">储能站点试点</h2></div>
+          <span class="home-case-stage">初步接洽</span>
+        </div>
+        <blockquote>“试点期间，夜间告警优先发邮件，电话只留给紧急故障。”<cite>周谨 · 客户原话 <code>MSG-1122</code></cite></blockquote>
+        <div class="home-case-evidence">
+          <div><small>已完成的业务活动</small><strong>站点接入技术访谈</strong></div>
+          <code>ACT-1121</code>
+        </div>
+        <p class="home-case-question"><strong>销售下一步</strong> 这笔商机现在可以进入技术评估吗？</p>
+      </article>
     </section>
 
-    <section class="home-architecture" id="architecture" aria-labelledby="architecture-title">
-      <div class="home-diagram-heading" id="highlights">
-        <h2 id="architecture-title">系统架构</h2>
-        <p id="agent-help">选择节点，查看职责、数据来源或校验边界。</p>
+    <section class="home-section home-problem" id="difficulties" aria-labelledby="problem-title">
+      <div class="home-section-head">
+        <h2 id="problem-title">要解决什么问题</h2>
+        <p>一笔商机的活动、原话和政策资料常在不同地方。销售需要知道这次判断用了什么，以及下一步由谁负责。</p>
       </div>
-      <figure class="diagram system-diagram" id="architecture-board" data-inline aria-label="从工作台、队列和工具到数据与评测的系统图">
-        <p class="diagram-fallback">工作台限定组织、角色和商机范围，Worker 领取已落库作业。Pi 经许可工具读取业务数据与资料，由负责人审批阶段变更；执行后回到 SQL 核对状态。</p>
+      <div class="home-problem-grid">
+        <article><h3>约了会，算完成约见吗？</h3><p>按商机和 UTC 时间窗查询业务记录，只把已完成的约见作为阶段判断依据。缺证时留下缺项。</p></article>
+        <article><h3>建议推进，谁确认写入？</h3><p>把证据和阶段变化一起提交人审。批准、执行、回查分别留记录，销售能对照实际阶段和回执。</p></article>
+        <article><h3>下次回访，还记得客户原话吗？</h3><p>从授权会话提取待审偏好，负责人核对原文后确认。新会话只读取这位客户仍有效的确认事实。</p></article>
+      </div>
+    </section>
+
+    <section class="home-section" id="architecture" aria-labelledby="architecture-title">
+      <div class="home-section-head" id="highlights">
+        <h2 id="architecture-title">系统架构全景</h2>
+        <p>沿受控运行路径看请求怎么执行，再看事实从哪里读取、审批怎样落库，以及轨迹如何进入观测。</p>
+      </div>
+      <figure class="home-system-figure" id="architecture-board" data-home-map aria-label="从工作台、运行队列和许可工具到业务数据与观测的系统架构">
+        <p class="home-diagram-fallback">工作台限定组织、角色和商机范围，Worker 领取已落库作业。Pi 经许可工具读取业务数据与资料，由负责人审批阶段变更，执行后回到 SQL 核对状态。</p>
       </figure>
     </section>
 
-    <section class="home-architecture home-run" id="run-states" aria-labelledby="run-title">
-      <div class="home-diagram-heading" id="implementation">
-        <h2 id="run-title">运行与审批状态</h2>
-        <p>切换查看只读、人审执行，以及停止后需要复核的路径。</p>
+    <section class="home-section" id="run-states" aria-labelledby="run-title">
+      <div class="home-section-head">
+        <h2 id="run-title">Run 与审批状态机</h2>
+        <p>沿箭头看进入下一步的条件。只读任务可以直接完成，阶段变更要等人工决定；不确定的结果会停下来核对。</p>
       </div>
-      <figure class="diagram run-diagram" id="run-board" data-inline aria-label="Run 队列、提案审批与异常分支图">
-        <p class="diagram-fallback">只读任务可以直接完成。阶段写入等待人工批准。证据缺失、提案拒绝或写入结果不明时，保留相应记录供复核。</p>
+      <figure class="home-run-figure" id="run-board" aria-label="Run 队列、提案审批与异常分支图">
+        <p class="home-diagram-fallback">只读任务可以直接完成。阶段写入等待人工批准。证据缺失、提案拒绝或写入结果不明时，保留相应记录供复核。</p>
       </figure>
+    </section>
+
+    <section class="home-section" id="agent-help" aria-labelledby="review-title">
+      <div class="home-section-head">
+        <h2 id="review-title">人机协同的审批现场</h2>
+        <p>以储能试点为例，Agent、负责人和系统各自留下什么记录。</p>
+      </div>
+      <div class="home-decision">
+        <article class="home-decision-summary">
+          <p>待批准的阶段提案</p>
+          <h3>初步接洽 <span aria-label="变更为">→</span> 技术评估</h3>
+          <dl>
+            <div><dt>依据</dt><dd>已完成的技术访谈 <code>ACT-1121</code></dd></div>
+            <div><dt>待批时实际阶段</dt><dd>初步接洽</dd></div>
+            <div><dt>待批时执行回执</dt><dd>0 条</dd></div>
+          </dl>
+        </article>
+        <ol class="home-responsibilities" aria-label="阶段提案的三方职责">
+          <li><span>Agent</span><div><h3>核对依据，准备提案</h3><p>用授权工具读取指定商机的约见结果，把活动 ID 和目标阶段交给审核人。</p></div></li>
+          <li><span>负责人</span><div><h3>看原文，决定是否批准</h3><p>核对客户范围和活动原文。拒绝会保留原阶段；批准后，提案进入待执行。</p></div></li>
+          <li><span>Worker</span><div><h3>核验后执行，再读实际状态</h3><p>执行产生一条变更回执。续跑时将商机阶段与回执核对后归档。</p></div></li>
+        </ol>
+      </div>
+      <p class="home-review-note"><strong>确认记忆也有人审。</strong> 客户原话先生成待审候选，确认后才供新会话读取。撤回后停止召回，原审核记录可回查。</p>
+    </section>
+
+    <section class="home-section home-engineering" id="implementation" aria-labelledby="engineering-title">
+      <div class="home-section-head">
+        <h2 id="engineering-title">界面与工程</h2>
+        <p>界面把判断过程摊开。运行、审批和回执各自留痕，刷新页面后仍有据可查。</p>
+      </div>
+      <div class="home-engineering-grid">
+        <figure class="home-workbench">
+          <img src="./assets/home-workbench.jpg" width="1280" height="800" loading="lazy" decoding="async" alt="演示工作台的待审批提案，左侧展开已完成约见的工具回执，右侧显示当前阶段和批准、拒绝按钮">
+          <figcaption>演示台实拍 · 主区核对业务证据，右侧处理提案。</figcaption>
+        </figure>
+        <div class="home-engineering-notes">
+          <article><h3>业务界面</h3><p>会话、看板、工作台按同一客户联动。工作台展开工具回执，运行记录用于复查过去的决定。</p></article>
+          <article><h3>异步与持久化</h3><p>正式应用由 Next.js 接收请求，Node.js Worker 从持久队列领取任务，PostgreSQL 保存运行和业务事实。</p></article>
+          <article><h3>观测与校验</h3><p>Langfuse 关联脱敏轨迹和耗时。规则核对字段、引用和业务动作，语义复核检查回答是否得到证据支持。</p></article>
+        </div>
+      </div>
     </section>
   </main>
-  <footer class="home-width home-footnote"><p>演示台使用浏览器内的合成数据。</p></footer>
+  <footer class="home-width home-footnote"><p>Pi Native CRM · 项目展示</p><p>演示操作使用浏览器内的合成数据。</p></footer>
 </body>
 </html>
