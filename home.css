@@ -7,17 +7,18 @@
   display: flex;
   min-height: 66px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .demo-entry {
-  padding-inline: 20px;
+  min-height: 48px;
+  margin-top: 18px;
+  padding-inline: 24px;
+  font-size: 1rem;
   white-space: nowrap;
 }
 
 .home-intro {
-  padding: 20px 0 16px;
+  padding: 30px 0 26px;
 }
 
 .home-intro h1 {
@@ -96,7 +97,7 @@
   }
 
   .home-intro {
-    padding-block: 20px 15px;
+    padding-block: 22px;
   }
 
   .project-home .diagram-lane + .diagram-lane {
@@ -112,9 +113,5 @@
   .home-topbar .brand {
     gap: 7px;
     font-size: .91rem;
-  }
-
-  .demo-entry {
-    padding-inline: 12px;
   }
 }
