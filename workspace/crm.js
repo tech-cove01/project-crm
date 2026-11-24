@@ -9,6 +9,8 @@ const inboxFilters = [
 ];
 const taskFilters = [["all", "全部"], ["open", "待完成"], ["done", "已完成"]];
 const messageLimit = 500;
+const opportunityNameLimit = 64;
+const opportunityAmountLimit = 999999999.99;
 const crmKeys = Object.keys(crmProfiles);
 const crmMemoryNames = {
   none: ["暂无候选", "neutral"],
@@ -21,6 +23,16 @@ const crmMemoryNames = {
 const escape = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 })[character]);
+
+function readOpportunity(input, number) {
+  const title = typeof input?.title === "string" ? input.title.trim() : "";
+  const company = typeof input?.company === "string" ? input.company.trim() : "";
+  if (!title || !company || title.length > opportunityNameLimit || company.length > opportunityNameLimit) return null;
+  const { stage, amount } = input;
+  if (!pipelineStages.some(({ name }) => name === stage)) return null;
+  if (!Number.isFinite(amount) || amount < 0 || amount > opportunityAmountLimit) return null;
+  return { id: `board-${number}`, title, company, stage, amount: Math.round(amount * 100) / 100 };
+}
 
 export function readCrmState(previous) {
   const byCase = Object.fromEntries(crmKeys.map((id) => {
@@ -37,7 +49,12 @@ export function readCrmState(previous) {
       ) && typeof item.text === "string").map(({ kind, text }) => ({ kind, text: text.slice(0, messageLimit) })),
     }];
   }));
-  return { byCase, inboxFilter: "all", inboxQuery: "", directoryQuery: "", pipelineStage: "all", taskFilter: "all" };
+  const opportunities = [];
+  for (const saved of Array.isArray(previous?.opportunities) ? previous.opportunities : []) {
+    const opportunity = readOpportunity(saved, opportunities.length + 1);
+    if (opportunity) opportunities.push(opportunity);
+  }
+  return { byCase, opportunities, inboxFilter: "all", inboxQuery: "", directoryQuery: "", pipelineStage: "all", taskFilter: "all" };
 }
 
 function getCrm(m) {
@@ -244,13 +261,11 @@ function riskFor(deal, current) {
 }
 
 function manualStageControl(deal, m) {
-  const blocked = ["pending", "approved", "executed"].includes(m.state.cases[deal.id].proposal);
-  const old = m.state.cases[deal.id].manualChange;
-  if (blocked) return '<p class="board-guard">这笔商机有未结案的提案，需先在工作台处理。</p>';
+  const old = m.state.cases[deal.id]?.manualChange;
   return `<details class="board-adjust">
     <summary>调整阶段</summary>
     <form data-board-stage="${deal.id}">
-      <label class="sr-only" for="stage-${deal.id}">${deal.title}的目标阶段</label>
+      <label class="sr-only" for="stage-${deal.id}">${escape(deal.title)}的目标阶段</label>
       <select id="stage-${deal.id}" name="stage" required>
         <option value="">选择目标</option>
         ${pipelineStages.filter(({ name }) => name !== m.stageFor(deal)).map(({ name }) => `<option value="${name}">${name}</option>`).join("")}
@@ -261,11 +276,67 @@ function manualStageControl(deal, m) {
   </details>`;
 }
 
+function opportunityDialog() {
+  return `<dialog class="board-create-dialog" id="board-create-dialog" aria-labelledby="board-create-title">
+    <h2 id="board-create-title">新建商机</h2>
+    <p>创建后进入「初步接洽」，并保存在当前演示标签页。</p>
+    <form data-board-create>
+      <label>商机名称<input name="title" type="text" maxlength="${opportunityNameLimit}" required autofocus></label>
+      <label>客户或公司<input name="company" type="text" maxlength="${opportunityNameLimit}" required></label>
+      <label>预计金额（元）<input name="amount" type="number" min="0" max="${opportunityAmountLimit}" step="0.01" inputmode="decimal" placeholder="选填"></label>
+      <p class="board-create-error" role="alert"></p>
+      <div class="board-create-actions">
+        <button type="button" class="button" data-action="crm-board-cancel">取消</button>
+        <button type="submit" class="button button-primary">创建商机</button>
+      </div>
+    </form>
+  </dialog>`;
+}
+
+export function createCrmOpportunity(form, crm) {
+  const fields = new FormData(form);
+  const opportunity = readOpportunity({
+    title: fields.get("title"),
+    company: fields.get("company"),
+    amount: Number(fields.get("amount")),
+    stage: pipelineStages[0].name,
+  }, crm.opportunities.length + 1);
+  if (!opportunity) {
+    form.querySelector("[role=alert]").textContent = "请填写有效的商机名称、客户或公司和金额。";
+    return null;
+  }
+  crm.opportunities.push(opportunity);
+  crm.pipelineStage = "all";
+  return opportunity;
+}
+
+function boardCard(deal, m) {
+  const current = m.state.cases[deal.id];
+  const guarded = ["pending", "approved", "executed"].includes(current?.proposal);
+  return `<article class="crm-board-card" data-board-card="${deal.id}">
+    <div class="crm-board-card-top">${current ? m.avatar(deal) : '<span class="case-avatar" aria-hidden="true">商</span>'}
+      <div><h3>${escape(deal.title)}</h3><p>${escape(deal.company)}</p></div>
+      ${guarded ? "" : '<span class="board-drag" draggable="true" title="拖到其他阶段" aria-hidden="true">⠿</span>'}
+    </div>
+    <strong>${m.money.format(deal.amount)}</strong>
+    <div class="crm-board-card-tags">${current
+      ? (riskFor(deal, current) ? m.label("需要跟进", "gold") : m.label("跟进中"))
+      : m.label("手动创建")}
+      ${deal.meeting ? m.label("有约见依据", "green") : ""}
+    </div>
+    ${guarded ? '<p class="board-guard">这笔商机有未结案的提案，需先在工作台处理。</p>' : manualStageControl(deal, m)}
+    ${current ? `<div class="crm-board-card-actions">${caseLink(deal, "workbench", "查看商机")}${caseLink(deal, "inbox", "客户会话")}</div>` : ""}
+  </article>`;
+}
+
 function pipeline(m) {
   const crm = getCrm(m);
   const stages = pipelineStages.filter((stage) => crm.pipelineStage === "all" || crm.pipelineStage === stage.id);
-  const active = m.deals.filter((deal) => stages.some((stage) => m.stageFor(deal) === stage.name));
-  return `${m.heading("销售管道", "拖动卡片或手动选择阶段；等待执行和回查的提案由 Agent 工作台处理。")}
+  const active = [...crm.opportunities].reverse().concat(m.deals)
+    .filter((deal) => stages.some((stage) => m.stageFor(deal) === stage.name));
+  return `${m.heading("销售管道", "拖动卡片或手动选择阶段；等待执行和回查的提案由 Agent 工作台处理。",
+    buttonAction("crm-board-open", "新建商机", 'aria-haspopup="dialog" aria-controls="board-create-dialog"', "button button-primary"))}
+    ${opportunityDialog()}
     <div class="crm-board-toolbar">
       <div><strong>${active.length} 笔商机</strong><span>${m.money.format(active.reduce((amount, deal) => amount + deal.amount, 0))}</span></div>
       <label class="crm-select"><span>筛选阶段</span><select data-crm-control="pipeline-stage">
@@ -280,19 +351,7 @@ function pipeline(m) {
         return `<section class="crm-board-column crm-board-${stage.id}" aria-label="${stage.name}" data-board-drop="${stage.name}">
           <div class="crm-board-heading"><h2>${stage.name}</h2><small>${cases.length} 笔</small></div>
           <p>${stage.note}</p><strong class="crm-stage-amount">${m.money.format(cases.reduce((amount, deal) => amount + deal.amount, 0))}</strong>
-          <div class="crm-board-cards">${cases.map((deal) => {
-            const risk = riskFor(deal, m.state.cases[deal.id]);
-            const movable = !["pending", "approved", "executed"].includes(m.state.cases[deal.id].proposal);
-            return `<article class="crm-board-card" data-board-card="${deal.id}">
-              <div class="crm-board-card-top">${m.avatar(deal)}<div><h3>${deal.title}</h3><p>${deal.company}</p></div>
-                ${movable ? '<span class="board-drag" draggable="true" title="拖到其他阶段" aria-hidden="true">⠿</span>' : ""}</div>
-              <strong>${m.money.format(deal.amount)}</strong>
-              <div class="crm-board-card-tags">${risk ? m.label("需要跟进", "gold") : m.label("跟进中")}
-                ${deal.meeting ? m.label("有约见依据", "green") : ""}</div>
-              ${manualStageControl(deal, m)}
-              <div class="crm-board-card-actions">${caseLink(deal, "workbench", "查看商机")}${caseLink(deal, "inbox", "客户会话")}</div>
-            </article>`;
-          }).join("") || '<div class="crm-board-empty"><small>暂无商机</small></div>'}</div>
+          <div class="crm-board-cards">${cases.map((deal) => boardCard(deal, m)).join("") || '<div class="crm-board-empty"><small>暂无商机</small></div>'}</div>
         </section>`;
       }).join("")}
     </div>
@@ -397,6 +456,16 @@ export function handleCrm(action, control, m) {
   const customer = crm.byCase[target.id];
   const option = control.dataset.filter;
   switch (action) {
+    case "crm-board-open": {
+      const dialog = document.getElementById("board-create-dialog");
+      dialog.querySelector("form").reset();
+      dialog.querySelector("[role=alert]").textContent = "";
+      dialog.showModal();
+      return undefined;
+    }
+    case "crm-board-cancel":
+      control.closest("dialog").close();
+      return undefined;
     case "crm-select-case":
       m.state.selected = target.id;
       customer.read = true;

@@ -488,6 +488,35 @@
   gap: 4px 12px;
 }
 
+.board-create-dialog {
+  width: min(90vw, 440px);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.board-create-dialog::backdrop { background: #142b25a8; }
+.board-create-dialog h2 { margin: 0; font-size: 21px; }
+.board-create-dialog > p { margin: 7px 0 15px; color: var(--muted); font-size: 14px; }
+.board-create-dialog form { display: grid; gap: 13px; }
+.board-create-dialog label { display: grid; gap: 5px; font-size: 14px; font-weight: 650; }
+.board-create-dialog input {
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+.board-create-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.board-create-error { margin: 0; color: var(--ink); font-size: 14px; }
+.board-create-error:empty { display: none; }
+
 .crm-board-toolbar > div span,
 .crm-board-column > p,
 .crm-board-foot {
@@ -585,6 +614,8 @@
   align-items: center;
   gap: 8px;
 }
+
+.crm-board-card-top > div { min-width: 0; overflow-wrap: anywhere; }
 
 .crm-board-card-top h3,
 .crm-board-card-top h2 {

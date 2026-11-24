@@ -1,6 +1,6 @@
 import { deals, events, pipelineStages, routes } from "./data.js";
 import { agentScreens, handleAgent, handleAgentInput, handleAgentSubmit, readAgentState } from "./agent.js";
-import { crmScreens, handleCrm, handleCrmChange, handleCrmInput, readCrmState } from "./crm.js";
+import { createCrmOpportunity, crmScreens, handleCrm, handleCrmChange, handleCrmInput, readCrmState } from "./crm.js";
 import { deskScreens, handleDesk, handleDeskChange, handleDeskSubmit, readDeskState } from "./desk.js";
 import { handleLab, handleLabChange, labScreens, resetLabControls } from "./lab.js";
 import { handleWorkflow, handleWorkflowChange, workflowScreens, readWorkflowState } from "./workflow.js";
@@ -18,7 +18,7 @@ const caseById = Object.fromEntries(deals.map((deal) => [deal.id, deal]));
 const proposalStates = ["none", "blocked", "pending", "approved", "rejected", "executed", "verified"];
 const memoryStates = ["none", "pending", "confirmed", "rejected", "withdrawn"];
 const stageNames = new Set(pipelineStages.map(({ name }) => name));
-const money = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 });
+const money = new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 function freshState() {
   return {
@@ -111,21 +111,26 @@ function log(deal, kind) {
 
 function stageFor(deal) {
   const current = state.cases[deal.id];
+  if (!current) return deal.stage;
   return current.manualStage ?? (["executed", "verified"].includes(current.proposal) ? "技术评估" : deal.stage);
 }
 
 function moveStage(id, target) {
-  if (!Object.hasOwn(caseById, id) || !stageNames.has(target)) return "请选择有效商机和阶段。";
-  const deal = caseById[id];
+  const deal = Object.hasOwn(caseById, id) ? caseById[id] : state.crm.opportunities.find((item) => item.id === id);
+  if (!deal || !stageNames.has(target)) return "请选择有效商机和阶段。";
   const current = state.cases[id];
-  if (["pending", "approved", "executed"].includes(current.proposal))
+  if (["pending", "approved", "executed"].includes(current?.proposal))
     return "这笔商机有未结案的提案，请在工作台处理后再调整阶段。";
   const from = stageFor(deal);
   if (from === target) return "这笔商机已在该阶段。";
-  current.manualStage = target;
-  current.manualChange = { from, to: target };
+  if (current) {
+    current.manualStage = target;
+    current.manualChange = { from, to: target };
+    log(deal, "manualStage");
+  } else {
+    deal.stage = target;
+  }
   state.crm.pipelineStage = "all";
-  log(deal, "manualStage");
   return `${deal.title} · ${from} → ${target}`;
 }
 
@@ -368,13 +373,22 @@ function finishForm(message, focusSelector) {
 }
 
 page.addEventListener("submit", (event) => {
-  const model = getModel();
+  if (event.target.matches("[data-board-create]")) {
+    event.preventDefault();
+    const opportunity = createCrmOpportunity(event.target, state.crm);
+    if (!opportunity) return;
+    event.target.closest("dialog").close();
+    stageFeedback = `已创建「${opportunity.title}」，当前阶段为${opportunity.stage}。`;
+    finishForm(stageFeedback, "[data-board-status]");
+    return;
+  }
   if (event.target.matches("[data-board-stage]")) {
     event.preventDefault();
     stageFeedback = moveStage(event.target.dataset.boardStage, new FormData(event.target).get("stage"));
     finishForm(stageFeedback, "[data-board-status]");
     return;
   }
+  const model = getModel();
   const message = handleAgentSubmit(event, model) ?? handleDeskSubmit(event, model);
   finishForm(message, "[aria-invalid='true']");
 });
@@ -430,7 +444,7 @@ function renderSearchResults() {
 }
 
 function openSearch() {
-  if (searchDialog.open || dialog.open) return;
+  if (searchDialog.open || dialog.open || page.querySelector("dialog[open]")) return;
   searchInput.value = "";
   renderSearchResults();
   searchDialog.showModal();
