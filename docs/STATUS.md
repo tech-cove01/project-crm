@@ -4,6 +4,8 @@
 
 ## 已发布 · 演示台版式与 Agent 工作台（待用户验收）
 
+[参考站演示台](https://crm.helson.top/#/app) · [参考站 About 与架构图](https://crm.helson.top/about)
+
 在 1440px 桌面对照参考站和上一版。页面标题从 42px 收到 22px，工作栏从 66px 收到 52px。看板阶段、笔数和小计在同一栏头，放大卡片名称和金额。收件箱采用连续三栏，正文 15px，消息单独滚动，底部可回复。Agent 工作台顶部切换任务、商机与访问模式，启动前可直接输入指令；运行后可在主区检查来源和步骤，在右侧处理提案。
 
 本机和线上 Chrome 各通过集成 12/12、新建商机回归 3/3。独立桌面对照确认 1280×800、1440×900 的约见证据与批准按钮同屏，另抽查 390px。GitHub Pages 已构建内容提交 `2faf2aa`，6/6 项改动资源字节一致。[Agent 工作台](https://tech-cove01.github.io/project-crm/workspace/#workbench) · [核验记录](static-verification.md#演示台版式与-agent-工作台2026-11-24)
