@@ -6,7 +6,9 @@
 
 本机 Chrome 11/11 组通过，含 1440、1280、390、320px 的示例、指令位置与运行滚动，以及工作台审批、回查、跨客户和记忆确认回归。独立 4/4 组通过，实际比较播放前后的会话存储相同，跨客户没有带入 `MSG-1122`，客户记忆由 0 条到确认后 1 条，暂停恢复后只生成一条执行回执。390px 窄屏导航往返及独立滚动通过。
 
-本地证据目录为共同工作区 `.reviews/crm-workbench-composer-1124/`，含 `reference/reference-workbench-report.json`、`integrated-local/report.json`、`independent/local.json` 与截图。
+GitHub Pages 于 11:47:39（Asia/Shanghai）构建 `3b3d2c2e68559f38dbcc31f5f84d63fddb0b8b1b` 成功。公开站重跑 11/11 组通过，3/3 项更改资源与发布提交字节一致。
+
+证据目录为共同工作区 `.reviews/crm-workbench-composer-1124/`，含 `reference/reference-workbench-report.json`、`integrated-local/report.json`、`integrated-public/report.json`、`independent/local.json`、`release-bytes.json` 与截图。
 
 ## 展示首页场景叙事与架构图（2026-11-24）
 
