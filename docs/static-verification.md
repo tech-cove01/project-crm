@@ -8,7 +8,9 @@ Chrome 在 1440×900、1280×800 加载参考站和改版前的公开工作台�
 
 本机集成 12/12，含 18 页布局、14 条旧入口、跨客户与缺证、只读指令、暂停后继续原提案、单回执、历史与记忆。新建商机 3/3 组，覆盖拖动、手机下拉、刷新和待审锁定。合成场景未产生外部动作。
 
-复测报告及截图位于共同工作区 `.reviews/crm-density-1124/`，包括 `review/metrics.json`、`review/after-metrics.json`、`integrated-local/report.json` 和 `local-views.json`。
+GitHub Pages 于 11:17:11（Asia/Shanghai）构建 `2faf2aa3a276f79756e160979b6e67632f4a8733` 成功。公开站集成 12/12、新建商机回归 3/3，六个改动的 CSS/JS 与发布提交字节一致。集成只发起同源 GET，未见页面错误或资源失败。
+
+复测报告及截图位于共同工作区 `.reviews/crm-density-1124/`，包括 `review/metrics.json`、`review/after-metrics.json`、`integrated-local/report.json`、`integrated-public/report.json`、`local-views.json` 和 `release-bytes.json`。
 
 ## 看板新建商机（2026-11-24）
 
