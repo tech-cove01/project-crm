@@ -10,8 +10,8 @@ const statusLabels = {
 };
 const channels = ["线上会议", "电话回访", "现场沟通"];
 const planned = [
-  { id: "slot-1", caseId: "bridge", title: "核对试点线路与车辆清单", date: "2026-11-25", time: "02:30", channel: "线上会议", status: "scheduled" },
-  { id: "slot-2", caseId: "gallery", title: "确认展馆维护窗口", date: "2026-11-26", time: "06:00", channel: "电话回访", status: "scheduled" },
+  { id: "slot-1", caseId: "bridge", title: "核对试点线路与车辆清单", date: "2026-08-25", time: "02:30", channel: "线上会议", status: "scheduled" },
+  { id: "slot-2", caseId: "gallery", title: "确认展馆维护窗口", date: "2026-08-26", time: "06:00", channel: "电话回访", status: "scheduled" },
 ];
 const fixedActivities = deals.flatMap(({ id, meeting }) => {
   if (!meeting) return [];
@@ -261,7 +261,7 @@ export function handleDesk(action, control, m) {
   desk.notice = "";
   switch (action) {
     case "desk-book-open":
-      desk.booking ??= { title: "", caseId: m.deal.id, date: desk.day || "2026-11-27", time: "09:00", channel: channels[0] };
+      desk.booking ??= { title: "", caseId: m.deal.id, date: desk.day || "2026-08-27", time: "09:00", channel: channels[0] };
       focusForm("appointment");
       return "已打开预约表单。";
     case "desk-book-close":

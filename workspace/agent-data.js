@@ -18,8 +18,8 @@ export const taskOptions = {
 export const taskWindow = {
   version: "1.0.0",
   template: "completed_appointments",
-  from: "2026-10-26 00:00 UTC",
-  to: "2026-11-25 00:00 UTC",
+  from: "2026-07-26 00:00 UTC",
+  to: "2026-08-25 00:00 UTC",
   relation: "crm_lead_activities.lead_id → crm_leads.id",
 };
 

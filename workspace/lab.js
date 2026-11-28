@@ -16,7 +16,7 @@ const definitions = {
 };
 
 let queryType = "open";
-let queryWindow = { from: "2026-10-26", to: "2026-11-25" };
+let queryWindow = { from: "2026-07-26", to: "2026-08-25" };
 let runQuery = null;
 
 function memoryRow(deal, m) {
@@ -127,7 +127,7 @@ export const labScreens = { memory, ontology };
 
 export function resetLabControls() {
   queryType = "open";
-  queryWindow = { from: "2026-10-26", to: "2026-11-25" };
+  queryWindow = { from: "2026-07-26", to: "2026-08-25" };
   runQuery = null;
 }
 

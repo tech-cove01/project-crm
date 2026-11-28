@@ -206,7 +206,7 @@ function overview() {
         <dl class="stage-summary">${distribution.map(({ name, count }, index) => `<div class="stage-tone-${index}"><dt>${name}</dt><dd>${count} 笔</dd></div>`).join("")}</dl>
       </article>
     </div>
-    <section class="panel"><div class="panel-heading"><h2>开放商机</h2><span class="muted">2026 年 11 月 · 演示数据</span></div>
+    <section class="panel"><div class="panel-heading"><h2>开放商机</h2><span class="muted">2026 年 8 月 · 演示数据</span></div>
       ${dealRows(deals)}
     </section>
     <section class="panel overview-queue"><div class="panel-heading"><h2>最近的跟进任务</h2><a href="#tasks">查看任务列表</a></div>

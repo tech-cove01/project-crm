@@ -68,12 +68,12 @@
 
 .avatar {
   display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%;
-  background: #e8efff; color: #2547d0; font-weight: 650; overflow: hidden;
+  background: #e8f2ea; color: #26604a; font-weight: 650; overflow: hidden;
 }
 .avatar.md { width: 40px; height: 40px; font-size: 14px; }
 .avatar.lg { width: 54px; height: 54px; font-size: 18px; }
 .avatar.sm { width: 26px; height: 26px; font-size: 11px; }
-.avatar.tone-blue { background: #e8efff; color: #2547d0; }
+.avatar.tone-blue { background: #e8f2ea; color: #26604a; }
 .avatar.tone-teal { background: #e4f5f7; color: #16697a; }
 .avatar.tone-amber { background: #fdf1e0; color: #8a5a10; }
 .avatar.tone-rose { background: #fdeeea; color: #9c4b28; }
@@ -87,13 +87,13 @@
 .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .badge.warning { background: #fff5eb; border-color: #ffe2c7; color: #b54708; }
 .badge.success { background: #ecfdf3; border-color: #d1fadf; color: #0b6e3a; }
-.badge.info { background: var(--accent-soft); border-color: #d5e0ff; color: #2547d0; }
+.badge.info { background: var(--accent-soft); border-color: #d3e8db; color: #26604a; }
 .badge.error { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 .badge.purple { background: #f5f3ff; border-color: #e4dcff; color: #5b21b6; }
 .badge.neutral { background: var(--canvas); border-color: var(--line); color: #525866; }
 .ai-draft-pill {
   display: inline-flex; align-items: center; gap: 4px; min-height: 25px; padding: 0 7px;
-  border: 1px solid #d5e0ff; border-radius: 6px; background: var(--accent-soft); color: #2547d0;
+  border: 1px solid #d3e8db; border-radius: 6px; background: var(--accent-soft); color: #26604a;
   font-size: 11.5px; font-weight: 600;
 }
 .ai-draft-pill .icon { width: 13px; height: 13px; }
@@ -103,7 +103,7 @@
 }
 .ch-icon .icon { width: 12px; height: 12px; }
 .ch-icon.wx { color: #0b6e3a; border-color: #d1fadf; background: #f2fdf7; }
-.ch-icon.mail { color: #2547d0; border-color: #d5e0ff; background: #f4f7ff; }
+.ch-icon.mail { color: #26604a; border-color: #d3e8db; background: #f3faf6; }
 
 .inbox-list-foot {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -144,7 +144,7 @@
   padding: 11px 15px 9px; border: 1px solid transparent; border-radius: 16px 16px 16px 4px;
   background: #f3f5f8; border-color: #eff1f5; color: var(--ink); font-size: 13.5px; line-height: 1.6;
 }
-.msg-row.outbound .msg-bubble { background: #ebf1ff; border-color: #dce6ff; border-radius: 16px 16px 4px 16px; }
+.msg-row.outbound .msg-bubble { background: #e7f2ea; border-color: #d7eadd; border-radius: 16px 16px 4px 16px; }
 .msg-bubble p { margin: 0; }
 .msg-bubble-foot { display: flex; align-items: center; gap: 6px; justify-content: flex-end; margin-top: 5px; color: var(--soft); font-size: 11px; }
 .msg-row.outbound .msg-bubble-foot .ticks { color: var(--accent); }
@@ -184,7 +184,7 @@
 }
 .composer-draft-note {
   display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding: 5px 8px;
-  border: 1px solid #d5e0ff; border-radius: 8px; background: var(--accent-soft); color: #2547d0; font-size: 11.5px;
+  border: 1px solid #d3e8db; border-radius: 8px; background: var(--accent-soft); color: #26604a; font-size: 11.5px;
 }
 .composer-draft-note .icon { width: 12px; height: 12px; }
 
@@ -231,7 +231,7 @@
 .approval-card-top h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .approval-card-top .meta { color: var(--soft); font-size: 12px; }
 .approval-card-top .badge { margin-left: auto; }
-.approval-draft { padding: 12px 14px; border: 1px solid #dce6ff; border-radius: 11px; background: #f5f8ff; font-size: 13px; line-height: 1.6; }
+.approval-draft { padding: 12px 14px; border: 1px solid #d7eadd; border-radius: 11px; background: #f4faf6; font-size: 13px; line-height: 1.6; }
 .approval-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .approval-empty { padding: 32px 16px; border: 1px dashed var(--line); border-radius: var(--radius-lg); color: var(--muted); text-align: center; font-size: 13px; }
 

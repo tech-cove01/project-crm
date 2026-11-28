@@ -1,4 +1,4 @@
-export const dateWindow = "2026-10-26 至 2026-11-24（UTC）";
+export const dateWindow = "2026-07-26 至 2026-08-24（UTC）";
 export const pipelineStages = [
   { id: "first", name: "初步接洽", note: "确认需求和联系人" },
   { id: "review", name: "技术评估", note: "查验活动与约束" },
@@ -16,9 +16,9 @@ export const deals = [
     amount: 186000,
     stage: "初步接洽",
     color: "pine",
-    meeting: { id: "ACT-1121", date: "2026-11-21 03:00 UTC", title: "已完成技术访谈", note: "运维团队完成站点接入访谈，确认第一阶段可开展告警接口评估。" },
-    message: { id: "MSG-1122", date: "11 月 22 日 15:10", quote: "试点期间，夜间告警优先发邮件，电话只留给紧急故障。", fact: "夜间告警优先邮件，紧急故障才打电话。" },
-    task: { label: "整理站点告警接口材料", due: "11 月 25 日", owner: "林序" },
+    meeting: { id: "ACT-1121", date: "2026-08-21 03:00 UTC", title: "已完成技术访谈", note: "运维团队完成站点接入访谈，确认第一阶段可开展告警接口评估。" },
+    message: { id: "MSG-1122", date: "8 月 22 日 15:10", quote: "试点期间，夜间告警优先发邮件，电话只留给紧急故障。", fact: "夜间告警优先邮件，紧急故障才打电话。" },
+    task: { label: "整理站点告警接口材料", due: "8 月 25 日", owner: "林序" },
   },
   {
     id: "bridge",
@@ -31,8 +31,8 @@ export const deals = [
     stage: "初步接洽",
     color: "water",
     meeting: null,
-    message: { id: "MSG-1123", date: "11 月 23 日 10:40", quote: "每周异常明细请发 CSV，表头按车辆、线路、异常时间排。", fact: "每周异常明细使用 CSV，列顺序为车辆、线路、异常时间。" },
-    task: { label: "确认首批试点车辆名单", due: "11 月 26 日", owner: "陈遥" },
+    message: { id: "MSG-1123", date: "8 月 23 日 10:40", quote: "每周异常明细请发 CSV，表头按车辆、线路、异常时间排。", fact: "每周异常明细使用 CSV，列顺序为车辆、线路、异常时间。" },
+    task: { label: "确认首批试点车辆名单", due: "8 月 26 日", owner: "陈遥" },
   },
   {
     id: "gallery",
@@ -45,8 +45,8 @@ export const deals = [
     stage: "技术评估",
     color: "gold",
     meeting: null,
-    message: { id: "MSG-1124", date: "11 月 24 日 09:05", quote: "我们周一闭馆，系统维护可以安排到周一上午。", fact: "闭馆日为周一，优先安排周一上午维护。" },
-    task: { label: "核对预约时段与维护窗口", due: "11 月 27 日", owner: "许岸" },
+    message: { id: "MSG-1124", date: "8 月 24 日 09:05", quote: "我们周一闭馆，系统维护可以安排到周一上午。", fact: "闭馆日为周一，优先安排周一上午维护。" },
+    task: { label: "核对预约时段与维护窗口", due: "8 月 27 日", owner: "许岸" },
   },
   {
     id: "harbor",
@@ -59,8 +59,8 @@ export const deals = [
     stage: "方案复核",
     color: "clay",
     meeting: null,
-    message: { id: "MSG-1125", date: "11 月 25 日 11:42", quote: "补货建议按门店分开发，我们店长只看自己那一家。", fact: "补货建议按门店拆分下发，店长仅可见本店数据。" },
-    task: { label: "确认门店分权范围", due: "11 月 28 日", owner: "林序" },
+    message: { id: "MSG-1125", date: "8 月 25 日 11:42", quote: "补货建议按门店分开发，我们店长只看自己那一家。", fact: "补货建议按门店拆分下发，店长仅可见本店数据。" },
+    task: { label: "确认门店分权范围", due: "8 月 28 日", owner: "林序" },
   },
   {
     id: "nanshan",
@@ -73,8 +73,8 @@ export const deals = [
     stage: "初步接洽",
     color: "violet",
     meeting: null,
-    message: { id: "MSG-1126", date: "11 月 16 日 16:40", quote: "会员分层先按消费频次做，标签我们后面再补。", fact: "会员分层先按消费频次，标签体系后续补充。" },
-    task: { label: "整理会员分层字段清单", due: "11 月 29 日", owner: "许岸" },
+    message: { id: "MSG-1126", date: "8 月 16 日 16:40", quote: "会员分层先按消费频次做，标签我们后面再补。", fact: "会员分层先按消费频次，标签体系后续补充。" },
+    task: { label: "整理会员分层字段清单", due: "8 月 29 日", owner: "许岸" },
   },
 ];
 
