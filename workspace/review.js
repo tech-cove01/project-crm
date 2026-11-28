@@ -30,7 +30,7 @@ function deterministicChecks(run, deal, logs) {
 function reviewSelect(m) {
   const runSelected = matchedRun(m);
   return `<label class="selector"><span>选择要检查的记录</span><select data-control="review-run">
-    <option value="example">栖岭能源 · 只读取证示例</option>
+    <option value="example">恒远能源 · 只读取证示例</option>
     ${[...m.state.agent.runs].reverse().map((run) => {
       const deal = m.deals.find(({ id }) => id === run.caseId);
       return `<option value="${run.no}" ${runSelected.no === run.no ? "selected" : ""}>RUN-${String(run.no).padStart(4, "0")} · ${deal.company} · ${run.kind === "memory" ? "记忆读取" : "商机取证"}</option>`;

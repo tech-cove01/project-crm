@@ -8,8 +8,8 @@ export const pipelineStages = [
 export const deals = [
   {
     id: "ridge",
-    company: "栖岭能源",
-    initials: "栖",
+    company: "恒远能源",
+    initials: "恒",
     contact: "周谨",
     role: "运维负责人",
     title: "储能站点试点",
@@ -22,8 +22,8 @@ export const deals = [
   },
   {
     id: "bridge",
-    company: "渡桥物流",
-    initials: "渡",
+    company: "顺捷物流",
+    initials: "顺",
     contact: "罗曼宁",
     role: "冷链运营主管",
     title: "冷链异常预警",
@@ -36,8 +36,8 @@ export const deals = [
   },
   {
     id: "gallery",
-    company: "澜室文旅",
-    initials: "澜",
+    company: "锦程文旅",
+    initials: "锦",
     contact: "孟乔",
     role: "场馆预约主管",
     title: "展馆预约改造",
@@ -50,8 +50,8 @@ export const deals = [
   },
   {
     id: "harbor",
-    company: "昭禾食品",
-    initials: "昭",
+    company: "佳禾食品",
+    initials: "佳",
     contact: "沈兆",
     role: "供应链总监",
     title: "门店补货预测",
@@ -64,8 +64,8 @@ export const deals = [
   },
   {
     id: "nanshan",
-    company: "南山文创",
-    initials: "南",
+    company: "云创文化",
+    initials: "云",
     contact: "柯亦",
     role: "品牌运营负责人",
     title: "私域会员运营",

@@ -188,7 +188,7 @@ function overview() {
     </div>
     <div class="overview-grid">
       <article class="feature-case">
-        <div><span class="feature-kicker">栖岭能源 · 储能站点试点</span><h2>访谈之后，商机怎么推进？</h2>
+        <div><span class="feature-kicker">恒远能源 · 储能站点试点</span><h2>访谈之后，商机怎么推进？</h2>
         <p>从技术访谈取证到执行回查，跟着一笔商机看完整链路。</p>
         <div class="overview-actions"><a class="button button-mint" href="#workbench" data-select="ridge">打开储能试点</a>
         <a href="../about/#run-states">查看 Run 状态图</a></div></div>

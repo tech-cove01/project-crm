@@ -3,7 +3,7 @@ export const crmProfiles = {
     channel: "邮件", channelKind: "mail", owner: "林序", unread: 2, human: true, industry: "储能运营",
     stageDays: 3, priority: "高", risk: "", at: "16:22", day: "today",
     tag: { text: "需人工接管", tone: "warning" },
-    phone: "+86 138-0000-1024", email: "zhou.jin@qiling.example",
+    phone: "+86 138-0000-1024", email: "zhou.jin@hengyuan.example",
     aiDraft: "周先生您好，站点告警接口清单已按告警等级整理完毕。夜间通知默认走邮件，只有紧急故障才触发电话，和您上次确认的口径一致。字段表我发到您邮箱，方便的话周三前给个反馈？",
     entries: [
       { kind: "customer", time: "11 月 20 日 14:08", text: "首期先挑两个站点。我们想弄清现有告警在哪一步进入工单，以及夜间误报怎么处理。" },
@@ -16,7 +16,7 @@ export const crmProfiles = {
     channel: "企业微信", channelKind: "wx", owner: "陈遥", unread: 1, human: false, industry: "冷链运输",
     stageDays: 8, priority: "高", at: "15:10", day: "today",
     tag: { text: "温度阈值待确认", tone: "info" },
-    phone: "+86 139-0000-2087", email: "luo.manning@duqiao.example",
+    phone: "+86 139-0000-2087", email: "luo.manning@shunjie.example",
     aiDraft: "罗经理您好，异常明细的 CSV 已按车辆、线路、异常时间排好表头。首批试点车辆名单确认后就能开通试跑，您看这周能否定下来？",
     risk: "试点车辆范围仍待确认，当前没有已完成的技术约见记录。",
     entries: [
@@ -30,7 +30,7 @@ export const crmProfiles = {
     channel: "邮件", channelKind: "mail", owner: "许岸", unread: 1, human: false, industry: "展馆运营",
     stageDays: 6, priority: "中", at: "14:05", day: "today",
     tag: { text: "维护窗口已定", tone: "success" },
-    phone: "+86 137-0000-3312", email: "meng.qiao@lanshi.example",
+    phone: "+86 137-0000-3312", email: "meng.qiao@jincheng.example",
     aiDraft: "孟老师您好，维护窗口按您说的周一上午排，会避开团队接待时段。团体预约的临时取消规则还需您确认一版，确认后我们出改造排期。",
     risk: "预约改造正在评估，维护窗口尚未进入已确认记忆。",
     entries: [
@@ -44,7 +44,7 @@ export const crmProfiles = {
     channel: "站内会话", channelKind: "chat", owner: "林序", unread: 0, human: true, industry: "连锁零售",
     stageDays: 4, priority: "高", at: "11:42", day: "today",
     tag: { text: "条款待复核", tone: "error" },
-    phone: "+86 136-0000-4471", email: "shen.zhao@zhaohe.example",
+    phone: "+86 136-0000-4471", email: "shen.zhao@jiahe.example",
     aiDraft: "沈总您好，补货建议会按门店拆分下发，店长只能看到本店数据。门店权限范围确认后，我们先挑三家门店试跑两周。",
     risk: "门店分权范围未确认，方案复核阶段的交付边界仍待补充。",
     entries: [
@@ -57,7 +57,7 @@ export const crmProfiles = {
     channel: "企业微信", channelKind: "wx", owner: "许岸", unread: 0, human: false, industry: "文化消费",
     stageDays: 11, priority: "中", at: "11-16", day: "earlier",
     tag: { text: "技术对接", tone: "info" },
-    phone: "+86 135-0000-5583", email: "ke.yi@nanshan.example",
+    phone: "+86 135-0000-5583", email: "ke.yi@yunchuang.example",
     aiDraft: null,
     risk: "会员分层口径未落定，商机在当前阶段停留偏久。",
     entries: [
