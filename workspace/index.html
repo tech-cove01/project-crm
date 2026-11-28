@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#15372d">
-  <meta name="description" content="在浏览器里体验 Pi Native CRM 的商机、Agent 审批、客户记忆和执行回查。">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="在浏览器里体验 Pi Native CRM 的会话收件箱、商机、Agent 审批、客户记忆和执行回查。">
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
   <link rel="stylesheet" href="./workspace.css">
   <link rel="stylesheet" href="./crm.css">
+  <link rel="stylesheet" href="./inbox.css">
   <link rel="stylesheet" href="./agent.css">
   <link rel="stylesheet" href="./lab.css">
   <link rel="stylesheet" href="./workflow.css">
@@ -16,76 +17,156 @@
   <title>销售工作区 · Pi Native CRM</title>
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false" width="0" height="0">
+    <defs>
+      <symbol id="i-grid" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="2.2" width="4.8" height="4.8" rx="1.2"/><rect x="9" y="2.2" width="4.8" height="4.8" rx="1.2"/><rect x="2.2" y="9" width="4.8" height="4.8" rx="1.2"/><rect x="9" y="9" width="4.8" height="4.8" rx="1.2"/></g></symbol>
+      <symbol id="i-check-square" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="2.2" width="11.6" height="11.6" rx="3"/><path d="M5.2 8.2l2 2 3.6-4"/></g></symbol>
+      <symbol id="i-users" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6" cy="5.6" r="2.4"/><path d="M1.8 13.2c0-2.1 1.9-3.4 4.2-3.4s4.2 1.3 4.2 3.4"/><path d="M11 3.6a2.2 2.2 0 0 1 0 4.3M12.2 13.2c0-1.5-.5-2.5-1.4-3.1"/></g></symbol>
+      <symbol id="i-chat" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 7.4c0-2.7 2.5-4.8 5.8-4.8s5.8 2.1 5.8 4.8-2.5 4.8-5.8 4.8c-.8 0-1.5-.1-2.2-.3L2.4 13.4l.6-2.5a4.7 4.7 0 0 1-.8-3.5Z"/></g></symbol>
+      <symbol id="i-radar" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2"/><circle cx="8" cy="8" r="5.2"/><path d="M8 2.8V5M8 11v2.2M2.8 8H5M11 8h2.2"/></g></symbol>
+      <symbol id="i-calendar" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.2" y="3.4" width="11.6" height="10.4" rx="2.4"/><path d="M2.2 6.6h11.6M5.6 1.8v2.6M10.4 1.8v2.6"/></g></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6l1.1 2.9 2.9 1.1-2.9 1.1-1.1 2.9-1.1-2.9L2.4 6.6l2.9-1.1z"/><path d="M11.6 9.4l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z"/></g></symbol>
+      <symbol id="i-branch" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="4.6" cy="3.4" r="1.8"/><circle cx="4.6" cy="12.6" r="1.8"/><circle cx="11.4" cy="6.6" r="1.8"/><path d="M4.6 5.2v5.6M6.2 8.4h1.6c1.4 0 2-1 2-2"/></g></symbol>
+      <symbol id="i-database" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="3.8" rx="5.2" ry="2"/><path d="M2.8 3.8v8.4c0 1.1 2.3 2 5.2 2s5.2-.9 5.2-2V3.8"/><path d="M2.8 8c0 1.1 2.3 2 5.2 2s5.2-.9 5.2-2"/></g></symbol>
+      <symbol id="i-layers" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2.2l5.6 2.8L8 7.8 2.4 5z"/><path d="M2.4 8.2L8 11l5.6-2.8M2.4 11.2L8 14l5.6-2.8"/></g></symbol>
+      <symbol id="i-columns" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="2.6" width="11.6" height="10.8" rx="2.2"/><path d="M6.2 2.6v10.8M9.8 2.6v10.8"/></g></symbol>
+      <symbol id="i-list-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 4.4l1.4 1.4 2.2-2.4M2.4 10.4l1.4 1.4 2.2-2.4"/><path d="M8.4 4.6h5.2M8.4 10.6h5.2"/></g></symbol>
+      <symbol id="i-template" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2.4"/><path d="M5 6h6M5 8.6h6M5 11.2h3.4"/></g></symbol>
+      <symbol id="i-chart" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.6 13.4h10.8"/><rect x="3.6" y="8" width="2.4" height="4" rx=".8"/><rect x="7.2" y="4.6" width="2.4" height="7.4" rx=".8"/><rect x="10.8" y="6.4" width="2.2" height="5.6" rx=".8"/></g></symbol>
+      <symbol id="i-gear" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M2.2 8h1.6M12.2 8h1.6M3.9 3.9l1.1 1.1M11 11l1.1 1.1M12.1 3.9L11 5M5 11l-1.1 1.1"/></g></symbol>
+      <symbol id="i-search" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2l3 3"/></g></symbol>
+      <symbol id="i-panel" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="3" width="11.6" height="10" rx="2.2"/><path d="M6.6 3v10"/></g></symbol>
+      <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 1.9l4.8 1.8v4c0 3-2 5.4-4.8 6.4-2.8-1-4.8-3.4-4.8-6.4v-4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.4" y="1.8" width="7.2" height="12.4" rx="2"/><path d="M7 12.4h2"/></g></symbol>
+      <symbol id="i-send" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 2.6L2.8 6.9l4 1.7 1.7 4z"/></g></symbol>
+      <symbol id="i-close" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></g></symbol>
+      <symbol id="i-reset" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13.2 2.4v3.2H10"/></g></symbol>
+      <symbol id="i-info" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v4M8 5.1v.1"/></g></symbol>
+    </defs>
+  </svg>
   <a class="skip-link" href="#workspace-content">跳到工作区内容</a>
-  <div class="workspace-shell">
-    <aside class="rail">
-      <a class="brand" href="../index.html">
-        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
-        <span>Pi Native CRM<small>销售工作区</small></span>
-      </a>
-      <button type="button" class="rail-toggle" aria-expanded="false" aria-controls="workspace-nav">导航</button>
-      <nav class="workspace-nav" aria-label="工作区导航" id="workspace-nav">
-        <div class="nav-group">
-          <p>工作区</p>
-          <a href="#overview" data-route="overview"><i class="nav-icon" aria-hidden="true">▦</i> 概览</a>
-          <a href="#workbench" data-route="workbench"><i class="nav-icon" aria-hidden="true">✧</i> Agent 工作台</a>
-          <a href="#pipeline" data-route="pipeline"><i class="nav-icon" aria-hidden="true">▥</i> 销售管道</a>
-        </div>
-        <div class="nav-group">
-          <p>客户经营</p>
-          <a href="#inbox" data-route="inbox"><i class="nav-icon" aria-hidden="true">▣</i> 客户会话</a>
-          <a href="#contacts" data-route="contacts"><i class="nav-icon" aria-hidden="true">⊙</i> 联系人</a>
-          <a href="#risk" data-route="risk"><i class="nav-icon" aria-hidden="true">◉</i> 风险提醒</a>
-          <a href="#agenda" data-route="agenda"><i class="nav-icon" aria-hidden="true">▦</i> 日程预约</a>
-          <a href="#replies" data-route="replies"><i class="nav-icon" aria-hidden="true">▤</i> 快捷回复</a>
-          <a href="#tasks" data-route="tasks"><i class="nav-icon" aria-hidden="true">✓</i> 跟进任务</a>
-          <a href="#followups" data-route="followups"><i class="nav-icon" aria-hidden="true">↳</i> 跟进流程</a>
-        </div>
-        <div class="nav-group">
-          <p>证据与规则</p>
-          <a href="#memory" data-route="memory"><i class="nav-icon" aria-hidden="true">◇</i> 客户记忆</a>
-          <a href="#ontology" data-route="ontology"><i class="nav-icon" aria-hidden="true">≋</i> 业务口径</a>
-          <a href="#runs" data-route="runs"><i class="nav-icon" aria-hidden="true">≡</i> 运行记录</a>
-          <a href="#evaluation" data-route="evaluation"><i class="nav-icon" aria-hidden="true">◈</i> 演示检查</a>
-        </div>
-        <div class="nav-group">
-          <p>工作区管理</p>
-          <a href="#analytics" data-route="analytics"><i class="nav-icon" aria-hidden="true">▥</i> 工作区指标</a>
-          <a href="#settings" data-route="settings"><i class="nav-icon" aria-hidden="true">⊹</i> 工作区设置</a>
-        </div>
-      </nav>
-      <div class="rail-footer">
-        <div class="rail-user"><span class="user-avatar" aria-hidden="true">林</span><span>林序<small>演示审核人</small></span></div>
-        <a href="../about/">项目说明</a>
+  <div class="app-frame">
+    <header class="demobar">
+      <div class="demobar-center">
+        <span class="demobar-dot" aria-hidden="true"></span>
+        <strong>纯静态交互演示</strong>
+        <span>· 虚构业务数据与受控 AI 模拟，所有操作仅保存在本地浏览器，无真实外发</span>
       </div>
-    </aside>
-    <div class="workspace-main">
-      <header class="workspace-bar">
-        <div class="workspace-path" aria-label="当前位置"><span>销售工作区</span><span aria-hidden="true">/</span><strong id="workspace-location">概览</strong></div>
-        <div class="bar-actions">
-          <button type="button" class="button button-small search-trigger" data-action="search" aria-keyshortcuts="Control+K Meta+K">搜索 <kbd>Ctrl K</kbd></button>
-          <span class="demo-label" title="所有操作仅处理合成数据">演示环境</span>
-          <button type="button" class="button button-small" data-action="reset">重置</button>
+      <div class="demobar-actions">
+        <button type="button" class="demobar-btn" data-action="demo-guide"><svg class="icon" aria-hidden="true"><use href="#i-layers"></use></svg>架构导览</button>
+        <button type="button" class="demobar-btn" data-action="demo-phone" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-phone"></use></svg>手机端</button>
+        <button type="button" class="demobar-btn" data-action="reset"><svg class="icon" aria-hidden="true"><use href="#i-reset"></use></svg>重置数据</button>
+      </div>
+    </header>
+    <div class="workspace-shell">
+      <aside class="rail sidebar">
+        <div class="sidebar-header">
+          <a class="brand" href="#overview">
+            <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+            <span class="brand-text">Pi Native CRM<small>销售工作区</small></span>
+          </a>
+          <div class="sidebar-head-actions">
+            <button type="button" class="rail-toggle" aria-expanded="false" aria-controls="workspace-nav">导航</button>
+          </div>
         </div>
-      </header>
-      <main class="content" id="workspace-content" tabindex="-1"></main>
-      <noscript><p class="content">启用 JavaScript 后即可体验工作台。<a href="../about/">阅读项目说明</a></p></noscript>
+        <div class="sidebar-search-wrap">
+          <button type="button" class="sidebar-search-btn" data-action="search">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            <span class="sidebar-search-text">搜索或跳转…</span>
+            <span class="kbd">Ctrl K</span>
+          </button>
+        </div>
+        <nav class="workspace-nav" id="workspace-nav" aria-label="工作区导航">
+          <div class="nav-group">
+            <a class="nav-item" href="#overview" data-route="overview"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg><span class="nav-label">概览看板</span></a>
+            <a class="nav-item" href="#approvals" data-route="approvals"><svg class="icon" aria-hidden="true"><use href="#i-check-square"></use></svg><span class="nav-label">待人工拍板</span><span class="nav-badge urgent" data-badge="approvals" hidden></span></a>
+            <a class="nav-item" href="#contacts" data-route="contacts"><svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg><span class="nav-label">客户与线索</span></a>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-label">客户触达</p>
+            <a class="nav-item" href="#inbox" data-route="inbox"><svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg><span class="nav-label">会话收件箱</span><span class="nav-badge accent" data-badge="inbox" hidden></span></a>
+            <a class="nav-item" href="#risk" data-route="risk"><svg class="icon" aria-hidden="true"><use href="#i-radar"></use></svg><span class="nav-label">停滞风险雷达</span><span class="nav-badge" data-badge="risk" hidden></span></a>
+            <a class="nav-item" href="#agenda" data-route="agenda"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg><span class="nav-label">日程预约</span></a>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-label">AI 原生中台</p>
+            <a class="nav-item" href="#workbench" data-route="workbench"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"></use></svg><span class="nav-label">Agent–CRM 工作台</span><span class="nav-badge accent">Pi</span></a>
+            <a class="nav-item" href="#followups" data-route="followups"><svg class="icon" aria-hidden="true"><use href="#i-branch"></use></svg><span class="nav-label">跟进流程</span></a>
+            <a class="nav-item" href="#memory" data-route="memory"><svg class="icon" aria-hidden="true"><use href="#i-database"></use></svg><span class="nav-label">客户记忆与规则</span><span class="nav-badge" data-badge="memory" hidden></span></a>
+            <a class="nav-item" href="#ontology" data-route="ontology"><svg class="icon" aria-hidden="true"><use href="#i-layers"></use></svg><span class="nav-label">本体论与评测</span></a>
+            <a class="nav-item" href="#runs" data-route="runs"><svg class="icon" aria-hidden="true"><use href="#i-list-check"></use></svg><span class="nav-label">运行记录</span></a>
+            <a class="nav-item" href="#evaluation" data-route="evaluation"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg><span class="nav-label">演示检查</span></a>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-label">销售管理</p>
+            <a class="nav-item" href="#pipeline" data-route="pipeline"><svg class="icon" aria-hidden="true"><use href="#i-columns"></use></svg><span class="nav-label">销售漏斗</span></a>
+            <a class="nav-item" href="#tasks" data-route="tasks"><svg class="icon" aria-hidden="true"><use href="#i-list-check"></use></svg><span class="nav-label">跟进任务</span><span class="nav-badge" data-badge="tasks" hidden></span></a>
+            <a class="nav-item" href="#replies" data-route="replies"><svg class="icon" aria-hidden="true"><use href="#i-template"></use></svg><span class="nav-label">回复模板库</span></a>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <a class="nav-item" href="#analytics" data-route="analytics"><svg class="icon" aria-hidden="true"><use href="#i-chart"></use></svg><span class="nav-label">指标分析</span></a>
+          <a class="nav-item" href="#settings" data-route="settings"><svg class="icon" aria-hidden="true"><use href="#i-gear"></use></svg><span class="nav-label">工作区设置</span></a>
+          <div class="workspace-card">
+            <span class="workspace-avatar" aria-hidden="true">序</span>
+            <span class="workspace-card-info">
+              <span class="workspace-card-name">栖岭能源 · 销售工作区</span>
+              <span class="workspace-card-sub">林序 · 演示审核人</span>
+            </span>
+          </div>
+        </div>
+      </aside>
+      <div class="workspace-main">
+        <main class="content" id="workspace-content" tabindex="-1">
+          <noscript><p>启用 JavaScript 后即可体验工作台。<a href="../about/">阅读项目说明</a></p></noscript>
+        </main>
+      </div>
     </div>
   </div>
+  <span class="sr-only" id="workspace-location">概览看板</span>
   <div class="sr-only" id="announcement" role="status" aria-live="polite"></div>
   <dialog class="reset-dialog" id="reset-dialog" aria-labelledby="reset-title">
     <h2 id="reset-title">重置演示？</h2>
-    <p>清除当前标签页里的审批决定、记忆和运行记录，恢复示例起点。</p>
+    <p>清除当前标签页里的审批决定、记忆、会话草稿和运行记录，恢复示例起点。</p>
     <form method="dialog" class="button-row">
-      <button class="button" value="cancel" autofocus>取消</button>
-      <button class="button button-primary" value="confirm">重置示例</button>
+      <button class="btn" value="cancel" autofocus>取消</button>
+      <button class="btn primary" value="confirm" data-action="reset-confirm">重置数据</button>
     </form>
   </dialog>
   <dialog class="search-dialog" id="search-dialog" aria-labelledby="search-title">
-    <form method="dialog" class="search-top"><h2 id="search-title">搜索工作区</h2><button type="submit" class="button button-small">关闭</button></form>
+    <form method="dialog" class="search-top"><h2 id="search-title">搜索工作区</h2><button type="submit" class="btn sm">关闭</button></form>
     <label class="sr-only" for="workspace-search">输入客户、商机或页面名</label>
     <input type="search" id="workspace-search" placeholder="输入客户、商机或页面名" autofocus>
     <div id="search-results" class="search-results"></div>
+  </dialog>
+  <dialog class="guide-dialog" id="guide-dialog" aria-labelledby="guide-title">
+    <div class="guide-head">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+      <div><h2 id="guide-title">Pi Native CRM · 架构导览</h2>
+        <p class="muted">业务本体论约束 Agent 推理，人工审核后才会写回业务系统。</p></div>
+      <button type="button" class="btn icon sm" data-action="demo-guide-close" aria-label="关闭架构导览"><svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg></button>
+    </div>
+    <div class="guide-body">
+      <section>
+        <h3>交互与渠道层</h3>
+        <p>会话收件箱按渠道归并客户消息，人工可随时接管；Agent–CRM 工作台展示一次 Run 的取证、提案与回执。</p>
+        <a href="#inbox">打开会话收件箱</a>
+      </section>
+      <section>
+        <h3>受控执行与编排</h3>
+        <p>业务口径先过滤，再由队列按序执行。阶段变更生成提案，等待负责人批准，拒绝或缺证都保留原阶段。</p>
+        <a href="#workbench">查看工作台诊断</a>
+      </section>
+      <section>
+        <h3>事实与记忆分层</h3>
+        <p>商机、会话、任务以数据库事实为准；客户偏好必须从原话提取并由人工确认，才可跨会话复用。</p>
+        <a href="#memory">查看客户记忆</a>
+      </section>
+    </div>
+    <div class="guide-foot">
+      <a class="btn" href="../about/">完整架构页</a>
+      <button type="button" class="btn primary" data-action="demo-guide-close">进入交互演示</button>
+    </div>
   </dialog>
 </body>
 </html>

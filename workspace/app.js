@@ -1,4 +1,5 @@
 import { deals, events, pipelineStages, routes } from "./data.js";
+import { crmProfiles } from "./crm-data.js";
 import { agentScreens, handleAgent, handleAgentInput, handleAgentSubmit, readAgentState } from "./agent.js";
 import { createCrmOpportunity, crmScreens, handleCrm, handleCrmChange, handleCrmInput, readCrmState } from "./crm.js";
 import { deskScreens, handleDesk, handleDeskChange, handleDeskSubmit, readDeskState } from "./desk.js";
@@ -9,10 +10,12 @@ import { handleReview, handleReviewChange, reviewScreen, resetReview } from "./r
 const storeKey = "pi-crm-showcase-workspace-v1";
 const page = document.querySelector("#workspace-content");
 const dialog = document.querySelector("#reset-dialog");
+const guideDialog = document.querySelector("#guide-dialog");
 const searchDialog = document.querySelector("#search-dialog");
 const searchInput = document.querySelector("#workspace-search");
 const searchResults = document.querySelector("#search-results");
 const railToggle = document.querySelector(".rail-toggle");
+const workspaceNav = document.querySelector("#workspace-nav");
 const announcement = document.querySelector("#announcement");
 const caseById = Object.fromEntries(deals.map((deal) => [deal.id, deal]));
 const proposalStates = ["none", "blocked", "pending", "approved", "rejected", "executed", "verified"];
@@ -222,6 +225,20 @@ function getModel() {
   };
 }
 
+function updateBadges() {
+  const counts = {
+    approvals: deals.filter((deal) => state.crm?.byCase?.[deal.id]?.aiDraft).length,
+    inbox: deals.filter((deal) => crmProfiles[deal.id]?.unread && !state.crm?.byCase?.[deal.id]?.read).length,
+    memory: Object.values(state.cases).filter((entry) => entry.memory === "pending").length,
+    tasks: Object.values(state.cases).filter((entry) => !entry.taskDone).length,
+  };
+  for (const badge of document.querySelectorAll("[data-badge]")) {
+    const value = counts[badge.dataset.badge] ?? 0;
+    badge.textContent = value || "";
+    badge.hidden = !value;
+  }
+}
+
 function render() {
   const slug = activeRoute();
   const scrollOffsets = Object.fromEntries([...page.querySelectorAll("[data-workbench-scroll]")].map((panel) => [
@@ -234,7 +251,9 @@ function render() {
   }
   document.title = `${routes[slug]} · Pi Native CRM`;
   document.documentElement.dataset.deskTheme = state.desk.theme;
+  page.classList.toggle("flush", slug === "inbox" || slug === "approvals");
   page.innerHTML = screens[slug](getModel());
+  updateBadges();
   for (const panel of page.querySelectorAll("[data-workbench-scroll]")) {
     panel.scrollTop = scrollOffsets[panel.dataset.workbenchScroll] ?? 0;
   }
@@ -319,8 +338,29 @@ document.addEventListener("click", (event) => {
     dialog.showModal();
     return;
   }
+  if (control.dataset.action === "reset-confirm") {
+    control.closest("dialog")?.close();
+    performReset();
+    return;
+  }
   if (control.dataset.action === "search") {
     openSearch();
+    return;
+  }
+  if (control.dataset.action === "demo-guide") {
+    guideDialog.showModal();
+    return;
+  }
+  if (control.dataset.action === "demo-guide-close") {
+    control.closest("dialog")?.close();
+    return;
+  }
+  if (control.dataset.action === "demo-phone") {
+    const on = document.documentElement.dataset.demoPhone !== "on";
+    if (on) document.documentElement.dataset.demoPhone = "on";
+    else delete document.documentElement.dataset.demoPhone;
+    control.setAttribute("aria-pressed", String(on));
+    announcement.textContent = on ? "已切换到手机尺寸预览。" : "已退出手机尺寸预览。";
     return;
   }
   const message = handleAction(control.dataset.action, control);
@@ -461,25 +501,46 @@ searchInput.addEventListener("input", renderSearchResults);
 searchResults.addEventListener("click", (event) => {
   if (event.target.closest("a:not([data-select])") && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) searchDialog.close();
 });
+function moveSelection(step) {
+  const index = deals.findIndex((deal) => deal.id === state.selected);
+  const next = deals[Math.min(deals.length - 1, Math.max(0, index + step))];
+  if (!next || next.id === state.selected) return;
+  state.selected = next.id;
+  state.crm.byCase[next.id].read = true;
+  save();
+  render();
+  announcement.textContent = `已切换到${next.contact}的会话。`;
+}
+
 document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     openSearch();
+    return;
   }
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (!["j", "k"].includes(event.key.toLowerCase())) return;
+  if (activeRoute() !== "inbox") return;
+  const tag = document.activeElement?.tagName ?? "";
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || document.querySelector("dialog[open]")) return;
+  event.preventDefault();
+  moveSelection(event.key.toLowerCase() === "j" ? 1 : -1);
 });
 railToggle.addEventListener("click", () => {
-  railToggle.setAttribute("aria-expanded", railToggle.getAttribute("aria-expanded") === "true" ? "false" : "true");
+  const expanded = railToggle.getAttribute("aria-expanded") === "true";
+  railToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+  workspaceNav.classList.toggle("is-open", !expanded);
 });
 
 window.addEventListener("hashchange", () => {
   railToggle.setAttribute("aria-expanded", "false");
+  workspaceNav.classList.remove("is-open");
   render();
   window.scrollTo(0, 0);
   page.focus({ preventScroll: true });
 });
 
-dialog.addEventListener("close", () => {
-  if (dialog.returnValue !== "confirm") return;
+function performReset() {
   state = freshState();
   resetLabControls();
   resetReview();
@@ -487,6 +548,11 @@ dialog.addEventListener("close", () => {
   save();
   render();
   announcement.textContent = "演示已重置。";
+}
+
+dialog.addEventListener("close", () => {
+  if (dialog.returnValue !== "confirm") return;
+  performReset();
 });
 
 render();
